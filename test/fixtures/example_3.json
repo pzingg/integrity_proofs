@@ -1,0 +1,15 @@
+{
+  "@context": [
+    {"title": "https://schema.org/title"},
+    "https://w3id.org/security/data-integrity/v1"
+  ],
+  "title": "Hello world!",
+  "proof": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "jcs-eddsa-2022",
+    "created": "2020-11-05T19:23:24Z",
+    "verificationMethod": "https://ldi.example/issuer#z6MkjLrk3gKS2nnkeWcmcxiZPGskmesDpuwRBorgHxUXfxnG",
+    "proofPurpose": "assertionMethod",
+    "proofValue": "z4oey5q2M3XKaxup3tmzN4DRFTLVqpLMweBrSxMY2xHX5XTYVQeVbY8nQAVHMrXFkXJpmEcqdoDwLWxaqA3Q1geV6"
+  }
+}
