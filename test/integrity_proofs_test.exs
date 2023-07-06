@@ -156,10 +156,6 @@ defmodule IntegrityProofsTest do
     assert pub == @public_key_bytes
   end
 
-  test "encodes a multibase ed25519 public key" do
-    assert true
-  end
-
   test "decodes a multibase encoded ed25519 public key" do
     {:ok, decoded} = Multibase.decode("z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVtZxP")
     assert byte_size(decoded) == 34

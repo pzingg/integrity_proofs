@@ -1,0 +1,31 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/activitystreams",
+    "https://www.w3.org/ns/did/v1",
+    "https://w3id.org/security/data-integrity/v1",
+    {
+      "fep": "https://w3id.org/fep#",
+      "VerifiableIdentityStatement": "fep:VerifiableIdentityStatement",
+      "subject": "fep:subject"
+    }
+  ],
+  "type": "Person",
+  "id": "https://server.example/users/alice",
+  "inbox": "https://server.example/users/alice/inbox",
+  "outbox": "https://server.example/users/alice/outbox",
+  "attachment": [
+    {
+      "type": "VerifiableIdentityStatement",
+      "subject": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+      "alsoKnownAs": "https://server.example/users/alice",
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "jcs-eddsa-2022",
+        "created": "2022-11-12T00:00:00Z",
+        "verificationMethod": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "<proof-value>"
+      }
+    }
+  ]
+}
