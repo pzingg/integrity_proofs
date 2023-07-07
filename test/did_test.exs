@@ -1,8 +1,6 @@
 defmodule IntegrityProofs.DidTest do
   use ExUnit.Case
 
-  require Multibase
-
   @public_key_bytes <<243, 105, 212, 154, 54, 128, 250, 99, 47, 184, 242, 248, 144, 45, 17, 70,
                       176, 243, 220, 174, 103, 200, 4, 192, 33, 143, 102, 29, 234, 149, 1, 188>>
 

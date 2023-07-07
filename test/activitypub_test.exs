@@ -1,8 +1,5 @@
 defmodule IntegrityProofs.ActivityPubTest do
-  alias LSP.Types.TextDocument.Item
   use ExUnit.Case
-
-  require Multibase
 
   @public_key_bytes <<243, 105, 212, 154, 54, 128, 250, 99, 47, 184, 242, 248, 144, 45, 17, 70,
                       176, 243, 220, 174, 103, 200, 4, 192, 33, 143, 102, 29, 234, 149, 1, 188>>
@@ -11,12 +8,9 @@ defmodule IntegrityProofs.ActivityPubTest do
                        117, 44, 83, 74, 35, 121, 140, 91, 190, 215, 239, 144, 58, 42, 1, 200>>
 
   @proof_config_created "2020-11-05T19:23:24Z"
-
-  @controller_url "did:example:123"
-  @controller_document_url "did:example:123456789abcdefghi"
   @verification_method_url "did:example:123456789abcdefghi#keys-1"
 
-  @person %{
+  @test_person %{
     "type" => "Person",
     "id" => "https://server.example/users/alice",
     "inbox" => "https://server.example/users/alice/inbox",
@@ -25,7 +19,7 @@ defmodule IntegrityProofs.ActivityPubTest do
 
   test "builds an fep-c390 identity proof document" do
     person_with_identity_proof =
-      IntegrityProofs.ActivityPub.build_identity_proof!(@person,
+      IntegrityProofs.ActivityPub.build_identity_proof!(@test_person,
         type: "DataIntegrityProof",
         cryptosuite: "jcs-eddsa-2022",
         created: @proof_config_created,
@@ -35,7 +29,7 @@ defmodule IntegrityProofs.ActivityPubTest do
         private_key_bytes: @private_key_bytes
       )
 
-    assert %{"id" => actor_id} = person_with_identity_proof
+    assert %{"id" => _actor_id} = person_with_identity_proof
 
     assert person_with_identity_proof["attachment"] == [
              %{
@@ -57,7 +51,7 @@ defmodule IntegrityProofs.ActivityPubTest do
 
   test "verifies an fep-c390 identity proof document" do
     person_with_identity_proof =
-      IntegrityProofs.ActivityPub.build_identity_proof!(@person,
+      IntegrityProofs.ActivityPub.build_identity_proof!(@test_person,
         type: "DataIntegrityProof",
         cryptosuite: "jcs-eddsa-2022",
         created: @proof_config_created,
