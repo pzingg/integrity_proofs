@@ -95,7 +95,7 @@ defmodule IntegrityProofs do
     defexception method: nil
 
     def message(%{method: method}) do
-      "Invalid verification method #{method}"
+      "Invalid verification method #{inspect(method)}"
     end
   end
 
@@ -103,26 +103,21 @@ defmodule IntegrityProofs do
     defexception method: nil, purpose: nil
 
     def message(%{method: method, purpose: purpose}) do
-      "Invalid proof purpose #{purpose} for verification method #{method}"
+      "Invalid proof purpose #{purpose} for verification method #{inspect(method)}"
+    end
+  end
+
+  defmodule InvalidPublicKeyError do
+    defexception multibase: nil, reason: nil
+
+    def message(%{multibase: multibase, reason: reason}) do
+      "Invalid public Multikey #{multibase}: #{reason}"
     end
   end
 
   @doc """
-  Hello world.
-
-  ## Examples
-
-      iex> IntegrityProofs.hello()
-      :world
-
-  """
-  def hello do
-    :world
-  end
-
-  @doc """
   Implements jcs-eddsa-2022 transformation of an untransformed
-  document. Section 3.2.
+  document. § 3.2.
 
   1. If `options.type` is not set to the string "DataIntegrityProof" and
      options.cryptosuite is not set to the string "jcs-eddsa-2022" then
@@ -144,7 +139,7 @@ defmodule IntegrityProofs do
   end
 
   @doc """
-  Implements jcs-eddsa-2022 proof configuration. Sections 3.1.5 and 3.2
+  Implements jcs-eddsa-2022 proof configuration. § 3.1.5 and § 3.2
 
   1. Let `proof_config` be an empty object.
   2. Set `proof_config.type` to `options.type`.
@@ -191,7 +186,7 @@ defmodule IntegrityProofs do
   end
 
   @doc """
-  Implements jcs-eddsa-2022 hashing. Section 3.1.4.
+  Implements jcs-eddsa-2022 hashing. § 3.1.4.
 
   1. Let `transformed_document_hash` be the result of applying the SHA-256
      (SHA-2 with 256-bit output) cryptographic hashing algorithm
@@ -251,12 +246,12 @@ defmodule IntegrityProofs do
 
   @doc """
   Implements jcs-eddsa-2022 proof serialization
-  Section 3.1.6.
+  § 3.1.6.
 
   1. Let `private_key_bytes` be the result of retrieving the private key
      bytes associated with the `options.verification_method` value as
      described in the Data Integrity [VC-DATA-INTEGRITY] specification,
-     Section 4: Retrieving Cryptographic Material.
+     § 4: Retrieving Cryptographic Material.
   2. Let `proof_bytes` be the result of applying the Edwards-Curve Digital
      Signature Algorithm (EdDSA) [RFC8032], using the Ed25519 variant
      (Pure EdDSA), with `hash_data` as the data to be signed using the
@@ -272,12 +267,12 @@ defmodule IntegrityProofs do
 
   @doc """
   Implements jcs-eddsa-2022 proof serialization
-  Section 3.1.7.
+  § 3.1.7.
 
   1. Let `public_key_bytes` be the result of retrieving the public key
      bytes associated with the `options.verification_method` value as
      described in the Data Integrity [VC-DATA-INTEGRITY] specification,
-     Section 4: Retrieving Cryptographic Material.
+     § 4: Retrieving Cryptographic Material.
   2. Let `verification_result` be the result of applying the verification
      algorithm for the Edwards-Curve Digital Signature Algorithm (EdDSA)
      [RFC8032], using the Ed25519 variant (Pure EdDSA), with `hash_data`
@@ -292,7 +287,7 @@ defmodule IntegrityProofs do
   end
 
   @doc """
-  Retrieve a verification method. Section 4.3.
+  Retrieve a verification method. § 4.3.
 
   Required inputs are a data integrity proof (`proof`) and a set of
   dereferencing options (`options`).
@@ -333,7 +328,7 @@ defmodule IntegrityProofs do
           "verificationMethod" => verification_method,
           "proofPurpose" => vm_purpose,
           "proofValue" => _value
-        } = proof,
+        },
         options
       ) do
     vm_identifier = URI.parse(verification_method)
@@ -395,36 +390,6 @@ defmodule IntegrityProofs do
   end
 
   @doc """
-  Multikey verification method.
-
-  1. The `type` of the verification method MUST be "Multikey".
-  2. The `controller` of the verification method MUST be a URL.
-  3. The `publicKeyMultibase` property of the verification method MUST be a
-     public key encoded according to [MULTICODEC] and formatted according to
-     [MULTIBASE]. The multicodec encoding of an Ed25519 public key is the
-     two-byte prefix `0xed01` followed by the 32-byte public key data.
-     The 34 byte value is then encoded using base58-btc (z) as the prefix.
-     Any other encoding MUST NOT be allowed.
-  """
-  def vm_multikey() do
-  end
-
-  @doc """
-  Ed25519VerificationKey2020 verification method.
-
-  1. The `type` of the verification method MUST be "Ed25519VerificationKey2020".
-  2. The `controller` of the verification method MUST be a URL.
-  3. The `publicKeyMultibase` property of the verification method MUST be a
-     public key encoded according to [MULTICODEC] and formatted according to
-     [MULTIBASE]. The multicodec encoding of an Ed25519 public key is the
-     two-byte prefix `0xed01` followed by the 32-byte public key data.
-     The 34 byte value is then encoded using base58-btc (z) as the prefix.
-     Any other encoding MUST NOT be allowed.
-  """
-  def vm_ed25519_2020() do
-  end
-
-  @doc """
   Retrieves the private key, from supplied data, a cache or
   via an HTTP request.
 
@@ -441,7 +406,7 @@ defmodule IntegrityProofs do
         make_ed25519_private_key(pub, priv, fmt)
 
       !is_nil(private_key_pem) ->
-        case decode_ed25519_pem(private_key_pem, :openssh_key_v1, options) do
+        case decode_ed25519_pem(private_key_pem, :openssh_key_v1, fmt) do
           {:ok, _, private_key} -> private_key
           _ -> raise ArgumentError, IO.inspect(options)
         end
@@ -474,7 +439,7 @@ defmodule IntegrityProofs do
         make_ed25519_public_key(pub, fmt)
 
       is_binary(public_key_pem) ->
-        case decode_ed25519_pem(public_key_pem, :public_key, options) do
+        case decode_ed25519_pem(public_key_pem, :public_key, fmt) do
           {:ok, public_key, _} -> public_key
           _ -> raise ArgumentError, IO.inspect(options)
         end
@@ -484,12 +449,12 @@ defmodule IntegrityProofs do
     end
   end
 
-  def dereference_controller_document!(controller_document_url, options) do
+  def dereference_controller_document!(_controller_document_url, options) do
     built_in = Keyword.get(options, :cached_controller_document)
     built_in
   end
 
-  def find_verification_method_fragment(controller_document, vm_fragment, options) do
+  def find_verification_method_fragment(controller_document, vm_fragment, _options) do
     document_id = Map.fetch!(controller_document, "id")
     vm_url = document_id <> "#" <> vm_fragment
 
@@ -513,12 +478,14 @@ defmodule IntegrityProofs do
   end
 
   @doc """
-  Returns a private key, from supplied data. `fmt` determines the
+  Returns a public key, from supplied data. `fmt` determines the
   format of the key returned.
 
   * `:public_key` returns a tuple `{{:ECPoint, pub}, {:namedCurve, {1, 3, 101, 112}}`.
   * `:public_key_ed` returns a tuple `{:ed_pub, :ed25519, pub}`.
   * `:crypto_algo_key` returns a tuple `{:eddsa, [pub, :ed25519]}`.
+  * `:multikey` returns a btc58-encoded binary starting with "z6".
+  * `:did_key` returns a binary starting with "did:key:".
   """
   def make_ed25519_public_key(pub, :public_key)
       when byte_size(pub) == 32 do
@@ -533,6 +500,19 @@ defmodule IntegrityProofs do
   def make_ed25519_public_key(pub, :crypto_algo_key)
       when byte_size(pub) == 32 do
     {:eddsa, [pub, :ed25519]}
+  end
+
+  def make_ed25519_public_key(pub, :multikey)
+      when byte_size(pub) == 32 do
+    pub
+    |> Multicodec.encode!("ed25519-pub")
+    |> Multibase.encode!(:base58_btc)
+  end
+
+  def make_ed25519_public_key(pub, :did_key)
+      when byte_size(pub) == 32 do
+    multikey = make_ed25519_public_key(pub, :multikey)
+    "did:key:" <> multikey
   end
 
   def make_ed25519_public_key(_, _), do: raise(ArgumentError)
@@ -637,19 +617,47 @@ defmodule IntegrityProofs do
   See `make_ed25519_public_key/2` for details on the formats for the
   returned key.
   """
+  def extract_multikey(verification_method, fmt \\ :crypto_algo_key)
+
   def extract_multikey(
-        %{"type" => "Multikey", "publicKeyMultibase" => public_key_multibase} =
-          verification_method,
-        fmt \\ :crypto_algo_key
+        %{"type" => "Multikey", "publicKeyMultibase" => multibase_value},
+        fmt
       )
-      when is_binary(public_key_multibase) do
-    with {:ok, {public_key, :base58_btc}} <- Multibase.codec_decode(public_key_multibase),
-         {:ok, pub} <- Multicodec.decode(public_key) do
+      when is_binary(multibase_value) do
+    with {:ok, {pub, _codec, _multicodec_value}} <- decode_multikey(multibase_value) do
       {:ok, make_ed25519_public_key(pub, fmt)}
     end
   end
 
   def extract_multikey(_, _), do: {:error, "not a Multikey verification method"}
+
+  @doc """
+  Decodes the public key from a "Multikey" verification method's
+  multibase value.
+
+  Returns `{:ok, {raw_public_key_bytes, codec, multicodec_value}}` on success.
+  """
+  def decode_multikey(multibase_value) do
+    with {:ok, {public_key, :base58_btc}} <- Multibase.codec_decode(multibase_value),
+         {:ok, {raw_public_key_bytes, codec}} <- Multicodec.codec_decode(public_key),
+         {:ok, <<multicodec_value::size(8), rest>>} <- Multicodec.prefix_for(codec) do
+      {:ok, {raw_public_key_bytes, codec, multicodec_value}}
+    end
+  end
+
+  @doc """
+  Decodes the public key from a "Multikey" verification method's
+  multibase value.
+
+  Returns `{raw_public_key_bytes, codec, multicodec_value}` on success.
+  Raises `InvalidPublicKeyError` on failure.
+  """
+  def decode_multikey!(multibase_value) do
+    case decode_multikey(multibase_value) do
+      {:ok, tuple} -> tuple
+      {:error, reason} -> raise InvalidPublicKeyError, multibase: multibase_value, reason: reason
+    end
+  end
 
   def did_uri?(%URI{scheme: "did", host: nil, path: path})
       when is_binary(path) do
@@ -659,9 +667,7 @@ defmodule IntegrityProofs do
     end
   end
 
-  def did_uri?(uri) do
-    false
-  end
+  def did_uri?(_), do: false
 
   def http_uri?(%URI{scheme: scheme, host: host, path: path}) do
     scheme in ["http", "https"] && !is_nil(host) && !is_nil(path)
@@ -675,7 +681,7 @@ defmodule IntegrityProofs do
 
   defp valid_datetime?(_), do: false
 
-  defp valid_verification_method?(verification_method) do
+  defp valid_verification_method?(verification_method) when is_map(verification_method) do
     case extract_multikey(verification_method) do
       {:ok, _key} -> true
       _ -> false
@@ -684,7 +690,8 @@ defmodule IntegrityProofs do
 
   defp valid_verification_method?(_), do: false
 
-  defp valid_purpose?(verification_method, purpose) do
-    true
+  defp valid_purpose?(_verification_method, purpose) do
+    # TODO
+    purpose in @valid_proof_purposes
   end
 end

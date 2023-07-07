@@ -7,8 +7,7 @@ defmodule IntegrityProofsTest do
   @public_key_bytes <<243, 105, 212, 154, 54, 128, 250, 99, 47, 184, 242, 248, 144, 45, 17, 70,
                       176, 243, 220, 174, 103, 200, 4, 192, 33, 143, 102, 29, 234, 149, 1, 188>>
 
-  @public_key_multibase Multicodec.encode!(@public_key_bytes, "ed25519-pub")
-                        |> Multibase.encode!(:base58_btc)
+  @public_key_multibase IntegrityProofs.make_ed25519_public_key(@public_key_bytes, :multikey)
 
   @private_key_bytes <<112, 38, 151, 226, 182, 82, 47, 205, 7, 158, 217, 27, 159, 218, 142, 29,
                        117, 44, 83, 74, 35, 121, 140, 91, 190, 215, 239, 144, 58, 42, 1, 200>>
@@ -59,10 +58,6 @@ defmodule IntegrityProofsTest do
       |> Enum.join(", ")
 
     "<<" <> out <> ">>"
-  end
-
-  test "greets the world" do
-    assert IntegrityProofs.hello() == :world
   end
 
   test "Erlang :crypto app supports eddsa and ed25519" do

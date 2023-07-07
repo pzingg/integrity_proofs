@@ -8,6 +8,7 @@ See also:
 
 * [Fediverse Enhancement Proposal FEP-c390: Identity Proofs](https://codeberg.org/silverpill/feps/src/branch/main/c390/fep-c390.md)
 * [Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did-core/)
+* [The did:key Method v0.7](https://w3c-ccg.github.io/did-method-key/)
 
 ## Installation
 
@@ -49,3 +50,10 @@ can be generated from the command line with:
 ```sh
 ssh-keygen -t ed25519 -C "bob@example.com" -f bob_example_ed25519
 ```
+
+## did:key implementation
+
+The examples in the [The did:key Method v0.7](https://w3c-ccg.github.io/did-method-key/) 
+draft seem not to jibe with algorithms described there. I'm not sure where the 
+multibase values for the key agreement parts come from, or whether anyone
+has actually tried to follow this spec.
