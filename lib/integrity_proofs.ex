@@ -173,8 +173,10 @@ defmodule IntegrityProofs do
       raise IntegrityProofs.InvalidProofDatetimeError, created: created
     end
 
+    context = Keyword.get(options, :context) || Map.fetch!(unsecured_document, "@context")
+
     proof_config = %{
-      "@context": Map.fetch!(unsecured_document, "@context"),
+      "@context": context,
       type: type,
       cryptosuite: cryptosuite,
       created: created,
@@ -212,24 +214,23 @@ defmodule IntegrityProofs do
   cryptosuite with the purpose "assertionMethod", and with other specified options.
   """
   def build_assertion_proof!(document, options) do
+    verification_method = Keyword.fetch!(options, :verification_method)
+    created = Keyword.fetch!(options, :created)
+
     transformed_document =
       IntegrityProofs.transform_jcs_eddsa_2022!(document,
         type: "DataIntegrityProof",
         cryptosuite: "jcs-eddsa-2022"
       )
 
-    verification_method = Keyword.get(options, :verification_method)
-    created = Keyword.get(options, :created)
-
-    proof_config =
-      IntegrityProofs.proof_configuration!(document,
+    options =
+      Keyword.merge(options,
         type: "DataIntegrityProof",
         cryptosuite: "jcs-eddsa-2022",
-        created: created,
-        verification_method: verification_method,
         proof_purpose: "assertionMethod"
       )
 
+    proof_config = IntegrityProofs.proof_configuration!(document, options)
     hash_data = IntegrityProofs.hash(proof_config, transformed_document)
     proof_bytes = serialize_proof!(hash_data, options)
     proof_value = Multibase.encode!(proof_bytes, :base58_btc)
@@ -367,16 +368,18 @@ defmodule IntegrityProofs do
   """
   def verify_proof_document!(proof_document, options) when is_map(proof_document) do
     {proof, document_to_verify} = Map.pop!(proof_document, "proof")
-    {proof_value, raw_config} = Map.pop(proof, "proofValue")
+    {proof_value, proof_config} = Map.pop(proof, "proofValue")
 
-    proof_config =
-      IntegrityProofs.proof_configuration!(document_to_verify,
-        type: raw_config["type"],
-        cryptosuite: raw_config["cryptosuite"],
-        created: raw_config["created"],
-        verification_method: raw_config["verificationMethod"],
-        proof_purpose: raw_config["proofPurpose"]
+    options =
+      Keyword.merge(options,
+        type: proof_config["type"],
+        cryptosuite: proof_config["cryptosuite"],
+        created: proof_config["created"],
+        verification_method: proof_config["verificationMethod"],
+        proof_purpose: proof_config["proofPurpose"]
       )
+
+    proof_config = IntegrityProofs.proof_configuration!(document_to_verify, options)
 
     transformed_document =
       transform_jcs_eddsa_2022!(document_to_verify,
@@ -671,8 +674,11 @@ defmodule IntegrityProofs do
   def did_uri?(%URI{scheme: "did", host: nil, path: path})
       when is_binary(path) do
     case String.split(path, ":", parts: 2) do
-      [did_method, did_value] -> did_method in @valid_did_methods && did_value != ""
-      _ -> false
+      [did_method, did_value] ->
+        did_method in @valid_did_methods && did_value != ""
+
+      _ ->
+        false
     end
   end
 
