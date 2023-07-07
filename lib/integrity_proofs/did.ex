@@ -1,5 +1,11 @@
 defmodule IntegrityProofs.Did do
+  @moduledoc """
+  Functions to create and resolve DID documents.
+  """
+
   @valid_did_methods ["web", "key", "plc", "example"]
+  @known_signature_key_formats ["Multikey", "JsonWebKey2020", "Ed25519VerificationKey2020"]
+  @known_encryption_key_formats ["Multikey", "JsonWebKey2020", "X25519KeyAgreementKey2020"]
 
   defmodule InvalidDidError do
     defexception did: nil
@@ -132,26 +138,23 @@ defmodule IntegrityProofs.Did do
         options
       ) do
     public_key_format = Keyword.get(options, :public_key_format, "Multikey")
-    enable_experimental_key_types = Keyword.get(options, :enable_experimental_key_types, false)
     # Not in standard
     fragment = Keyword.get(options, :signature_method_fragment, multibase_value)
 
     # The did:key Method draft here seems wrong.
-    {_raw_public_key_bytes, %{codec: codec, code: multicodec_value, prefix: prefix}} =
+    {_raw_public_key_bytes, %{codec: _codec, code: _multicodec_value, prefix: _prefix}} =
       IntegrityProofs.decode_multikey!(multibase_value)
 
-    case public_key_format do
-      "Multikey" ->
-        %{
-          "id" => identifier <> "#" <> fragment,
-          "type" => public_key_format,
-          "controller" => identifier,
-          "publicKeyMultibase" => multibase_value
-        }
-
-      _ ->
-        raise UnsupportedPublicKeyTypeError, format: public_key_format
+    if !valid_signature_key_format?(public_key_format, options) do
+      raise UnsupportedPublicKeyTypeError, format: public_key_format
     end
+
+    %{
+      "id" => identifier <> "#" <> fragment,
+      "type" => public_key_format,
+      "controller" => identifier,
+      "publicKeyMultibase" => multibase_value
+    }
   end
 
   @doc """
@@ -196,23 +199,20 @@ defmodule IntegrityProofs.Did do
         options
       ) do
     public_key_format = Keyword.get(options, :public_key_format, "Multikey")
-    enable_experimental_key_types = Keyword.get(options, :enable_experimental_key_types, false)
     # Not in standard
     fragment = Keyword.get(options, :encryption_method_fragment, multibase_value)
     _decoded = IntegrityProofs.decode_multikey!(multibase_value)
 
-    case public_key_format do
-      "Multikey" ->
-        %{
-          "id" => identifier <> "#" <> fragment,
-          "type" => public_key_format,
-          "controller" => identifier,
-          "publicKeyMultibase" => multibase_value
-        }
-
-      _ ->
-        raise UnsupportedPublicKeyTypeError, format: public_key_format
+    if !valid_encryption_key_format?(public_key_format, options) do
+      raise UnsupportedPublicKeyTypeError, format: public_key_format
     end
+
+    %{
+      "id" => identifier <> "#" <> fragment,
+      "type" => public_key_format,
+      "controller" => identifier,
+      "publicKeyMultibase" => multibase_value
+    }
   end
 
   defp parse_did!(identifier) do
@@ -235,5 +235,15 @@ defmodule IntegrityProofs.Did do
     else
       raise InvalidDidError, did: identifier
     end
+  end
+
+  defp valid_signature_key_format?(format, options) do
+    Keyword.get(options, :enable_experimental_key_types, false) ||
+      format in @known_signature_key_formats
+  end
+
+  defp valid_encryption_key_format?(format, options) do
+    Keyword.get(options, :enable_experimental_key_types, false) ||
+      format in @known_encryption_key_formats
   end
 end

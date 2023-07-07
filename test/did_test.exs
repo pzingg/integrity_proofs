@@ -13,24 +13,24 @@ defmodule IntegrityProofs.DidTest do
       "https://www.w3.org/ns/did/v1",
       "https://w3id.org/security/data-integrity/v1"
     ],
-    "id" => "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV",
+    "id" => @identifier,
     "assertionMethod" => [
-      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#keys-1"
+      "#{@identifier}#keys-1"
     ],
     "authentication" => [
-      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#keys-1"
+      "#{@identifier}#keys-1"
     ],
     "capabilityDelegation" => [
-      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#keys-1"
+      "#{@identifier}#keys-1"
     ],
     "capabilityInvocation" => [
-      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#keys-1"
+      "#{@identifier}#keys-1"
     ],
     "verificationMethod" => [
       %{
-        "id" => "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#keys-1",
+        "id" => "#{@identifier}#keys-1",
         "type" => "Multikey",
-        "controller" => "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV",
+        "controller" => @identifier,
         "publicKeyMultibase" => "z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV"
       }
     ]
