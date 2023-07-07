@@ -133,18 +133,17 @@ defmodule IntegrityProofs.Did do
       ) do
     public_key_format = Keyword.get(options, :public_key_format, "Multikey")
     enable_experimental_key_types = Keyword.get(options, :enable_experimental_key_types, false)
+    # Not in standard
+    fragment = Keyword.get(options, :signature_method_fragment, multibase_value)
 
     # The did:key Method draft here seems wrong.
-    {_raw_public_key_bytes, codec, multicodec_value} =
+    {_raw_public_key_bytes, %{codec: codec, code: multicodec_value, prefix: prefix}} =
       IntegrityProofs.decode_multikey!(multibase_value)
-    if multicodec_value != 0xed do
-      raise RuntimeError, "multicodec_value"
-    end
 
     case public_key_format do
       "Multikey" ->
         %{
-          "id" => identifier <> "#" <> multibase_value,
+          "id" => identifier <> "#" <> fragment,
           "type" => public_key_format,
           "controller" => identifier,
           "publicKeyMultibase" => multibase_value
@@ -198,12 +197,14 @@ defmodule IntegrityProofs.Did do
       ) do
     public_key_format = Keyword.get(options, :public_key_format, "Multikey")
     enable_experimental_key_types = Keyword.get(options, :enable_experimental_key_types, false)
+    # Not in standard
+    fragment = Keyword.get(options, :encryption_method_fragment, multibase_value)
     _decoded = IntegrityProofs.decode_multikey!(multibase_value)
 
     case public_key_format do
       "Multikey" ->
         %{
-          "id" => identifier <> "#" <> multibase_value,
+          "id" => identifier <> "#" <> fragment,
           "type" => public_key_format,
           "controller" => identifier,
           "publicKeyMultibase" => multibase_value

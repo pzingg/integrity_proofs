@@ -15,21 +15,20 @@ defmodule IntegrityProofs.DidTest do
     ],
     "id" => "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV",
     "assertionMethod" => [
-      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV"
+      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#keys-1"
     ],
     "authentication" => [
-      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV"
+      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#keys-1"
     ],
     "capabilityDelegation" => [
-      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV"
+      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#keys-1"
     ],
     "capabilityInvocation" => [
-      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV"
+      "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#keys-1"
     ],
     "verificationMethod" => [
       %{
-        "id" =>
-          "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV",
+        "id" => "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV#keys-1",
         "type" => "Multikey",
         "controller" => "did:key:z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV",
         "publicKeyMultibase" => "z6MkvqSiJweFXrZmmdQgRR1A6vANr1S4qoyKVrVwVXSnBFdV"
@@ -39,7 +38,11 @@ defmodule IntegrityProofs.DidTest do
 
   test "builds a DID document" do
     document =
-      IntegrityProofs.Did.build_did_document!(@identifier, enable_encryption_key_derivation: false)
+      IntegrityProofs.Did.build_did_document!(@identifier,
+        signature_method_fragment: "keys-1",
+        encryption_method_fragment: "keys-2",
+        enable_encryption_key_derivation: false
+      )
 
     assert @did_document = document
   end

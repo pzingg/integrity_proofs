@@ -624,7 +624,7 @@ defmodule IntegrityProofs do
         fmt
       )
       when is_binary(multibase_value) do
-    with {:ok, {pub, _codec, _multicodec_value}} <- decode_multikey(multibase_value) do
+    with {:ok, {pub, _multicodec_mapping}} <- decode_multikey(multibase_value) do
       {:ok, make_ed25519_public_key(pub, fmt)}
     end
   end
@@ -635,13 +635,22 @@ defmodule IntegrityProofs do
   Decodes the public key from a "Multikey" verification method's
   multibase value.
 
-  Returns `{:ok, {raw_public_key_bytes, codec, multicodec_value}}` on success.
+  Returns `{:ok, {raw_public_key_bytes, multicodec_mapping}}` on success.
   """
   def decode_multikey(multibase_value) do
     with {:ok, {public_key, :base58_btc}} <- Multibase.codec_decode(multibase_value),
          {:ok, {raw_public_key_bytes, codec}} <- Multicodec.codec_decode(public_key),
-         {:ok, <<multicodec_value::size(8), rest>>} <- Multicodec.prefix_for(codec) do
-      {:ok, {raw_public_key_bytes, codec, multicodec_value}}
+         {:ok, mapping} <- find_multicodec_mapping(codec) do
+      {:ok, {raw_public_key_bytes, mapping}}
+    end
+  end
+
+  defp find_multicodec_mapping(codec) do
+    Multicodec.mappings()
+    |> Enum.find(fn %Multicodec.MulticodecMapping{codec: c} -> c == codec end)
+    |> case do
+      %Multicodec.MulticodecMapping{} = mapping -> {:ok, mapping}
+      _ -> {:error, "mapping for codec #{codec} not found"}
     end
   end
 
@@ -649,7 +658,7 @@ defmodule IntegrityProofs do
   Decodes the public key from a "Multikey" verification method's
   multibase value.
 
-  Returns `{raw_public_key_bytes, codec, multicodec_value}` on success.
+  Returns `{raw_public_key_bytes, codec, multicodec_mapping}` on success.
   Raises `InvalidPublicKeyError` on failure.
   """
   def decode_multikey!(multibase_value) do
