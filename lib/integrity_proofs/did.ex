@@ -215,6 +215,73 @@ defmodule IntegrityProofs.Did do
     }
   end
 
+  @doc """
+  Resolve the URL for a did:web identifier.
+
+  The method specific identifier MUST match the common name used in
+  the SSL/TLS certificate, and it MUST NOT include IP addresses.
+  A port MAY be included and the colon MUST be percent encoded to
+  prevent a conflict with paths. Directories and subdirectories MAY
+  optionally be included, delimited by colons rather than slashes.
+
+  web-did = "did:web:" domain-name
+  web-did = "did:web:" domain-name * (":" path)
+  """
+  def did_web_url(identifier, scheme \\ "https") do
+    if String.starts_with?(identifier, "did:web:") do
+      {host, port, path} =
+        String.replace_leading(identifier, "did:web:", "")
+        |> String.split(":")
+        |> case do
+          [host_port | path_parts] ->
+            path =
+              if Enum.all?(path_parts, fn part ->
+                   part != "" && is_nil(Regex.run(~r/\s/, part))
+                 end) do
+                case Enum.join(path_parts, "/") do
+                  "" -> "/.well-known/did.json"
+                  p -> "/" <> p <> "/did.json"
+                end
+              else
+                nil
+              end
+
+            URI.decode(host_port)
+            |> String.split(":", parts: 2)
+            |> case do
+              [host] ->
+                {host, nil, path}
+
+              [host, port] ->
+                case Integer.parse(port) do
+                  {p, ""} -> {host, p, path}
+                  _ -> {host, 0, path}
+                end
+            end
+        end
+
+      cond do
+        is_nil(path) ->
+          {:error, "invalid path"}
+
+        is_integer(port) && (port == 0 || port > 65535) ->
+          {:error, "invalid port"}
+
+        true ->
+          port =
+            case {scheme, port} do
+              {"http", 80} -> nil
+              {"https", 443} -> nil
+              {_, p} -> p
+            end
+
+          {:ok, %URI{scheme: scheme, host: host, port: port, path: path}}
+      end
+    else
+      {:error, "not a did:web identifier"}
+    end
+  end
+
   defp parse_did!(identifier) do
     parts = String.split(identifier, ":")
 

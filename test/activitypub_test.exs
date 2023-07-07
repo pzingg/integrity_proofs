@@ -7,8 +7,9 @@ defmodule IntegrityProofs.ActivityPubTest do
   @private_key_bytes <<112, 38, 151, 226, 182, 82, 47, 205, 7, 158, 217, 27, 159, 218, 142, 29,
                        117, 44, 83, 74, 35, 121, 140, 91, 190, 215, 239, 144, 58, 42, 1, 200>>
 
+  @identifier IntegrityProofs.make_ed25519_public_key(@public_key_bytes, :did_key)
+  @verification_method_url "#{@identifier}#keys-1"
   @proof_config_created "2020-11-05T19:23:24Z"
-  @verification_method_url "did:example:123456789abcdefghi#keys-1"
 
   @test_person %{
     "type" => "Person",
@@ -34,16 +35,16 @@ defmodule IntegrityProofs.ActivityPubTest do
     assert person_with_identity_proof["attachment"] == [
              %{
                "type" => "VerifiableIdentityStatement",
-               "subject" => "did:example:123456789abcdefghi#keys-1",
+               "subject" => @verification_method_url,
                "alsoKnownAs" => "https://server.example/users/alice",
                "proof" => %{
                  "created" => "2020-11-05T19:23:24Z",
                  "cryptosuite" => "jcs-eddsa-2022",
                  "proofPurpose" => "assertionMethod",
                  "proofValue" =>
-                   "z2uFJT9DG444yJi5jdT5mV4Mv8moGEsbt3WyscJvzxbVREvJjyrDFmtfoUFBX7pfHoq2n52dfa1xt2ETh8HASBcfy",
+                   "z5JnJU6aBzyG8gMBvGeYBnC2SVaKJX1zGgdqGbfWt9sGNn32mjmtHZd6WZUqdipH3cuvhc9BSnkXSFD8nNw2nLVfS",
                  "type" => "DataIntegrityProof",
-                 "verificationMethod" => "did:example:123456789abcdefghi#keys-1"
+                 "verificationMethod" => @verification_method_url
                }
              }
            ]
