@@ -27,7 +27,7 @@ Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_do
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
 be found at <https://hexdocs.pm/integrity_proofs>.
 
-## Status and roadman
+## Status and roadmap
 
 Right now, fetching verification methods, controller documents, and keys are all
 done in memory, using the options shown in the tests. Implementation of 
