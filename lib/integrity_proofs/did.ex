@@ -2,9 +2,9 @@ defmodule IntegrityProofs.Did do
   @moduledoc """
   Functions to create and resolve DID documents.
 
-  See:
-  * [The did:key Method v0.7](https://w3c-ccg.github.io/did-method-key/)
-  * [did:web Method Specification](https://w3c-ccg.github.io/did-method-web/)
+  Section references refer to [The did:key Method v0.7](https://w3c-ccg.github.io/did-method-key/)
+
+  See also the [did:web Method Specification](https://w3c-ccg.github.io/did-method-web/)
   """
 
   @valid_did_methods ["web", "key", "plc", "example"]
