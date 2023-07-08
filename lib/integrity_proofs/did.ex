@@ -1,6 +1,10 @@
 defmodule IntegrityProofs.Did do
   @moduledoc """
   Functions to create and resolve DID documents.
+
+  See:
+  * [The did:key Method v0.7](https://w3c-ccg.github.io/did-method-key/)
+  * [did:web Method Specification](https://w3c-ccg.github.io/did-method-web/)
   """
 
   @valid_did_methods ["web", "key", "plc", "example"]
@@ -12,6 +16,14 @@ defmodule IntegrityProofs.Did do
 
     def message(%{did: did}) do
       "Invalid DID #{did}"
+    end
+  end
+
+  defmodule DidResolutionError do
+    defexception did: nil, reason: nil
+
+    def message(%{did: did, reason: reason}) do
+      "Failed to resolve DID #{did}: #{reason}"
     end
   end
 
@@ -134,13 +146,21 @@ defmodule IntegrityProofs.Did do
   12. Return `verification_method`.
   """
   def build_signature_method!(
-        %{identifier: identifier, multibase_value: multibase_value},
+        %{method: :key, did_string: identifier, multibase_value: multibase_value},
         options
       ) do
+    do_signature_method(identifier, multibase_value, options)
+  end
+
+  def build_signature_method!(%{did_string: identifier}, options) do
+    multibase_value = Keyword.fetch!(options, :multibase_value)
+    do_signature_method(identifier, multibase_value, options)
+  end
+
+  defp do_signature_method(identifier, multibase_value, options) do
     public_key_format = Keyword.get(options, :public_key_format, "Multikey")
     # Not in standard
     fragment = Keyword.get(options, :signature_method_fragment, multibase_value)
-
     # The did:key Method draft here seems wrong.
     {_raw_public_key_bytes, %{codec: _codec, code: _multicodec_value, prefix: _prefix}} =
       IntegrityProofs.decode_multikey!(multibase_value)
@@ -195,7 +215,7 @@ defmodule IntegrityProofs.Did do
   12. Return `verification_method`.
   """
   def build_encryption_method!(
-        %{identifier: identifier, multibase_value: multibase_value},
+        %{did_string: identifier, multibase_value: multibase_value},
         options
       ) do
     public_key_format = Keyword.get(options, :public_key_format, "Multikey")
@@ -216,6 +236,39 @@ defmodule IntegrityProofs.Did do
   end
 
   @doc """
+  For "did:web" and other HTTP-reliant methods, use a resolver to
+  fetch and decode a DID document.
+  """
+  def resolve_did_web!(identifier, options) when is_binary(identifier) do
+    parse_did!(identifier, options)
+    |> resolve_did_web!(options)
+  end
+
+  def resolve_did_web!(%{method: :web, did_string: identifier} = parsed_did, options) do
+    resolver_module = Keyword.fetch!(options, :web_resolver)
+
+    url =
+      %URI{
+        scheme: parsed_did.scheme,
+        host: parsed_did.host,
+        port: parsed_did.port,
+        path: parsed_did.path
+      }
+      |> URI.to_string()
+
+    with {:ok, body} <- apply(resolver_module, :fetch, [url, []]),
+         {:ok, document} <- Jason.decode(body) do
+      document
+    else
+      {:error, reason} -> raise DidResolutionError, did: identifier, reason: reason
+    end
+  end
+
+  def resolve_did_web!(%{method: method, did_string: identifier}, _) do
+    raise DidResolutionError, did: identifier, reason: "invalid DID method #{method}"
+  end
+
+  @doc """
   Resolve the URL for a did:web identifier.
 
   The method specific identifier MUST match the common name used in
@@ -227,82 +280,127 @@ defmodule IntegrityProofs.Did do
   web-did = "did:web:" domain-name
   web-did = "did:web:" domain-name * (":" path)
   """
-  def did_web_url(identifier, scheme \\ "https") do
+  def did_web_uri(identifier, options \\ []) do
     if String.starts_with?(identifier, "did:web:") do
-      {host, port, path} =
-        String.replace_leading(identifier, "did:web:", "")
-        |> String.split(":")
-        |> case do
-          [host_port | path_parts] ->
-            path =
-              if Enum.all?(path_parts, fn part ->
-                   part != "" && is_nil(Regex.run(~r/\s/, part))
-                 end) do
-                case Enum.join(path_parts, "/") do
-                  "" -> "/.well-known/did.json"
-                  p -> "/" <> p <> "/did.json"
-                end
-              else
-                nil
-              end
+      parsed_did = parse_did!(identifier, options)
 
-            URI.decode(host_port)
-            |> String.split(":", parts: 2)
-            |> case do
-              [host] ->
-                {host, nil, path}
-
-              [host, port] ->
-                case Integer.parse(port) do
-                  {p, ""} -> {host, p, path}
-                  _ -> {host, 0, path}
-                end
-            end
-        end
-
-      cond do
-        is_nil(path) ->
-          {:error, "invalid path"}
-
-        is_integer(port) && (port == 0 || port > 65535) ->
-          {:error, "invalid port"}
-
-        true ->
-          port =
-            case {scheme, port} do
-              {"http", 80} -> nil
-              {"https", 443} -> nil
-              {_, p} -> p
-            end
-
-          {:ok, %URI{scheme: scheme, host: host, port: port, path: path}}
-      end
+      {:ok,
+       %URI{
+         scheme: parsed_did.scheme,
+         host: parsed_did.host,
+         port: parsed_did.port,
+         path: parsed_did.path
+       }}
     else
       {:error, "not a did:web identifier"}
     end
   end
 
-  defp parse_did!(identifier) do
-    parts = String.split(identifier, ":")
+  defp parse_did!(identifier, options \\ []) do
+    parts = String.split(identifier, ":", parts: 3)
 
-    parsed =
-      case parts do
-        ["did", method, multibase_value] ->
-          %{method: method, version: "1", multibase_value: multibase_value}
+    if Enum.count(parts) != 3 || hd(parts) != "did" do
+      raise InvalidDidError, did: identifier
+    end
 
-        ["did", method, version, multibase_value] ->
-          %{method: method, version: version, multibase_value: multibase_value}
+    [_, method, method_specific_id] = parts
 
-        _ ->
-          %{method: "invalid", version: "1", multibase_value: ""}
-      end
+    parsed = %{
+      did_string: identifier,
+      method: String.to_existing_atom(method),
+      method_specific_id: method_specific_id
+    }
 
-    if parsed.method in @valid_did_methods && String.starts_with?(parsed.multibase_value, "z") do
-      Map.put(parsed, :identifier, identifier)
+    case method do
+      "key" ->
+        validate_did!(:key, parsed, String.split(method_specific_id, ":"), options)
+
+      "web" ->
+        validate_did!(:web, parsed, String.split(method_specific_id, ":"), options)
+
+      _ ->
+        raise InvalidDidError, did: identifier
+    end
+  end
+
+  defp validate_did!(:key, %{did_string: identifier} = parsed, [multibase_value], _) do
+    if String.starts_with?(multibase_value, "z") do
+      Map.merge(
+        parsed,
+        %{
+          version: "1",
+          multibase_value: multibase_value
+        }
+      )
     else
       raise InvalidDidError, did: identifier
     end
   end
+
+  defp validate_did!(:key, %{did_string: identifier} = parsed, [version, multibase_value], _) do
+    if String.starts_with?(multibase_value, "z") do
+      Map.merge(
+        parsed,
+        %{
+          version: version,
+          multibase_value: multibase_value
+        }
+      )
+    else
+      raise InvalidDidError, did: identifier
+    end
+  end
+
+  defp validate_did!(:web, %{did_string: identifier} = parsed, [host_port | path_parts], options) do
+    path =
+      if Enum.all?(path_parts, fn part ->
+           part != "" && is_nil(Regex.run(~r/\s/, part))
+         end) do
+        case Enum.join(path_parts, "/") do
+          "" -> "/.well-known/did.json"
+          p -> "/" <> p <> "/did.json"
+        end
+      else
+        nil
+      end
+
+    {host, port, path} =
+      URI.decode(host_port)
+      |> String.split(":", parts: 2)
+      |> case do
+        [host] ->
+          {host, nil, path}
+
+        [host, port] ->
+          case Integer.parse(port) do
+            {p, ""} -> {host, p, path}
+            _ -> {host, 0, path}
+          end
+      end
+
+    cond do
+      is_nil(path) ->
+        raise InvalidDidError, did: identifier
+
+      is_integer(port) && (port == 0 || port > 65535) ->
+        raise InvalidDidError, did: identifier
+
+      true ->
+        scheme = Keyword.get(options, :scheme, "https")
+
+        port =
+          case {scheme, port} do
+            {"http", 80} -> nil
+            {"https", 443} -> nil
+            {_, p} -> p
+          end
+
+        Map.merge(parsed, %{scheme: scheme, host: host, port: port, path: path})
+    end
+  end
+
+  defp validate_did!(_, %{did_string: identifier}, _, _),
+    do: raise(InvalidDidError, did: identifier)
 
   defp valid_signature_key_format?(format, options) do
     Keyword.get(options, :enable_experimental_key_types, false) ||

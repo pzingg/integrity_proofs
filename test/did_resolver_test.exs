@@ -1,6 +1,11 @@
 defmodule IntegrityProofs.DidResolverTest do
   use ExUnit.Case
 
+  @public_key_bytes <<243, 105, 212, 154, 54, 128, 250, 99, 47, 184, 242, 248, 144, 45, 17, 70,
+                      176, 243, 220, 174, 103, 200, 4, 192, 33, 143, 102, 29, 234, 149, 1, 188>>
+
+  @multibase_value IntegrityProofs.make_ed25519_public_key(@public_key_bytes, :multikey)
+
   @identifier "did:web:server.example:users:alice"
 
   setup do
@@ -8,12 +13,23 @@ defmodule IntegrityProofs.DidResolverTest do
 
     TestServer.add("/users/alice/did.json",
       to: fn conn ->
-        Plug.Conn.send_resp(conn, 200, "success")
+        body =
+          IntegrityProofs.Did.build_did_document!(@identifier,
+            multibase_value: @multibase_value,
+            signature_method_fragment: "keys-1"
+          )
+          |> Jason.encode!()
+
+        conn
+        |> Plug.Conn.put_resp_header("content-type", "application/json")
+        |> Plug.Conn.send_resp(200, body)
       end
     )
   end
 
-  def request(%URI{path: path} = uri, opts \\ []) do
+  def fetch(url, opts) do
+    %URI{path: path} = URI.parse(url)
+
     url =
       TestServer.url(path)
       |> String.to_charlist()
@@ -35,10 +51,22 @@ defmodule IntegrityProofs.DidResolverTest do
   end
 
   test "resolves a did:web identifier" do
-    {:ok, uri} = IntegrityProofs.Did.did_web_url(@identifier)
-    assert URI.to_string(uri) == "https://server.example/users/alice/did.json"
+    {:ok, uri} = IntegrityProofs.Did.did_web_uri(@identifier)
+    url = URI.to_string(uri)
+    assert url == "https://server.example/users/alice/did.json"
 
-    resp = request(uri)
-    assert {:ok, "success"} = resp
+    resp = fetch(url, [])
+    assert {:ok, json} = resp
+    assert {:ok, document} = Jason.decode(json)
+    assert document["id"] == @identifier
+  end
+
+  test "resolves a did:web identifier using web_resolver" do
+    assert document =
+             IntegrityProofs.Did.resolve_did_web!(@identifier,
+               web_resolver: __MODULE__
+             )
+
+    assert document["id"] == @identifier
   end
 end

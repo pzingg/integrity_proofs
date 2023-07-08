@@ -673,8 +673,8 @@ defmodule IntegrityProofs do
 
   def did_uri?(%URI{scheme: "did", host: nil, path: path})
       when is_binary(path) do
-    case String.split(path, ":", parts: 2) do
-      [did_method, did_value] ->
+    case String.split(path, ":") do
+      [did_method | [did_value | _]] ->
         did_method in @valid_did_methods && did_value != ""
 
       _ ->

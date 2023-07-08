@@ -63,8 +63,7 @@ defmodule IntegrityProofs.ActivityPubTest do
       )
 
     assert IntegrityProofs.ActivityPub.verify_identity_proof!(person_with_identity_proof,
-             public_key_bytes: @public_key_bytes,
-             private_key_bytes: @private_key_bytes
+             public_key_bytes: @public_key_bytes
            )
   end
 end
