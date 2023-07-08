@@ -236,6 +236,11 @@ defmodule IntegrityProofs.Did do
   end
 
   @doc """
+  Returns a list of the DID methods understood by this module, as strings.
+  """
+  def valid_did_methods(), do: @valid_did_methods
+
+  @doc """
   For "did:web" and other HTTP-reliant methods, use a resolver to
   fetch and decode a DID document.
   """

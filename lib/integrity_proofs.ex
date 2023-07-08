@@ -1,14 +1,44 @@
 defmodule IntegrityProofs do
   @moduledoc """
-  Documentation for `IntegrityProofs`.
+  Utilities for creating and verifying data integrity.
+
+  Section references in function descriptions refer to
+  [Verifiable Credential Data Integrity 1.0](https://www.w3.org/TR/vc-data-integrity/)
   """
 
   require Record
 
-  @valid_did_methods ["web", "key", "plc", "example"]
   @valid_proof_purposes ["assertionMethod"]
   @id_ed25519 {1, 3, 101, 112}
   @curve_params {:namedCurve, @id_ed25519}
+
+  @typedoc """
+  A Keyword option passed to any of the public functions
+  defined by modules in this library.
+  """
+  @type integrity_option() ::
+          {:type, String.t()}
+          | {:cryptosuite, String.t()}
+          | {:verfication_method, String.t()}
+          | {:proof_purpose, String.t()}
+          | {:created, String.t()}
+          | {:context, list()}
+          | {:scheme, String.t()}
+          | {:web_resolver, module()}
+          | {:private_key_bytes, binary()}
+          | {:public_key_bytes, binary()}
+          | {:private_key_pem, String.t()}
+          | {:public_key_pem, String.t()}
+          | {:multibase_value, String.t()}
+          | {:public_key_format, String.t()}
+          | {:signature_method_fragment, String.t()}
+          | {:encryption_method_fragment, String.t()}
+          | {:proof, map()}
+          | {:cached_controller_document, map()}
+          | {:enable_encryption_key_derivation, boolean()}
+          | {:enable_experimental_key_types, boolean()}
+
+  @type integrity_options() :: [integrity_option()]
 
   @doc """
   Erlang record for public key.
@@ -139,7 +169,7 @@ defmodule IntegrityProofs do
   end
 
   @doc """
-  Implements jcs-eddsa-2022 proof configuration. § 3.1.5 and § 3.2
+  Implements jcs-eddsa-2022 proof configuration. § 3.1.5 and § 3.2.
 
   1. Let `proof_config` be an empty object.
   2. Set `proof_config.type` to `options.type`.
@@ -246,8 +276,7 @@ defmodule IntegrityProofs do
   end
 
   @doc """
-  Implements jcs-eddsa-2022 proof serialization
-  § 3.1.6.
+  Implements jcs-eddsa-2022 proof serialization. § 3.1.6.
 
   1. Let `private_key_bytes` be the result of retrieving the private key
      bytes associated with the `options.verification_method` value as
@@ -267,8 +296,7 @@ defmodule IntegrityProofs do
   end
 
   @doc """
-  Implements jcs-eddsa-2022 proof serialization
-  § 3.1.7.
+  Implements jcs-eddsa-2022 proof verification, § 3.1.7.
 
   1. Let `public_key_bytes` be the result of retrieving the public key
      bytes associated with the `options.verification_method` value as
@@ -364,7 +392,13 @@ defmodule IntegrityProofs do
   end
 
   @doc """
-  Verifies a proof.
+  Verifies a proof document, e.g. an object (map) with a `proof` property that
+  has `type`, `cryptosuite`, `created`, `verificationMethod`, `proofPurpose`
+  and `proofValue` properties.
+
+  Returns `true` if the proof can be verified.
+
+  May raise errors if the proof is not in a valid format.
   """
   def verify_proof_document!(proof_document, options) when is_map(proof_document) do
     {proof, document_to_verify} = Map.pop!(proof_document, "proof")
@@ -450,23 +484,6 @@ defmodule IntegrityProofs do
       true ->
         raise ArgumentError, IO.inspect(options)
     end
-  end
-
-  def dereference_controller_document!(_controller_document_url, options) do
-    built_in = Keyword.get(options, :cached_controller_document)
-    built_in
-  end
-
-  def find_verification_method_fragment(controller_document, vm_fragment, _options) do
-    document_id = Map.fetch!(controller_document, "id")
-    vm_url = document_id <> "#" <> vm_fragment
-
-    Map.fetch!(controller_document, "verificationMethod")
-    |> List.wrap()
-    |> Enum.find(fn
-      vm when is_map(vm) -> Map.fetch!(vm, "id") == vm_url
-      _ -> false
-    end)
   end
 
   @doc """
@@ -648,15 +665,6 @@ defmodule IntegrityProofs do
     end
   end
 
-  defp find_multicodec_mapping(codec) do
-    Multicodec.mappings()
-    |> Enum.find(fn %Multicodec.MulticodecMapping{codec: c} -> c == codec end)
-    |> case do
-      %Multicodec.MulticodecMapping{} = mapping -> {:ok, mapping}
-      _ -> {:error, "mapping for codec #{codec} not found"}
-    end
-  end
-
   @doc """
   Decodes the public key from a "Multikey" verification method's
   multibase value.
@@ -671,11 +679,19 @@ defmodule IntegrityProofs do
     end
   end
 
+  @doc """
+  Returns `true` if a binary or URI is a recognized DID method
+  that has a non-empty method-specific id.
+  """
+  def did_uri?(url) when is_binary(url) do
+    URI.parse(url) |> did_uri?()
+  end
+
   def did_uri?(%URI{scheme: "did", host: nil, path: path})
       when is_binary(path) do
     case String.split(path, ":") do
       [did_method | [did_value | _]] ->
-        did_method in @valid_did_methods && did_value != ""
+        did_method in IntegrityProofs.Did.valid_did_methods() && did_value != ""
 
       _ ->
         false
@@ -684,11 +700,45 @@ defmodule IntegrityProofs do
 
   def did_uri?(_), do: false
 
+  @doc """
+  Returns `true` if a binary or URI has an "http" or "https"
+  scheme with non-empty host and path components.
+  """
+  def http_uri?(url) when is_binary(url) do
+    URI.parse(url) |> http_uri?()
+  end
+
   def http_uri?(%URI{scheme: scheme, host: host, path: path}) do
     scheme in ["http", "https"] && !is_nil(host) && !is_nil(path)
   end
 
   def http_uri?(_), do: false
+
+  defp dereference_controller_document!(_controller_document_url, options) do
+    built_in = Keyword.get(options, :cached_controller_document)
+    built_in
+  end
+
+  defp find_verification_method_fragment(controller_document, vm_fragment, _options) do
+    document_id = Map.fetch!(controller_document, "id")
+    vm_url = document_id <> "#" <> vm_fragment
+
+    Map.fetch!(controller_document, "verificationMethod")
+    |> List.wrap()
+    |> Enum.find(fn
+      vm when is_map(vm) -> Map.fetch!(vm, "id") == vm_url
+      _ -> false
+    end)
+  end
+
+  defp find_multicodec_mapping(codec) do
+    Multicodec.mappings()
+    |> Enum.find(fn %Multicodec.MulticodecMapping{codec: c} -> c == codec end)
+    |> case do
+      %Multicodec.MulticodecMapping{} = mapping -> {:ok, mapping}
+      _ -> {:error, "mapping for codec #{codec} not found"}
+    end
+  end
 
   defp valid_datetime?(dt) when is_binary(dt) do
     Regex.match?(~r/^\d\d\d\d-\d\d-\d\dT\d\d\:\d\d\:\d\dZ$/, dt)
