@@ -30,8 +30,15 @@ be found at <https://hexdocs.pm/integrity_proofs>.
 ## Status and roadmap
 
 Right now, fetching verification methods, controller documents, and keys are all
-done in memory, using the options shown in the tests. Implementation of 
-a hosted DID system is in the plan.
+done in memory, using the options shown in the tests. 
+
+A future version should utilize registered verification handler
+behaviour modules that can dereference remote key stores, and 
+(with proper authorization) look up private keys that correspond
+to exposed public keys.
+
+Implementations of hosted (non-decentralized) DID systems,
+using the "did:web" and "did:plc" methods are also planned.
 
 ## Implementation notes
 
