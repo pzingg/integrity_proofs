@@ -263,6 +263,7 @@ defmodule IntegrityProofsTest do
       )
 
     assert IntegrityProofs.verify_proof_document!(proof_document,
+             expected_proof_purpose: "assertionMethod",
              cached_controller_document: @controller_document
            )
   end

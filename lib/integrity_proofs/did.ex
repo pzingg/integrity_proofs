@@ -12,34 +12,37 @@ defmodule IntegrityProofs.Did do
   @known_encryption_key_formats ["Multikey", "JsonWebKey2020", "X25519KeyAgreementKey2020"]
 
   defmodule InvalidDidError do
-    defexception did: nil
+    defexception [:message]
 
-    def message(%{did: did}) do
-      "Invalid DID #{did}"
+    @impl true
+    def exception(did) do
+      %__MODULE__{message: "Invalid DID #{did}"}
     end
   end
 
   defmodule DidResolutionError do
-    defexception did: nil, reason: nil
+    defexception [:did, :reason]
 
+    @impl true
     def message(%{did: did, reason: reason}) do
       "Failed to resolve DID #{did}: #{reason}"
     end
   end
 
   defmodule UnsupportedPublicKeyTypeError do
-    defexception format: nil
+    defexception [:message]
 
-    def message(%{format: format}) do
-      "Unsupported public key type #{format}"
+    @impl true
+    def exception(format) do
+      %__MODULE__{message: "Unsupported public key type #{format}"}
     end
   end
 
   @doc """
-  Builds a DID document.
+  Builds a DID document per § 3.1.1 Document Creation Algorithm.
 
   1. Initialize document to an empty object.
-  2. Using a colon (:) as the delimiter, split the `identifier` into its
+  2. Using a colon (":") as the delimiter, split the `identifier` into its
      components: a `scheme`, a `method`, a `version`, and a `multibase_value`.
      If there are only three components set the `version` to the string
      value "1" and use the last value as the `multibase_value`.
@@ -166,7 +169,7 @@ defmodule IntegrityProofs.Did do
       IntegrityProofs.decode_multikey!(multibase_value)
 
     if !valid_signature_key_format?(public_key_format, options) do
-      raise UnsupportedPublicKeyTypeError, format: public_key_format
+      raise UnsupportedPublicKeyTypeError, public_key_format
     end
 
     %{
@@ -224,7 +227,7 @@ defmodule IntegrityProofs.Did do
     _decoded = IntegrityProofs.decode_multikey!(multibase_value)
 
     if !valid_encryption_key_format?(public_key_format, options) do
-      raise UnsupportedPublicKeyTypeError, format: public_key_format
+      raise UnsupportedPublicKeyTypeError, public_key_format
     end
 
     %{
@@ -305,7 +308,7 @@ defmodule IntegrityProofs.Did do
     parts = String.split(identifier, ":", parts: 3)
 
     if Enum.count(parts) != 3 || hd(parts) != "did" do
-      raise InvalidDidError, did: identifier
+      raise InvalidDidError, identifier
     end
 
     [_, method, method_specific_id] = parts
@@ -324,7 +327,7 @@ defmodule IntegrityProofs.Did do
         validate_did!(:web, parsed, String.split(method_specific_id, ":"), options)
 
       _ ->
-        raise InvalidDidError, did: identifier
+        raise InvalidDidError, identifier
     end
   end
 
@@ -338,7 +341,7 @@ defmodule IntegrityProofs.Did do
         }
       )
     else
-      raise InvalidDidError, did: identifier
+      raise InvalidDidError, identifier
     end
   end
 
@@ -352,7 +355,7 @@ defmodule IntegrityProofs.Did do
         }
       )
     else
-      raise InvalidDidError, did: identifier
+      raise InvalidDidError, identifier
     end
   end
 
@@ -385,10 +388,10 @@ defmodule IntegrityProofs.Did do
 
     cond do
       is_nil(path) ->
-        raise InvalidDidError, did: identifier
+        raise InvalidDidError, identifier
 
       is_integer(port) && (port == 0 || port > 65535) ->
-        raise InvalidDidError, did: identifier
+        raise InvalidDidError, identifier
 
       true ->
         scheme = Keyword.get(options, :scheme, "https")
@@ -404,8 +407,9 @@ defmodule IntegrityProofs.Did do
     end
   end
 
-  defp validate_did!(_, %{did_string: identifier}, _, _),
-    do: raise(InvalidDidError, did: identifier)
+  defp validate_did!(_, %{did_string: identifier}, _, _) do
+    raise InvalidDidError, identifier
+  end
 
   defp valid_signature_key_format?(format, options) do
     Keyword.get(options, :enable_experimental_key_types, false) ||

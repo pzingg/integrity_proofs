@@ -8,7 +8,13 @@ defmodule IntegrityProofs do
 
   require Record
 
-  @valid_proof_purposes ["assertionMethod"]
+  @valid_proof_purposes [
+    "authentication",
+    "assertionMethod",
+    "keyAgreement",
+    "capabilityDelegation",
+    "capabilityInvocation"
+  ]
   @id_ed25519 {1, 3, 101, 112}
   @curve_params {:namedCurve, @id_ed25519}
 
@@ -37,6 +43,9 @@ defmodule IntegrityProofs do
           | {:cached_controller_document, map()}
           | {:enable_encryption_key_derivation, boolean()}
           | {:enable_experimental_key_types, boolean()}
+          | {:expected_proof_purpose, String.t()}
+          | {:acceptable_created_time_deviation, integer()}
+          | {:dt_verified, DateTime.t()}
 
   @type integrity_options() :: [integrity_option()]
 
@@ -84,6 +93,7 @@ defmodule IntegrityProofs do
   defmodule ProofTransformationError do
     defexception type: "undefined", cryptosuite: "undefined"
 
+    @impl true
     def message(%{type: type, cryptosuite: cryptosuite}) do
       "Invalid transformation options: type = #{type}, cryptosuite = #{cryptosuite}"
     end
@@ -92,56 +102,90 @@ defmodule IntegrityProofs do
   defmodule InvalidProofConfigurationError do
     defexception type: "undefined", cryptosuite: "undefined"
 
+    @impl true
     def message(%{type: type, cryptosuite: cryptosuite}) do
       "Invalid proof configuration: type = #{type}, cryptosuite = #{cryptosuite}"
     end
   end
 
   defmodule InvalidProofDatetimeError do
-    defexception created: nil
+    defexception [:message]
 
-    def message(%{created: created}) do
-      "Invalid proof datetime #{created}"
+    @impl true
+    def exception(created) do
+      %__MODULE__{message: "Invalid proof datetime #{created}"}
     end
   end
 
   defmodule InvalidVerificationMethodURLError do
-    defexception url: nil
+    defexception [:message]
 
-    def message(%{url: url}) do
-      "Invalid verification method URL #{url}"
+    @impl true
+    def exception(url) do
+      %__MODULE__{message: "Invalid verification method URL #{url}"}
     end
   end
 
   defmodule InvalidControllerDocumentIdError do
-    defexception id: nil
+    defexception [:message]
 
-    def message(%{id: id}) do
-      "Invalid controller document id #{id}"
+    @impl true
+    def exception(id) do
+      %__MODULE__{message: "Invalid controller document id #{id}"}
     end
   end
 
   defmodule InvalidVerificationMethodError do
-    defexception method: nil
+    defexception [:message]
 
-    def message(%{method: method}) do
-      "Invalid verification method #{inspect(method)}"
+    @impl true
+    def exception(method) do
+      %__MODULE__{message: "Invalid verification method #{inspect(method)}"}
     end
   end
 
   defmodule InvalidProofPurposeForVerificationMethodError do
-    defexception method: nil, purpose: nil
+    defexception [:method, :purpose]
 
+    @impl true
     def message(%{method: method, purpose: purpose}) do
       "Invalid proof purpose #{purpose} for verification method #{inspect(method)}"
     end
   end
 
   defmodule InvalidPublicKeyError do
-    defexception multibase: nil, reason: nil
+    defexception [:multibase, :reason]
 
+    @impl true
     def message(%{multibase: multibase, reason: reason}) do
       "Invalid public Multikey #{multibase}: #{reason}"
+    end
+  end
+
+  defmodule MalformedProofError do
+    defexception []
+
+    @impl true
+    def message(_) do
+      "malformed proof"
+    end
+  end
+
+  defmodule MismatchedProofPurposeError do
+    defexception []
+
+    @impl true
+    def message(_) do
+      "mismatched proof purpose"
+    end
+  end
+
+  defmodule CreatedTimeDeviationError do
+    defexception [:message]
+
+    @impl true
+    def exception(acceptable) do
+      %__MODULE__{message: "proof created time deviated more than #{acceptable} seconds"}
     end
   end
 
@@ -200,7 +244,7 @@ defmodule IntegrityProofs do
     created = Keyword.get(options, :created)
 
     if !valid_datetime?(created) do
-      raise IntegrityProofs.InvalidProofDatetimeError, created: created
+      raise IntegrityProofs.InvalidProofDatetimeError, created
     end
 
     context = Keyword.get(options, :context) || Map.fetch!(unsecured_document, "@context")
@@ -364,7 +408,7 @@ defmodule IntegrityProofs do
     vm_fragment = vm_identifier.fragment
 
     if !did_uri?(vm_identifier) && !http_uri?(vm_identifier) do
-      raise InvalidVerificationMethodURLError, url: verification_method
+      raise InvalidVerificationMethodURLError, verification_method
     end
 
     controller_document_url = %URI{vm_identifier | fragment: nil} |> URI.to_string()
@@ -372,14 +416,14 @@ defmodule IntegrityProofs do
     document_id = Map.get(controller_document, "id")
 
     if document_id != controller_document_url do
-      raise InvalidControllerDocumentIdError, id: document_id
+      raise InvalidControllerDocumentIdError, document_id
     end
 
     verification_method =
       find_verification_method_fragment(controller_document, vm_fragment, options)
 
     if !valid_verification_method?(verification_method) do
-      raise InvalidVerificationMethodError, method: verification_method
+      raise InvalidVerificationMethodError, verification_method
     end
 
     if !valid_purpose?(verification_method, vm_purpose) do
@@ -394,36 +438,106 @@ defmodule IntegrityProofs do
   @doc """
   Verifies a proof document, e.g. an object (map) with a `proof` property that
   has `type`, `cryptosuite`, `created`, `verificationMethod`, `proofPurpose`
-  and `proofValue` properties.
+  and `proofValue` properties. § 4.2.
 
   Returns `true` if the proof can be verified.
 
   May raise errors if the proof is not in a valid format.
+
+  1. Let `proof` be set to `securedDocument.proof`.
+  2. If the `proof.type`, `proof.verificationMethod`, or `proof.proofPurpose`
+     values are not set, a `MalformedProofError` MUST be raised.
+  3. If the cryptographic suite requires the `proof.created` value, and
+     it is not set, a `MalformedProofError` MUST be raised.
+  4. If the `proof.proofPurpose` value does not match
+     option `expected_proof_purpose`, a `MismatchedProofPurposeError`
+     MUST be raised.
+  5. Let `unsecuredDocument` be a copy of `securedDocument` with the
+     proof value removed.
+  6. Let `transformedData` be the result of transforming the
+     `unsecuredDocument` according to a transformation algorithm associated
+     with the cryptographic suite specified in proof and the options
+     parameters provided as inputs to the algorithm. The type of
+     cryptographic suite is specified by the `proof.type` value and MAY
+     be further described by cryptographic suite-specific properties
+     expressed in proof.
+  7. Let `hashData` be the result of hashing the `transformedData` according
+     to a hashing algorithm associated with the cryptographic suite
+     specified in the proof and options parameters provided as inputs to
+     the algorithm.
+  8. Let `proof_verified?` be the result of running the proof verification
+     algorithm associated with the cryptographic suite with the `hashData`
+     and options parameters provided as inputs to the algorithm.
+  9. If the `proof.created` is set and it deviates more than
+     options `acceptable_created_time_deviation` seconds, a
+     `CreatedTimeDeviationError` MUST be raised.
+  10. If `options.domain` is set and it does not match `proof.domain`,
+     an `InvalidDomainError` MUST be raised.
+  11. If `options.challenge` is set and it does not match `proof.challenge`,
+     an `InvalidChallengeError` MUST be raised.
+  12. Return `proof_verified?` as the verification result.
   """
   def verify_proof_document!(proof_document, options) when is_map(proof_document) do
+    expected_proof_purpose = Keyword.fetch!(options, :expected_proof_purpose)
+
+    acceptable_created_time_deviation =
+      Keyword.get(options, :acceptable_created_time_deviation, 0)
+
+    dt_verified = Keyword.get(options, :dt_verified, DateTime.utc_now())
+
     {proof, document_to_verify} = Map.pop!(proof_document, "proof")
-    {proof_value, proof_config} = Map.pop(proof, "proofValue")
 
-    options =
-      Keyword.merge(options,
-        type: proof_config["type"],
-        cryptosuite: proof_config["cryptosuite"],
-        created: proof_config["created"],
-        verification_method: proof_config["verificationMethod"],
-        proof_purpose: proof_config["proofPurpose"]
-      )
+    with %{
+           "type" => type,
+           "cryptosuite" => cryptosuite,
+           "created" => created,
+           "verificationMethod" => verification_method,
+           "proofPurpose" => proof_purpose,
+           "proofValue" => proof_value
+         } <- proof,
+         true <-
+           is_binary(type) && is_binary(cryptosuite) && is_binary(created) &&
+             is_binary(verification_method) && is_binary(proof_purpose) && is_binary(proof_value),
+         {:ok, dt_created} <- Timex.parse(created, "{RFC3339z}") do
+      if proof_purpose != expected_proof_purpose do
+        raise MismatchedProofPurposeError
+      end
 
-    proof_config = IntegrityProofs.proof_configuration!(document_to_verify, options)
+      options =
+        Keyword.merge(options,
+          type: type,
+          cryptosuite: cryptosuite,
+          created: created,
+          verification_method: verification_method,
+          proof_purpose: proof_purpose
+        )
 
-    transformed_document =
-      transform_jcs_eddsa_2022!(document_to_verify,
-        type: "DataIntegrityProof",
-        cryptosuite: "jcs-eddsa-2022"
-      )
+      proof_config = IntegrityProofs.proof_configuration!(document_to_verify, options)
 
-    hash_data = hash(proof_config, transformed_document)
-    {:ok, {proof_bytes, :base58_btc}} = Multibase.codec_decode(proof_value)
-    verify_proof!(hash_data, proof_bytes, Keyword.put(options, :proof, proof))
+      transformed_document =
+        transform_jcs_eddsa_2022!(document_to_verify,
+          type: "DataIntegrityProof",
+          cryptosuite: "jcs-eddsa-2022"
+        )
+
+      hash_data = hash(proof_config, transformed_document)
+      {:ok, {proof_bytes, :base58_btc}} = Multibase.codec_decode(proof_value)
+
+      proof_verified? = verify_proof!(hash_data, proof_bytes, Keyword.put(options, :proof, proof))
+
+      if acceptable_created_time_deviation > 0 do
+        deviation = DateTime.diff(dt_verified, dt_created) |> abs()
+
+        if deviation > acceptable_created_time_deviation do
+          raise CreatedTimeDeviationError, acceptable_created_time_deviation
+        end
+      end
+
+      proof_verified?
+    else
+      _ ->
+        raise MalformedProofError
+    end
   end
 
   @doc """

@@ -63,6 +63,7 @@ defmodule IntegrityProofs.ActivityPubTest do
       )
 
     assert IntegrityProofs.ActivityPub.verify_identity_proof!(person_with_identity_proof,
+             expected_proof_purpose: "assertionMethod",
              public_key_bytes: @public_key_bytes
            )
   end
