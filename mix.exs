@@ -29,7 +29,6 @@ defmodule IntegrityProofs.MixProject do
       {:jason, "~> 1.4"},
       {:multibase, "~> 0.0.1"},
       {:multicodec, "~> 0.0.2"},
-      {:timex, "~> 3.7"},
       {:jcs, git: "https://github.com/pzingg/jcs.git"},
       {:test_server, "~> 0.1", only: :test}
       # {:dep_from_hexpm, "~> 0.3.0"},

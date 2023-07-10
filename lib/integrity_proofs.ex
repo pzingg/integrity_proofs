@@ -15,8 +15,11 @@ defmodule IntegrityProofs do
     "capabilityDelegation",
     "capabilityInvocation"
   ]
+
+  # Named elliptic curves
   @id_ed25519 {1, 3, 101, 112}
-  @curve_params {:namedCurve, @id_ed25519}
+  @id_p256 {1, 2, 840, 10045, 3, 1, 7}
+  @id_secp256k1 {1, 3, 132, 0, 10}
 
   @typedoc """
   A Keyword option passed to any of the public functions
@@ -82,7 +85,7 @@ defmodule IntegrityProofs do
   Record.defrecord(:ec_private_key, :ECPrivateKey,
     version: 1,
     private_key: "",
-    parameters: @curve_params,
+    parameters: nil,
     public_key: <<>>
   )
 
@@ -244,7 +247,7 @@ defmodule IntegrityProofs do
     created = Keyword.get(options, :created)
 
     if !valid_datetime?(created) do
-      raise IntegrityProofs.InvalidProofDatetimeError, created
+      raise IntegrityProofs.InvalidProofDatetimeError, maybe_format_datetime(created)
     end
 
     context = Keyword.get(options, :context) || Map.fetch!(unsecured_document, "@context")
@@ -253,7 +256,7 @@ defmodule IntegrityProofs do
       "@context": context,
       type: type,
       cryptosuite: cryptosuite,
-      created: created,
+      created: maybe_format_datetime(created),
       verificationMethod: verification_method,
       proofPurpose: proof_purpose
     }
@@ -498,7 +501,7 @@ defmodule IntegrityProofs do
          true <-
            is_binary(type) && is_binary(cryptosuite) && is_binary(created) &&
              is_binary(verification_method) && is_binary(proof_purpose) && is_binary(proof_value),
-         {:ok, dt_created} <- Timex.parse(created, "{RFC3339z}") do
+         {:ok, dt_created, 0} <- DateTime.from_iso8601(created) do
       if proof_purpose != expected_proof_purpose do
         raise MismatchedProofPurposeError
       end
@@ -623,7 +626,7 @@ defmodule IntegrityProofs do
   """
   def make_ed25519_public_key(pub, :public_key)
       when byte_size(pub) == 32 do
-    {ec_point(point: pub), @curve_params}
+    {ec_point(point: pub), {:namedCurve, @id_ed25519}}
   end
 
   def make_ed25519_public_key(pub, :public_key_ed)
@@ -651,6 +654,16 @@ defmodule IntegrityProofs do
 
   def make_ed25519_public_key(_, _), do: raise(ArgumentError)
 
+  def make_p256_public_key(pub, :public_key) do
+    {ec_point(point: pub), {:namedCurve, @id_p256}}
+    # {:ecdsa, [pub, :p256]}
+  end
+
+  def make_secp256k1_public_key(pub, :public_key) do
+    {ec_point(point: pub), {:namedCurve, @id_secp256k1}}
+    # {:ecdsa, [pub, :secp256k1]}
+  end
+
   @doc """
   Returns a private key, from supplied data. `fmt` determines the
   format of the key returned.
@@ -661,7 +674,7 @@ defmodule IntegrityProofs do
   """
   def make_ed25519_private_key(pub, priv, :public_key)
       when byte_size(pub) == 32 and byte_size(priv) == 32 do
-    ec_private_key(private_key: priv, public_key: pub)
+    ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_ed25519})
   end
 
   def make_ed25519_private_key(pub, priv, :public_key_ed)
@@ -675,6 +688,22 @@ defmodule IntegrityProofs do
   end
 
   def make_ed25519_private_key(_, _, _), do: raise(ArgumentError)
+
+  def make_p256_private_key(pub, priv, :public_key) do
+    # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
+    # 4 means uncompressed format, x and y are curve coordinates
+    # priv is 32 bytes
+    ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_p256})
+    # {:ecdsa, [priv, :p256]}
+  end
+
+  def make_secp256k1_private_key(pub, priv, :public_key) do
+    # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
+    # 4 means uncompressed format, x and y are curve coordinates
+    # priv is 32 bytes
+    ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_secp256k1})
+    # {:ecdsa, [priv, :secp256k1]}
+  end
 
   @doc """
   Parses keys in files produced by the `ssh-keygen` command.
@@ -702,16 +731,32 @@ defmodule IntegrityProofs do
   """
   def decode_ed25519_pem(keys_pem, type \\ :openssh_key_v1, fmt \\ :crypto_algo_key)
       when is_binary(keys_pem) do
+    decode_pem(keys_pem, type, fmt)
+  end
+
+  def decode_pem(keys_pem, type, fmt) do
     case :ssh_file.decode(keys_pem, type) do
       decoded when is_list(decoded) ->
         public_key =
           Enum.find(decoded, fn
-            {{{:ECPoint, _pub}, @curve_params}, attrs} when is_list(attrs) -> true
+            {{{:ECPoint, _pub}, {:namedCurve, _}}, attrs} when is_list(attrs) -> true
             _ -> false
           end)
           |> case do
-            {{{:ECPoint, pub}, @curve_params}, _attrs} ->
-              make_ed25519_public_key(pub, fmt)
+            {{{:ECPoint, pub}, {:namedCurve, curve}}, _attrs} ->
+              case curve do
+                @id_ed25519 ->
+                  make_ed25519_public_key(pub, fmt)
+
+                @id_p256 ->
+                  make_p256_public_key(pub, fmt)
+
+                @id_secp256k1 ->
+                  make_secp256k1_public_key(pub, fmt)
+
+                _ ->
+                  nil
+              end
 
             _ ->
               nil
@@ -719,7 +764,7 @@ defmodule IntegrityProofs do
 
         private_key =
           Enum.find(decoded, fn
-            {{:ECPrivateKey, 1, _priv, @curve_params, _pub, :asn1_NOVALUE}, attrs}
+            {{:ECPrivateKey, 1, _priv, {:namedCurve, _}, _pub, :asn1_NOVALUE}, attrs}
             when is_list(attrs) ->
               true
 
@@ -727,8 +772,20 @@ defmodule IntegrityProofs do
               false
           end)
           |> case do
-            {{:ECPrivateKey, 1, priv, @curve_params, pub, :asn1_NOVALUE}, _attrs} ->
-              make_ed25519_private_key(pub, priv, fmt)
+            {{:ECPrivateKey, 1, priv, {:namedCurve, curve}, pub, :asn1_NOVALUE}, _attrs} ->
+              case curve do
+                @id_ed25519 ->
+                  make_ed25519_private_key(pub, priv, fmt)
+
+                @id_p256 ->
+                  make_p256_private_key(pub, priv, fmt)
+
+                @id_secp256k1 ->
+                  make_secp256k1_private_key(pub, priv, fmt)
+
+                _ ->
+                  nil
+              end
 
             _ ->
               nil
@@ -854,8 +911,27 @@ defmodule IntegrityProofs do
     end
   end
 
+  defp maybe_format_datetime(dt) when is_binary(dt), do: dt
+
+  defp maybe_format_datetime(%DateTime{} = dt) do
+    %DateTime{
+      dt
+      | microsecond: {0, 0},
+        utc_offset: 0,
+        std_offset: 0,
+        zone_abbr: "UTC",
+        time_zone: "Etc/UTC"
+    }
+    |> DateTime.to_iso8601()
+  end
+
+  defp valid_datetime?(%DateTime{utc_offset: offset}), do: offset == 0
+
   defp valid_datetime?(dt) when is_binary(dt) do
-    Regex.match?(~r/^\d\d\d\d-\d\d-\d\dT\d\d\:\d\d\:\d\dZ$/, dt)
+    case DateTime.from_iso8601(dt) do
+      {:ok, _, 0} -> true
+      _ -> false
+    end
   end
 
   defp valid_datetime?(_), do: false

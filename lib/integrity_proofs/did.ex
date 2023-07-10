@@ -20,6 +20,15 @@ defmodule IntegrityProofs.Did do
     end
   end
 
+  defmodule UnexpectedDidMethodError do
+    defexception [:message]
+
+    @impl true
+    def exception(method) do
+      %__MODULE__{message: "Unexpected DID method #{method}"}
+    end
+  end
+
   defmodule DidResolutionError do
     defexception [:did, :reason]
 
@@ -29,12 +38,30 @@ defmodule IntegrityProofs.Did do
     end
   end
 
+  defmodule UnsupportedPublicKeyCodecError do
+    defexception [:message]
+
+    @impl true
+    def exception(prefix) do
+      %__MODULE__{message: "Unsupported public key codec #{prefix}"}
+    end
+  end
+
   defmodule UnsupportedPublicKeyTypeError do
     defexception [:message]
 
     @impl true
     def exception(format) do
       %__MODULE__{message: "Unsupported public key type #{format}"}
+    end
+  end
+
+  defmodule EllipticCurveError do
+    defexception [:message]
+
+    @impl true
+    def exception(curve) do
+      %__MODULE__{message: "Point not on elliptic curve #{curve}"}
     end
   end
 
@@ -304,7 +331,10 @@ defmodule IntegrityProofs.Did do
     end
   end
 
-  defp parse_did!(identifier, options \\ []) do
+  @doc """
+  Parse a did
+  """
+  def parse_did!(identifier, options \\ []) do
     parts = String.split(identifier, ":", parts: 3)
 
     if Enum.count(parts) != 3 || hd(parts) != "did" do
@@ -312,6 +342,11 @@ defmodule IntegrityProofs.Did do
     end
 
     [_, method, method_specific_id] = parts
+    expected_did_method = Keyword.get(options, :expected_did_method)
+
+    if !is_nil(expected_did_method) && expected_did_method != method do
+      raise UnexpectedDidMethodError, method
+    end
 
     parsed = %{
       did_string: identifier,
