@@ -7,7 +7,7 @@ defmodule IntegrityProofsTest do
   @public_key_bytes <<243, 105, 212, 154, 54, 128, 250, 99, 47, 184, 242, 248, 144, 45, 17, 70,
                       176, 243, 220, 174, 103, 200, 4, 192, 33, 143, 102, 29, 234, 149, 1, 188>>
 
-  @public_key_multibase IntegrityProofs.make_ed25519_public_key(@public_key_bytes, :multikey)
+  @public_key_multibase IntegrityProofs.make_public_key(@public_key_bytes, :ed25519, :multikey)
 
   @private_key_bytes <<112, 38, 151, 226, 182, 82, 47, 205, 7, 158, 217, 27, 159, 218, 142, 29,
                        117, 44, 83, 74, 35, 121, 140, 91, 190, 215, 239, 144, 58, 42, 1, 200>>
@@ -76,7 +76,11 @@ defmodule IntegrityProofsTest do
 
   test "Erlang :public_key.format_sign_key/1 supports eddsa and ed25519" do
     private_key =
-      IntegrityProofs.make_ed25519_private_key(@public_key_bytes, @private_key_bytes, :public_key)
+      IntegrityProofs.make_private_key(
+        {@public_key_bytes, @private_key_bytes},
+        :ed25519,
+        :public_key
+      )
 
     fmt = :dbg_public_key.format_sign_key(private_key)
     assert fmt == {:eddsa, [@private_key_bytes, :ed25519]}
@@ -84,7 +88,11 @@ defmodule IntegrityProofsTest do
 
   test "Erlang :crypto.sign/5 supports eddsa and ed25519 public key" do
     private_key =
-      IntegrityProofs.make_ed25519_private_key(@public_key_bytes, @private_key_bytes, :public_key)
+      IntegrityProofs.make_private_key(
+        {@public_key_bytes, @private_key_bytes},
+        :ed25519,
+        :public_key
+      )
 
     {algorithm, crypto_key} = :dbg_public_key.format_sign_key(private_key)
     signature = :crypto.sign(algorithm, :none, @test_message, crypto_key, [])
@@ -92,13 +100,13 @@ defmodule IntegrityProofsTest do
   end
 
   test "Erlang :public_key.format_verify_key/1 supports eddsa and ed25519" do
-    public_key = IntegrityProofs.make_ed25519_public_key(@public_key_bytes, :public_key)
+    public_key = IntegrityProofs.make_public_key(@public_key_bytes, :ed25519, :public_key)
     fmt = :dbg_public_key.format_verify_key(public_key)
     assert fmt == {:eddsa, [@public_key_bytes, :ed25519]}
   end
 
   test "Erlang :public_key.verify/6 supports eddsa and ed25519" do
-    public_key = IntegrityProofs.make_ed25519_public_key(@public_key_bytes, :public_key)
+    public_key = IntegrityProofs.make_public_key(@public_key_bytes, :ed25519, :public_key)
     {algorithm, crypto_key} = :dbg_public_key.format_verify_key(public_key)
 
     assert :crypto.verify(
@@ -131,7 +139,7 @@ defmodule IntegrityProofsTest do
   test "decodes an ed25519 public key" do
     {:ok, pem} = File.read("./test/fixtures/bob_example_ed25519.pub")
 
-    {:ok, public_key, _priv} = IntegrityProofs.decode_ed25519_pem(pem, :public_key, :public_key)
+    {:ok, public_key, _priv} = IntegrityProofs.decode_pem_ssh_file(pem, :public_key, :public_key)
 
     assert {{:ECPoint, pub}, {:namedCurve, _curve}} = public_key
     assert byte_size(pub) == 32
@@ -142,7 +150,7 @@ defmodule IntegrityProofsTest do
     {:ok, pem} = File.read("./test/fixtures/bob_example_ed25519.priv")
 
     {:ok, _pub, private_key} =
-      IntegrityProofs.decode_ed25519_pem(pem, :openssh_key_v1, :public_key)
+      IntegrityProofs.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
 
     assert {:ECPrivateKey, 1, priv, {:namedCurve, _curve}, pub} = private_key
     assert byte_size(priv) == 32

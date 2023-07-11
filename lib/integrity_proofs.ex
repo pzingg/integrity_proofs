@@ -21,6 +21,12 @@ defmodule IntegrityProofs do
   @id_p256 {1, 2, 840, 10045, 3, 1, 7}
   @id_secp256k1 {1, 3, 132, 0, 10}
 
+  @known_curves %{
+    @id_ed25519 => :ed25519,
+    @id_p256 => :p256,
+    @id_secp256k1 => :secp256k1
+  }
+
   @typedoc """
   A Keyword option passed to any of the public functions
   defined by modules in this library.
@@ -191,6 +197,11 @@ defmodule IntegrityProofs do
       %__MODULE__{message: "proof created time deviated more than #{acceptable} seconds"}
     end
   end
+
+  @doc """
+  Returns an atom identifying a named elliptic curve from an OID.
+  """
+  def curve_from_oid(curve_oid), do: Map.get(@known_curves, curve_oid)
 
   @doc """
   Implements jcs-eddsa-2022 transformation of an untransformed
@@ -547,7 +558,7 @@ defmodule IntegrityProofs do
   Retrieves the private key, from supplied data, a cache or
   via an HTTP request.
 
-  See `make_ed25519_private_key/3` for details on the return
+  See `make_private_key/3` for details on the return
   formats specified in the `fmt` argument.
   """
   def retrieve_private_key!(options, fmt \\ :crypto_algo_key) do
@@ -557,10 +568,10 @@ defmodule IntegrityProofs do
 
     cond do
       !is_nil(priv) && !is_nil(pub) ->
-        make_ed25519_private_key(pub, priv, fmt)
+        make_private_key({pub, priv}, :ed25519, fmt)
 
       !is_nil(private_key_pem) ->
-        case decode_ed25519_pem(private_key_pem, :openssh_key_v1, fmt) do
+        case decode_pem_ssh_file(private_key_pem, :openssh_key_v1, fmt) do
           {:ok, _, private_key} -> private_key
           _ -> raise ArgumentError, IO.inspect(options)
         end
@@ -574,7 +585,7 @@ defmodule IntegrityProofs do
   Retrieves the public key, from supplied data, a cache or
   via an HTTP request.
 
-  See `make_ed25519_public_key/2` for details on the return
+  See `make_public_key/3` for details on the return
   formats specified in the `fmt` argument.
   """
   def retrieve_public_key!(options, fmt \\ :crypto_algo_key) do
@@ -590,10 +601,10 @@ defmodule IntegrityProofs do
         public_key
 
       is_binary(pub) ->
-        make_ed25519_public_key(pub, fmt)
+        make_public_key(pub, :ed25519, fmt)
 
       is_binary(public_key_pem) ->
-        case decode_ed25519_pem(public_key_pem, :public_key, fmt) do
+        case decode_pem_ssh_file(public_key_pem, :public_key, fmt) do
           {:ok, public_key, _} -> public_key
           _ -> raise ArgumentError, IO.inspect(options)
         end
@@ -605,13 +616,13 @@ defmodule IntegrityProofs do
 
   @doc """
   Generates a new random public-private key pair. `fmt` determines the
-  format of the keys returned. See `make_ed25519_public_key/2`
-  and `make_ed25519_private_key/3` for details on the return
+  format of the keys returned. See `make_public_key/3`
+  and `make_private_key/3` for details on the return
   formats.
   """
   def generate_ed25519_key_pair(fmt) do
     {pub, priv} = :crypto.generate_key(:eddsa, :ed25519)
-    {make_ed25519_public_key(pub, fmt), make_ed25519_private_key(pub, priv, fmt)}
+    {make_public_key(pub, :ed25519, fmt), make_private_key({pub, priv}, :ed25519, fmt)}
   end
 
   @doc """
@@ -624,45 +635,64 @@ defmodule IntegrityProofs do
   * `:multikey` returns a btc58-encoded binary starting with "z6".
   * `:did_key` returns a binary starting with "did:key:".
   """
-  def make_ed25519_public_key(pub, :public_key)
+  def make_public_key(pub, curve, :did_key) do
+    multikey = make_public_key(pub, curve, :multikey)
+    "did:key:" <> multikey
+  end
+
+  def make_public_key(pub, :ed25519, :public_key)
       when byte_size(pub) == 32 do
     {ec_point(point: pub), {:namedCurve, @id_ed25519}}
   end
 
-  def make_ed25519_public_key(pub, :public_key_ed)
-      when byte_size(pub) == 32 do
-    {:ed_pub, :ed25519, pub}
+  def make_public_key(pub, :p256, :public_key) do
+    {ec_point(point: pub), {:namedCurve, @id_p256}}
   end
 
-  def make_ed25519_public_key(pub, :crypto_algo_key)
+  def make_public_key(pub, :secp256k1, :public_key) do
+    {ec_point(point: pub), {:namedCurve, @id_secp256k1}}
+  end
+
+  def make_public_key(pub, :ed25519, :crypto_algo_key)
       when byte_size(pub) == 32 do
     {:eddsa, [pub, :ed25519]}
   end
 
-  def make_ed25519_public_key(pub, :multikey)
+  def make_public_key(pub, :p256, :crypto_algo_key) do
+    {:ecdsa, [pub, :p256]}
+  end
+
+  def make_public_key(pub, :secp256k1, :crypto_algo_key) do
+    {:ecdsa, [pub, :secp256k1]}
+  end
+
+  def make_public_key(pub, :ed25519, :multikey)
       when byte_size(pub) == 32 do
     pub
     |> Multicodec.encode!("ed25519-pub")
     |> Multibase.encode!(:base58_btc)
   end
 
-  def make_ed25519_public_key(pub, :did_key)
+  def make_public_key(pub, :p256, :multikey)
       when byte_size(pub) == 32 do
-    multikey = make_ed25519_public_key(pub, :multikey)
-    "did:key:" <> multikey
+    pub
+    |> Multicodec.encode!("ed25519-pub")
+    |> Multibase.encode!(:base58_btc)
   end
 
-  def make_ed25519_public_key(_, _), do: raise(ArgumentError)
-
-  def make_p256_public_key(pub, :public_key) do
-    {ec_point(point: pub), {:namedCurve, @id_p256}}
-    # {:ecdsa, [pub, :p256]}
+  def make_public_key(pub, :secp256k1, :multikey)
+      when byte_size(pub) == 32 do
+    pub
+    |> Multicodec.encode!("ed25519-pub")
+    |> Multibase.encode!(:base58_btc)
   end
 
-  def make_secp256k1_public_key(pub, :public_key) do
-    {ec_point(point: pub), {:namedCurve, @id_secp256k1}}
-    # {:ecdsa, [pub, :secp256k1]}
+  def make_public_key(pub, :ed25519, :public_key_ed)
+      when byte_size(pub) == 32 do
+    {:ed_pub, :ed25519, pub}
   end
+
+  def make_public_key(_, _, _), do: raise(ArgumentError)
 
   @doc """
   Returns a private key, from supplied data. `fmt` determines the
@@ -672,38 +702,50 @@ defmodule IntegrityProofs do
   * `:public_key_ed` returns a tuple `{:ed_pri, :ed25519, pub, priv}`.
   * `:crypto_algo_key` returns a tuple `{:eddsa, [priv, :ed25519]}`.
   """
-  def make_ed25519_private_key(pub, priv, :public_key)
+  def make_private_key({pub, priv}, :ed25519, :public_key)
       when byte_size(pub) == 32 and byte_size(priv) == 32 do
     ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_ed25519})
   end
 
-  def make_ed25519_private_key(pub, priv, :public_key_ed)
-      when byte_size(pub) == 32 and byte_size(priv) == 32 do
-    {:ed_pri, :ed25519, pub, priv}
-  end
-
-  def make_ed25519_private_key(pub, priv, :crypto_algo_key)
-      when byte_size(pub) == 32 and byte_size(priv) == 32 do
-    {:eddsa, [priv, :ed25519]}
-  end
-
-  def make_ed25519_private_key(_, _, _), do: raise(ArgumentError)
-
-  def make_p256_private_key(pub, priv, :public_key) do
+  def make_private_key({pub, priv}, :p256, :public_key) do
     # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
     ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_p256})
-    # {:ecdsa, [priv, :p256]}
   end
 
-  def make_secp256k1_private_key(pub, priv, :public_key) do
+  def make_private_key({pub, priv}, :secp256k1, :public_key) do
     # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
     ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_secp256k1})
-    # {:ecdsa, [priv, :secp256k1]}
   end
+
+  def make_private_key({pub, priv}, :ed25519, :crypto_algo_key)
+      when byte_size(pub) == 32 and byte_size(priv) == 32 do
+    {:eddsa, [priv, :ed25519]}
+  end
+
+  def make_private_key({pub, priv}, :p256, :crypto_algo_key) do
+    # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
+    # 4 means uncompressed format, x and y are curve coordinates
+    # priv is 32 bytes
+    {:ecdsa, [{pub, priv}, :p256]}
+  end
+
+  def make_private_key({pub, priv}, :secp256k1, :crypto_algo_key) do
+    # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
+    # 4 means uncompressed format, x and y are curve coordinates
+    # priv is 32 bytes
+    {:ecdsa, [{pub, priv}, :secp256k1]}
+  end
+
+  def make_private_key({pub, priv}, :ed25519, :public_key_ed)
+      when byte_size(pub) == 32 and byte_size(priv) == 32 do
+    {:ed_pri, :ed25519, pub, priv}
+  end
+
+  def make_private_key(_, _, _), do: raise(ArgumentError)
 
   @doc """
   Parses keys in files produced by the `ssh-keygen` command.
@@ -717,24 +759,20 @@ defmodule IntegrityProofs do
   Then use this function to decode the public key:
 
   ```elixir
-  File.read!("example.pub") |> decode_ed25519_pem(:public_key)
+  File.read!("example.pub") |> decode_pem_ssh_file(:public_key)
   ```
 
   Or to decode the public key:
 
   ```elixir
-  File.read!("example") |> decode_ed25519_pem(:openssh_key_v1)
+  File.read!("example") |> decode_pem_ssh_file(:openssh_key_v1)
   ```
 
-  See `make_ed25519_public_key/2` and `make_ed25519_private_key/3` for
+  See `make_public_key/3` and `make_private_key/3` for
   details on the formats for the returned keys.
   """
-  def decode_ed25519_pem(keys_pem, type \\ :openssh_key_v1, fmt \\ :crypto_algo_key)
+  def decode_pem_ssh_file(keys_pem, type \\ :openssh_key_v1, fmt \\ :crypto_algo_key)
       when is_binary(keys_pem) do
-    decode_pem(keys_pem, type, fmt)
-  end
-
-  def decode_pem(keys_pem, type, fmt) do
     case :ssh_file.decode(keys_pem, type) do
       decoded when is_list(decoded) ->
         public_key =
@@ -743,19 +781,13 @@ defmodule IntegrityProofs do
             _ -> false
           end)
           |> case do
-            {{{:ECPoint, pub}, {:namedCurve, curve}}, _attrs} ->
-              case curve do
-                @id_ed25519 ->
-                  make_ed25519_public_key(pub, fmt)
+            {{{:ECPoint, pub}, {:namedCurve, curve_oid}}, _attrs} ->
+              curve = curve_from_oid(curve_oid)
 
-                @id_p256 ->
-                  make_p256_public_key(pub, fmt)
-
-                @id_secp256k1 ->
-                  make_secp256k1_public_key(pub, fmt)
-
-                _ ->
-                  nil
+              if is_nil(curve) do
+                nil
+              else
+                make_public_key(pub, curve, fmt)
               end
 
             _ ->
@@ -772,19 +804,13 @@ defmodule IntegrityProofs do
               false
           end)
           |> case do
-            {{:ECPrivateKey, 1, priv, {:namedCurve, curve}, pub, :asn1_NOVALUE}, _attrs} ->
-              case curve do
-                @id_ed25519 ->
-                  make_ed25519_private_key(pub, priv, fmt)
+            {{:ECPrivateKey, 1, priv, {:namedCurve, curve_oid}, pub, :asn1_NOVALUE}, _attrs} ->
+              curve = curve_from_oid(curve_oid)
 
-                @id_p256 ->
-                  make_p256_private_key(pub, priv, fmt)
-
-                @id_secp256k1 ->
-                  make_secp256k1_private_key(pub, priv, fmt)
-
-                _ ->
-                  nil
+              if is_nil(curve) do
+                nil
+              else
+                make_private_key({pub, priv}, curve, fmt)
               end
 
             _ ->
@@ -803,9 +829,27 @@ defmodule IntegrityProofs do
   end
 
   @doc """
+  Parses public keys in files produced by the `openssl` command.
+  """
+  def decode_pem_public_key(keys_pem, fmt \\ :crypto_algo_key) when is_binary(keys_pem) do
+    with [{:SubjectPublicKeyInfo, _encoded, :not_encrypted} = public_key_entry | _] =
+           :public_key.pem_decode(keys_pem),
+         {{:ECPoint, pub}, {:namedCurve, curve_oid}} <-
+           :public_key.pem_entry_decode(public_key_entry) do
+      curve = curve_from_oid(curve_oid)
+
+      if is_nil(curve) do
+        {:error, "Unknown curve OID #{inspect(curve_oid)}"}
+      else
+        {:ok, make_public_key(pub, curve, fmt)}
+      end
+    end
+  end
+
+  @doc """
   Extracts the public key from a "Multikey" verification method.
 
-  See `make_ed25519_public_key/2` for details on the formats for the
+  See `make_public_key/3` for details on the formats for the
   returned key.
   """
   def extract_multikey(verification_method, fmt \\ :crypto_algo_key)
@@ -816,7 +860,7 @@ defmodule IntegrityProofs do
       )
       when is_binary(multibase_value) do
     with {:ok, {pub, _multicodec_mapping}} <- decode_multikey(multibase_value) do
-      {:ok, make_ed25519_public_key(pub, fmt)}
+      {:ok, make_public_key(pub, :ed25519, fmt)}
     end
   end
 

@@ -7,7 +7,7 @@ defmodule IntegrityProofs.ActivityPubTest do
   @private_key_bytes <<112, 38, 151, 226, 182, 82, 47, 205, 7, 158, 217, 27, 159, 218, 142, 29,
                        117, 44, 83, 74, 35, 121, 140, 91, 190, 215, 239, 144, 58, 42, 1, 200>>
 
-  @identifier IntegrityProofs.make_ed25519_public_key(@public_key_bytes, :did_key)
+  @identifier IntegrityProofs.make_public_key(@public_key_bytes, :ed25519, :did_key)
   @verification_method_url "#{@identifier}#keys-1"
   @proof_config_created "2020-11-05T19:23:24Z"
 

@@ -10,9 +10,11 @@ defmodule IntegrityProofs.DidPlcTest do
     "<<" <> out <> ">>"
   end
 
-  test "decodes a p256 private key" do
+  test "decodes a pem-encoded p256 private key" do
     {:ok, pem} = File.read("./test/fixtures/p256.priv")
-    {:ok, _pub, private_key} = IntegrityProofs.decode_pem(pem, :openssh_key_v1, :public_key)
+
+    {:ok, _pub, private_key} =
+      IntegrityProofs.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
 
     assert {:ECPrivateKey, 1, priv, {:namedCurve, curve}, pub} = private_key
     assert byte_size(priv) == 32
@@ -20,13 +22,23 @@ defmodule IntegrityProofs.DidPlcTest do
     assert curve == {1, 2, 840, 10045, 3, 1, 7}
   end
 
-  test "p256 compress public key" do
+  test "decodes a pem-encoded secp256k1 private key" do
+    {:ok, pem} = File.read("./test/fixtures/secp256k1.priv")
+
+    {:ok, _pub, private_key} =
+      IntegrityProofs.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
+
+    assert {:ECPrivateKey, 1, priv, {:namedCurve, curve}, pub} = private_key
+    assert byte_size(priv) == 32
+    assert byte_size(pub) == 65
+    assert curve == {1, 3, 132, 0, 10}
+  end
+
+  test "decodes and compresses a pem-encoded p256 public key" do
     {:ok, pem} = File.read("./test/fixtures/p256.pub")
 
-    [entry = {:SubjectPublicKeyInfo, _encoded, :not_encrypted}] = :public_key.pem_decode(pem)
-
-    assert {{:ECPoint, pub}, {:namedCurve, {1, 2, 840, 10045, 3, 1, 7}}} =
-             :public_key.pem_entry_decode(entry)
+    assert {:ok, {{:ECPoint, pub}, {:namedCurve, {1, 2, 840, 10045, 3, 1, 7}}}} =
+             IntegrityProofs.decode_pem_public_key(pem, :public_key)
 
     assert byte_size(pub) == 65
     assert {:ok, compressed} = IntegrityProofs.Did.Plc.compress_public_key_point(pub)
@@ -37,7 +49,7 @@ defmodule IntegrityProofs.DidPlcTest do
              IntegrityProofs.Did.Plc.decompress_public_key_point(compressed, :p256)
   end
 
-  test "p256 decode" do
+  test "decodes the (compressed) Multibase value of a p256 public key" do
     assert {:ok, d} = Multibase.decode("zDnaedvvAsDE6H3BDdBejpx9ve2Tz95cymyCAKF66JbyMh1Lt")
     <<b0::size(8), b1::size(8)>> <> key_bytes = d
     assert b0 == 0x80
@@ -47,7 +59,7 @@ defmodule IntegrityProofs.DidPlcTest do
     assert mode in [2, 3]
   end
 
-  test "p256 did:key" do
+  test "decodes and uncompresses a p256 did:key" do
     assert %{jwt_alg: _jwt_alg, algo_key: algo_key} =
              IntegrityProofs.Did.Plc.parse_did_key!(
                "did:key:zDnaedvvAsDE6H3BDdBejpx9ve2Tz95cymyCAKF66JbyMh1Lt"
@@ -55,15 +67,5 @@ defmodule IntegrityProofs.DidPlcTest do
 
     assert {:ecdsa, [key_bytes, :p256]} = algo_key
     assert byte_size(key_bytes) == 65
-  end
-
-  test "decodes a secp256k1 private key" do
-    {:ok, pem} = File.read("./test/fixtures/secp256k1.priv")
-    {:ok, _pub, private_key} = IntegrityProofs.decode_pem(pem, :openssh_key_v1, :public_key)
-
-    assert {:ECPrivateKey, 1, priv, {:namedCurve, curve}, pub} = private_key
-    assert byte_size(priv) == 32
-    assert byte_size(pub) == 65
-    assert curve == {1, 3, 132, 0, 10}
   end
 end

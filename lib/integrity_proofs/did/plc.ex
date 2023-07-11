@@ -139,17 +139,25 @@ defmodule IntegrityProofs.Did.Plc do
       case {mode, byte_size(y_coord)} do
         {4, 32} -> :ok
         {_, 32} -> {:error, "invalid mode #{mode}"}
-        {_, n} -> {:error, "invalid size #{n + 33}"}
+        {_, n} -> {:error, "invalid size for uncompressed key #{n + 33}"}
       end
 
     with :ok <- test do
-      y = :binary.decode_unsigned(y_coord, :big)
-
-      if Integer.is_odd(y) do
-        {:ok, <<3>> <> x_coord}
-      else
+      if :binary.decode_unsigned(y_coord, :big) |> Integer.is_even() do
         {:ok, <<2>> <> x_coord}
+      else
+        {:ok, <<3>> <> x_coord}
       end
+    end
+  end
+
+  def decompress_public_key_point(point, curve_oid) when is_tuple(curve_oid) do
+    curve = IntegrityProofs.curve_from_oid(curve_oid)
+
+    if curve in [:p256, :secp256k1] do
+      decompress_public_key_point(point, curve)
+    else
+      {:error, "invalid curve OID #{inspect(curve_oid)}"}
     end
   end
 
@@ -171,7 +179,7 @@ defmodule IntegrityProofs.Did.Plc do
         {2, 32} -> {:ok, false}
         {3, 32} -> {:ok, true}
         {_, 32} -> {:error, "invalid mode #{mode}"}
-        {_, n} -> {:error, "invalid size #{n + 1}"}
+        {_, n} -> {:error, "invalid size for compressed key #{n + 1}"}
       end
 
     with {:ok, odd?} <- test do
@@ -179,10 +187,22 @@ defmodule IntegrityProofs.Did.Plc do
       {:ok, y} = (IM.mod_pow(x, 3, p) + a * x + b) |> IM.sqrt_mod(p)
 
       if odd? == Integer.is_odd(y) do
-        {:ok, <<4>> <> :binary.encode_unsigned(x, :big) <> :binary.encode_unsigned(y, :big)}
+        {:ok, <<4::8>> <> to_hex_32(x) <> to_hex_32(y)}
       else
-        {:ok, <<4>> <> :binary.encode_unsigned(x, :big) <> :binary.encode_unsigned(p - y, :big)}
+        {:ok, <<4::8>> <> to_hex_32(x) <> to_hex_32(p - y)}
       end
+    end
+  end
+
+  def to_hex_32(i) do
+    s = :binary.encode_unsigned(i)
+    n_bytes = byte_size(s)
+
+    if n_bytes < 32 do
+      pad_size = (32 - n_bytes) * 8
+      <<0::integer-size(pad_size)>> <> s
+    else
+      s
     end
   end
 end
