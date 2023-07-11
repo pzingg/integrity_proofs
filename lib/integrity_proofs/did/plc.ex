@@ -9,6 +9,84 @@ defmodule IntegrityProofs.Did.Plc do
 
   alias IntegrityProofs.Math, as: IM
 
+  defmodule Block do
+    defstruct [:cid, :bytes, :value, :codec, :hasher]
+  end
+
+  defmodule CreateOpV1 do
+    defstruct [:signing_key, :recovery_key, :handle, :service, :prev, :sig, type: "create"]
+  end
+
+  defmodule OperationV2 do
+    defstruct [
+      :prev,
+      :sig,
+      type: "plc_operation",
+      also_known_as: [],
+      rotation_keys: [],
+      verification_methods: %{},
+      services: %{}
+    ]
+  end
+
+  defmodule InvalidSignatureError do
+    defexception [:message]
+
+    @impl true
+    def exception(_op) do
+      %__MODULE__{message: "invalid signature"}
+    end
+  end
+
+  defmodule PrevMismatchError do
+    defexception [:message]
+  end
+
+  defmodule MisorderedOperationError do
+    defexception []
+
+    @impl true
+    def message(_) do
+      "misordered plc operation"
+    end
+  end
+
+  defmodule LateRecoveryError do
+    defexception [:message]
+
+    @impl true
+    def exception(lapsed) do
+      %__MODULE__{message: "72 hour recovery period exceeded: #{lapsed} seconds"}
+    end
+  end
+
+  defmodule GenesisHashError do
+    defexception [:message]
+
+    @impl true
+    def exception(expected_did) do
+      %__MODULE__{message: "expected did #{expected_did} for genesis operation"}
+    end
+  end
+
+  defmodule ImproperOperationError do
+    defexception [:op, :message]
+
+    @impl true
+    def message(%{op: op, message: message}) do
+      "#{message}, op: #{inspect(op)}"
+    end
+  end
+
+  defmodule UnsupportedKeyError do
+    defexception [:message]
+
+    @impl true
+    def exception(key) do
+      %__MODULE__{message: "Unsupported key #{key}"}
+    end
+  end
+
   @p256_code 0x1200
   @p256_prefix <<0x80, 0x24>>
   @p256_jwt_alg "ES256"
@@ -132,6 +210,139 @@ defmodule IntegrityProofs.Did.Plc do
       _ ->
         raise IntegrityProofs.Did.UnsupportedPublicKeyCodecError, prefix
     end
+  end
+
+  def did_for_create_op(%{prev: nil} = op) do
+    hash_of_genesis = format_op(op) |> CBOR.encode() |> :crypto.hash(:sha256)
+
+    truncated_id =
+      hash_of_genesis |> Base.encode32(case: :lower, padding: false) |> String.slice(0, 24)
+
+    "did:plc:#{truncated_id}"
+  end
+
+  def format_op(%CreateOpV1{} = op) do
+    formatted = %{
+      "type" => op.type,
+      "signingKey" => op.signing_key,
+      "recoveryKey" => op.recovery_key,
+      "handle" => op.handle,
+      "service" => op.service,
+      "prev" => op.prev
+    }
+
+    if is_nil(op.sig) do
+      formatted
+    else
+      Map.put(formatted, "sig", op.sig)
+    end
+  end
+
+  def format_op(%OperationV2{} = op) do
+    formatted = %{
+      "type" => op.type,
+      "alsoKnownAs" => op.also_known_as,
+      "rotationKeys" => op.rotation_keys,
+      "verificationMethods" => op.verification_methods,
+      "services" => Enum.map(op.services, &format_service/1) |> Map.new(),
+      "prev" => op.prev
+    }
+
+    if is_nil(op.sig) do
+      formatted
+    else
+      Map.put(formatted, "sig", op.sig)
+    end
+  end
+
+  def cid_for_cbor(data) do
+    %Block{cid: cid} = data_to_cbor_block(data)
+    cid
+  end
+
+  def data_to_cbor_block(data) do
+    bytes = CBOR.encode(data)
+    # TODO make cid
+    cid = ""
+    %Block{cid: cid, bytes: bytes, value: data}
+  end
+
+  def normalize_op(%CreateOpV1{} = op) do
+  end
+
+  def normalize_op(%OperationV2{} = op), do: op
+
+  def validate_op(%OperationV2{} = op) do
+  end
+
+  def assure_valid_creation_op(did, %OperationV2{type: type} = op) do
+    if type == "plc_tombstone" do
+      raise MisorderedOperationError
+    end
+
+    assure_valid_op(op)
+    assure_valid_sig(op.rotation_keys, op)
+    expected_did = did_for_create_op(op)
+
+    if did != expected_did do
+      raise GenesisHashError, expected_did
+    end
+
+    if !is_nil(op.prev) do
+      raise ImproperOperationError, op: op, message: "expected null prev on create"
+    end
+
+    op
+  end
+
+  def assure_valid_op(%OperationV2{type: "plc_tombstone"}), do: true
+
+  def assure_valid_op(%OperationV2{rotation_keys: rotation_keys, verification_methods: vms} = op) do
+    # ensure we support the op's keys
+    keys = Map.values(vms) ++ rotation_keys
+
+    Enum.each(keys, fn key ->
+      try do
+        parse_did_key!(key)
+      rescue
+        _ -> raise UnsupportedKeyError, key
+      end
+    end)
+
+    if Enum.count(rotation_keys) > 5 do
+      raise ImproperOperationError, op: op, message: "too many rotation keys"
+    end
+
+    if Enum.count(rotation_keys) < 1 do
+      raise ImproperOperationError, op: op, message: "need at least one rotation key"
+    end
+  end
+
+  def assure_valid_sig(allowed_did_keys, %OperationV2{sig: sig} = op) when is_binary(sig) do
+    with {:ok, sig_bytes} <- Base.decode64(sig),
+         data_bytes <- %OperationV2{op | sig: nil} |> format_op() |> CBOR.encode() do
+      valid =
+        Enum.find(allowed_did_keys, fn did_key ->
+          verify_signature(did_key, data_bytes, sig_bytes)
+        end)
+
+      if is_nil(valid) do
+        :error
+      else
+        valid
+      end
+    else
+      _ -> raise InvalidSignatureError, op
+    end
+  end
+
+  def verify_signature(did_key, data_bytes, sig_bytes) do
+    # TODO: implement for p256 and secp256k1, according to did
+    false
+  end
+
+  def format_service({service_id, %{type: type, endpoint: endpoint}}) do
+    {service_id, %{"type" => type, "endpoint" => endpoint}}
   end
 
   def compress_public_key_point(<<mode::size(8), x_coord::binary-size(32), y_coord::binary>>) do
