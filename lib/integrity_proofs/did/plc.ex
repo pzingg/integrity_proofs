@@ -182,10 +182,10 @@ defmodule IntegrityProofs.Did.Plc do
         {_, n} -> {:error, "invalid size for compressed key #{n + 1}"}
       end
 
-    with {:ok, odd?} <- test do
-      x = :binary.decode_unsigned(x_coord, :big)
-      {:ok, y} = (IM.mod_pow(x, 3, p) + a * x + b) |> IM.sqrt_mod(p)
-
+    with {:ok, odd?} <- test,
+         x <- :binary.decode_unsigned(x_coord, :big),
+         y_squared <- rem(IM.mod_pow(x, 3, p) + a * x + b, p),
+         {:ok, y} <- IM.sqrt_mod(y_squared, p) do
       if odd? == Integer.is_odd(y) do
         {:ok, <<4::8>> <> to_hex_32(x) <> to_hex_32(y)}
       else

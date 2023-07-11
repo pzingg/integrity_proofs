@@ -1,13 +1,19 @@
 defmodule IntegrityProofs.DidPlcTest do
   use ExUnit.Case
 
-  def display_bytes(bin) do
-    out =
-      :binary.bin_to_list(bin)
-      |> Enum.map(&Integer.to_string(&1))
-      |> Enum.join(", ")
+  alias IntegrityProofs.Math, as: IM
 
-    "<<" <> out <> ">>"
+  test "tonelli-shanks sqrt_mod" do
+    p = 17
+    a = 0
+    b = 7
+    x = 10
+    y_squared = rem(IM.mod_pow(x, 3, p) + a * x + b, p)
+    assert y_squared == 4
+    {:ok, y} = IM.sqrt_mod(4, 17)
+    assert y == 2
+    assert IM.mod_pow(2, 2, 17) == y_squared
+    assert IM.mod_pow(17 - 2, 2, 17) == y_squared
   end
 
   test "decodes a pem-encoded p256 private key" do
@@ -45,8 +51,10 @@ defmodule IntegrityProofs.DidPlcTest do
     assert <<mode::size(8), _rest::binary>> = compressed
     assert mode in [2, 3]
 
-    assert {:ok, _uncompressed} =
+    assert {:ok, uncompressed} =
              IntegrityProofs.Did.Plc.decompress_public_key_point(compressed, :p256)
+
+    assert uncompressed == pub
   end
 
   test "decodes the (compressed) Multibase value of a p256 public key" do

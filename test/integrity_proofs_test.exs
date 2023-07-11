@@ -51,15 +51,6 @@ defmodule IntegrityProofsTest do
     ]
   }
 
-  def display_bytes(bin) do
-    out =
-      :binary.bin_to_list(bin)
-      |> Enum.map(&Integer.to_string(&1))
-      |> Enum.join(", ")
-
-    "<<" <> out <> ">>"
-  end
-
   test "Erlang :crypto app supports eddsa and ed25519" do
     crypto_supports = :crypto.supports()
     public_keys = Keyword.fetch!(crypto_supports, :public_keys)
@@ -202,7 +193,7 @@ defmodule IntegrityProofsTest do
              "{\"@context\":[\"https://www.w3.org/ns/did/v1\",\"https://w3id.org/security/data-integrity/v1\"],\"created\":\"2020-11-05T19:23:24Z\",\"cryptosuite\":\"jcs-eddsa-2022\",\"proofPurpose\":\"assertionMethod\",\"type\":\"DataIntegrityProof\",\"verificationMethod\":\"did:example:123456789abcdefghi#keys-1\"}"
 
     hash_data = IntegrityProofs.hash(proof_config, transformed_document)
-    # assert display_bytes(hash_data) == ""
+    # assert IntegrityProofs.Math.display_bytes(hash_data) == ""
 
     assert hash_data ==
              <<238, 154, 157, 59, 112, 209, 224, 189, 75, 33, 108, 128, 166, 229, 99, 132, 111,
@@ -216,7 +207,7 @@ defmodule IntegrityProofsTest do
     ]
 
     proof_bytes = IntegrityProofs.serialize_proof!(hash_data, key_options)
-    # assert display_bytes(proof_bytes) == ""
+    # assert IntegrityProofs.Math.display_bytes(proof_bytes) == ""
 
     assert proof_bytes ==
              <<236, 12, 31, 81, 196, 198, 187, 38, 102, 51, 173, 50, 216, 57, 22, 104, 218, 94, 6,
@@ -241,7 +232,7 @@ defmodule IntegrityProofsTest do
 
     assert %{"proof" => proof} = proof_document
     assert %{"proofValue" => proof_value} = proof
-    # assert display_bytes(proof_value) == ""
+    # assert IntegrityProofs.Math.display_bytes(proof_value) == ""
     assert proof_value ==
              "z5iisP3L5JS7gby3WCEMTg1ghf9x77iujzJv7fho1SJQg99sQR6eHGhSS22s2U9JenDhBfzSrJviFnuwjnau2eH3u"
 
