@@ -309,12 +309,13 @@ defmodule IntegrityProofs.Did.Plc do
     end
   end
 
-  def assure_valid_creation_op(
-        did,
-        %{"type" => type, "rotationKeys" => rotation_keys, "prev" => prev} = op
-      ) do
-    if type == "plc_tombstone" do
-      raise MisorderedOperationError
+  def assure_valid_creation_op(_did, %{"type" => "plc_tombstone"}) do
+    raise MisorderedOperationError
+  end
+
+  def assure_valid_creation_op(did, %{"rotationKeys" => rotation_keys, "prev" => prev} = op) do
+    if !is_nil(prev) do
+      raise ImproperOperationError, op: op, message: "expected null prev on create"
     end
 
     assure_valid_op(op)
@@ -323,10 +324,6 @@ defmodule IntegrityProofs.Did.Plc do
 
     if did != expected_did do
       raise GenesisHashError, expected_did
-    end
-
-    if !is_nil(prev) do
-      raise ImproperOperationError, op: op, message: "expected null prev on create"
     end
 
     op
@@ -351,7 +348,11 @@ defmodule IntegrityProofs.Did.Plc do
       raise ImproperOperationError, op: op, message: "too many rotation keys"
     end
 
-    if Enum.count(rotation_keys) < 1 do
+    assure_rotation_keys(op, rotation_keys)
+  end
+
+  def assure_rotation_keys(op, rotation_keys) do
+    if Enum.empty?(rotation_keys) do
       raise ImproperOperationError, op: op, message: "need at least one rotation key"
     end
 
@@ -359,6 +360,8 @@ defmodule IntegrityProofs.Did.Plc do
   end
 
   def assure_valid_sig(allowed_did_keys, %{"sig" => sig} = op) when is_binary(sig) do
+    _ = assure_rotation_keys(op, allowed_did_keys)
+
     with {:ok, sig_bytes} <- Base.decode64(sig),
          cbor <- Map.delete(op, "sig") |> normalize_op() |> CBOR.encode() do
       valid =

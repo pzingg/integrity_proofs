@@ -25,6 +25,14 @@ defmodule IntegrityProofs.DataCase do
     end
   end
 
+  setup_all do
+    if IntegrityProofs.Did.PlcRepo in Ecto.Repo.all_running() do
+      :ok
+    else
+      raise RuntimeError, "Maybe you need to run with PLC_REPO_START=on?"
+    end
+  end
+
   setup tags do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(IntegrityProofs.Did.PlcRepo)
 
