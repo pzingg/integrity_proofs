@@ -17,18 +17,6 @@ defmodule IntegrityProofs.Did.Plc do
     defstruct [:signing_key, :recovery_key, :handle, :service, :prev, :sig, type: "create"]
   end
 
-  defmodule OperationV2 do
-    defstruct [
-      :prev,
-      :sig,
-      type: "plc_operation",
-      also_known_as: [],
-      rotation_keys: [],
-      verification_methods: %{},
-      services: %{}
-    ]
-  end
-
   defmodule InvalidSignatureError do
     defexception [:message]
 
@@ -212,8 +200,18 @@ defmodule IntegrityProofs.Did.Plc do
     end
   end
 
-  def did_for_create_op(%{prev: nil} = op) do
-    hash_of_genesis = format_op(op) |> CBOR.encode() |> :crypto.hash(:sha256)
+  # Operations
+
+  def create_op(params) do
+    op = struct(CreateOpV1, params) |> normalize_op()
+    did = did_for_create_op(op)
+    {op, did}
+  end
+
+  def did_for_create_op(%{"prev" => nil} = normalized_op) do
+    cbor = CBOR.encode(normalized_op)
+    # <<166, 107, 97, 108, 115, 111, 75, 110, 111, 119, 110, 65, 115, 129, 118, 97
+    hash_of_genesis = :crypto.hash(:sha256, cbor)
 
     truncated_id =
       hash_of_genesis |> Base.encode32(case: :lower, padding: false) |> String.slice(0, 24)
@@ -221,61 +219,52 @@ defmodule IntegrityProofs.Did.Plc do
     "did:plc:#{truncated_id}"
   end
 
-  def format_op(%CreateOpV1{} = op) do
-    formatted = %{
-      "type" => op.type,
-      "signingKey" => op.signing_key,
-      "recoveryKey" => op.recovery_key,
-      "handle" => op.handle,
-      "service" => op.service,
+  def normalize_op(%CreateOpV1{sig: sig} = op) do
+    normalized_op = %{
+      "type" => "plc_operation",
+      "verificationMethods" => %{
+        "atproto" => op.signing_key
+      },
+      "rotationKeys" => [op.recovery_key, op.signing_key],
+      "alsoKnownAs" => [ensure_atproto_prefix(op.handle)],
+      "services" => %{
+        "atproto_pds" => %{
+          "type" => "AtprotoPersonalDataServer",
+          "endpoint" => ensure_http_prefix(op.service)
+        }
+      },
       "prev" => op.prev
     }
 
-    if is_nil(op.sig) do
-      formatted
+    if is_nil(sig) do
+      normalized_op
     else
-      Map.put(formatted, "sig", op.sig)
+      Map.put(normalized_op, "sig", sig)
     end
   end
 
-  def format_op(%OperationV2{} = op) do
-    formatted = %{
-      "type" => op.type,
-      "alsoKnownAs" => op.also_known_as,
-      "rotationKeys" => op.rotation_keys,
-      "verificationMethods" => op.verification_methods,
-      "services" => Enum.map(op.services, &format_service/1) |> Map.new(),
-      "prev" => op.prev
-    }
+  def normalize_op(%{"type" => _type} = op), do: op
 
-    if is_nil(op.sig) do
-      formatted
+  def ensure_http_prefix(str) do
+    if String.starts_with?(str, "http://") || String.starts_with?(str, "https://") do
+      str
     else
-      Map.put(formatted, "sig", op.sig)
+      "https://" <> str
     end
   end
 
-  def cid_for_cbor(data) do
-    %Block{cid: cid} = data_to_cbor_block(data)
-    cid
+  def ensure_atproto_prefix(str) do
+    if String.starts_with?(str, "at://") do
+      str
+    else
+      "at://" <>
+        (str
+         |> String.replace_leading("http://", "")
+         |> String.replace_leading("https://", ""))
+    end
   end
 
-  def data_to_cbor_block(data) do
-    bytes = CBOR.encode(data)
-    # TODO make cid
-    cid = ""
-    %Block{cid: cid, bytes: bytes, value: data}
-  end
-
-  def normalize_op(%CreateOpV1{} = op) do
-  end
-
-  def normalize_op(%OperationV2{} = op), do: op
-
-  def validate_op(%OperationV2{} = op) do
-  end
-
-  def assure_valid_creation_op(did, %OperationV2{type: type} = op) do
+  def assure_valid_creation_op(did, %{"type" => type} = op) do
     if type == "plc_tombstone" do
       raise MisorderedOperationError
     end
@@ -295,9 +284,9 @@ defmodule IntegrityProofs.Did.Plc do
     op
   end
 
-  def assure_valid_op(%OperationV2{type: "plc_tombstone"}), do: true
+  def assure_valid_op(%{"type" => "plc_tombstone"} = op), do: op
 
-  def assure_valid_op(%OperationV2{rotation_keys: rotation_keys, verification_methods: vms} = op) do
+  def assure_valid_op(%{"rotationKeys" => rotation_keys, "verificationMethods" => vms} = op) do
     # ensure we support the op's keys
     keys = Map.values(vms) ++ rotation_keys
 
@@ -316,11 +305,13 @@ defmodule IntegrityProofs.Did.Plc do
     if Enum.count(rotation_keys) < 1 do
       raise ImproperOperationError, op: op, message: "need at least one rotation key"
     end
+
+    op
   end
 
-  def assure_valid_sig(allowed_did_keys, %OperationV2{sig: sig} = op) when is_binary(sig) do
+  def assure_valid_sig(allowed_did_keys, %{"sig" => sig} = op) when is_binary(sig) do
     with {:ok, sig_bytes} <- Base.decode64(sig),
-         data_bytes <- %OperationV2{op | sig: nil} |> format_op() |> CBOR.encode() do
+         data_bytes <- Map.delete(op, "sig") |> normalize_op() |> CBOR.encode() do
       valid =
         Enum.find(allowed_did_keys, fn did_key ->
           verify_signature(did_key, data_bytes, sig_bytes)

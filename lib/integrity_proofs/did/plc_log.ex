@@ -131,7 +131,7 @@ defmodule IntegrityProofs.Did.PlcLog do
     proposed =
       proposed
       |> IntegrityProofs.Did.Plc.normalize_op()
-      |> IntegrityProofs.Did.Plc.validate_op()
+      |> IntegrityProofs.Did.Plc.assure_valid_op()
 
     # special case if account creation
     if Enum.empty?(ops) do

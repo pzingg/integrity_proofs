@@ -7,4 +7,9 @@
 # General application configuration
 import Config
 
-config :integrity_proofs, ecto_repos: [IntegrityProofs.Repo]
+# Set up a database to record plc server logs
+config :integrity_proofs,
+  ecto_repos: [IntegrityProofs.Did.PlcRepo]
+
+config :integrity_proofs, IntegrityProofs.Did.PlcRepo,
+  url: "ecto://postgres:postgres@localhost/plc_log"

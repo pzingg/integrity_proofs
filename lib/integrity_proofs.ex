@@ -27,6 +27,11 @@ defmodule IntegrityProofs do
     @id_secp256k1 => :secp256k1
   }
 
+  @p256_code 0x1200
+  @p256_prefix <<0x80, 0x24>>
+  @secp256k1_code 0xE7
+  @secp256k1_prefix <<0xE7, 0x01>>
+
   @typedoc """
   A Keyword option passed to any of the public functions
   defined by modules in this library.
@@ -195,6 +200,15 @@ defmodule IntegrityProofs do
     @impl true
     def exception(acceptable) do
       %__MODULE__{message: "proof created time deviated more than #{acceptable} seconds"}
+    end
+  end
+
+  defmodule UnsupportedNamedCurveError do
+    defexception [:message]
+
+    @impl true
+    def exception(name) do
+      %__MODULE__{message: "unsupported named curve #{name}"}
     end
   end
 
@@ -620,9 +634,23 @@ defmodule IntegrityProofs do
   and `make_private_key/3` for details on the return
   formats.
   """
-  def generate_ed25519_key_pair(fmt) do
-    {pub, priv} = :crypto.generate_key(:eddsa, :ed25519)
-    {make_public_key(pub, :ed25519, fmt), make_private_key({pub, priv}, :ed25519, fmt)}
+  def generate_key_pair(fmt, curve \\ :ed25519) do
+    type =
+      case curve do
+        :ed25519 -> :eddsa
+        :p256 -> :ecdh
+        :secp256k1 -> :ecdh
+        _ -> raise UnsupportedNamedCurveError, curve
+      end
+
+    priv_fmt =
+      case fmt do
+        :did_key -> :crypto_algo_key
+        _ -> fmt
+      end
+
+    {pub, priv} = :crypto.generate_key(type, curve)
+    {make_public_key(pub, curve, fmt), make_private_key({pub, priv}, curve, priv_fmt)}
   end
 
   @doc """
@@ -674,16 +702,16 @@ defmodule IntegrityProofs do
   end
 
   def make_public_key(pub, :p256, :multikey)
-      when byte_size(pub) == 32 do
-    pub
-    |> Multicodec.encode!("ed25519-pub")
+      when byte_size(pub) == 33 or byte_size(pub) == 65 do
+    # Multicodec.encode!("p256")
+    <<@p256_prefix::binary, pub::binary>>
     |> Multibase.encode!(:base58_btc)
   end
 
   def make_public_key(pub, :secp256k1, :multikey)
-      when byte_size(pub) == 32 do
-    pub
-    |> Multicodec.encode!("ed25519-pub")
+      when byte_size(pub) == 33 or byte_size(pub) == 65 do
+    # Multicodec.encode!("secp256k1")
+    <<@secp256k1_prefix::binary, pub::binary>>
     |> Multibase.encode!(:base58_btc)
   end
 
@@ -692,7 +720,7 @@ defmodule IntegrityProofs do
     {:ed_pub, :ed25519, pub}
   end
 
-  def make_public_key(_, _, _), do: raise(ArgumentError)
+  def make_public_key(_, curve, _), do: raise(UnsupportedNamedCurveError, curve)
 
   @doc """
   Returns a private key, from supplied data. `fmt` determines the
@@ -726,18 +754,20 @@ defmodule IntegrityProofs do
     {:eddsa, [priv, :ed25519]}
   end
 
-  def make_private_key({pub, priv}, :p256, :crypto_algo_key) do
+  def make_private_key({pub, priv}, :p256, :crypto_algo_key)
+      when is_binary(pub) and is_binary(priv) do
     # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
-    {:ecdsa, [{pub, priv}, :p256]}
+    {:ecdh, [{pub, priv}, :p256]}
   end
 
-  def make_private_key({pub, priv}, :secp256k1, :crypto_algo_key) do
+  def make_private_key({pub, priv}, :secp256k1, :crypto_algo_key)
+      when is_binary(pub) and is_binary(priv) do
     # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
-    {:ecdsa, [{pub, priv}, :secp256k1]}
+    {:ecdh, [{pub, priv}, :secp256k1]}
   end
 
   def make_private_key({pub, priv}, :ed25519, :public_key_ed)
@@ -745,7 +775,7 @@ defmodule IntegrityProofs do
     {:ed_pri, :ed25519, pub, priv}
   end
 
-  def make_private_key(_, _, _), do: raise(ArgumentError)
+  def make_private_key(_, curve, _), do: raise(UnsupportedNamedCurveError, curve)
 
   @doc """
   Parses keys in files produced by the `ssh-keygen` command.
@@ -928,6 +958,19 @@ defmodule IntegrityProofs do
   end
 
   def http_uri?(_), do: false
+
+  @doc """
+  Used for debugging. Displays a raw binary as a list of integer
+  byte values, comma-separated, and enclosed in "<<" ">>".
+  """
+  def display_bytes(bin) do
+    out =
+      :binary.bin_to_list(bin)
+      |> Enum.map(&Integer.to_string(&1))
+      |> Enum.join(", ")
+
+    "<<" <> out <> ">>"
+  end
 
   defp dereference_controller_document!(_controller_document_url, options) do
     built_in = Keyword.get(options, :cached_controller_document)
