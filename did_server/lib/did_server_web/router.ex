@@ -20,8 +20,28 @@ defmodule DidServerWeb.Router do
     get "/", PageController, :home
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", DidServerWeb do
-  #   pipe_through :api
-  # end
+  scope "/web", DidServerWeb do
+    pipe_through :api
+
+    # get "/:did", WebController, :show
+
+    get "/", WebController, :info
+  end
+
+  scope "/plc", DidServerWeb do
+    pipe_through :api
+
+    # get "/export", PlcController, :index
+
+    # get "/:did", PlcController, :show
+    # get "/:did/data", PlcController, :show_data
+    # get "/:did/log", PlcController, :show_log
+    # get "/:did/log/audit", PlcController, :show_operation_log
+    # get "/:did/log", PlcController, :show_most_recent
+    # post "/:did", PlcController, :update
+
+    get "/_health", PlcController, :health
+
+    get "/", PlcController, :info
+  end
 end

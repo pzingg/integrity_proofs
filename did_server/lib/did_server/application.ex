@@ -33,4 +33,9 @@ defmodule DidServer.Application do
     DidServerWeb.Endpoint.config_change(changed, removed)
     :ok
   end
+
+  def version() do
+    {:ok, vsn} = :application.get_key(:did_server, :vsn)
+    List.to_string(vsn)
+  end
 end
