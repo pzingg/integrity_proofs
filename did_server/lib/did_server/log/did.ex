@@ -1,4 +1,4 @@
-defmodule IntegrityProofs.Did.PlcLog.Did do
+defmodule DidServer.Log.Did do
   use Ecto.Schema
   import Ecto.Changeset
 
@@ -8,8 +8,9 @@ defmodule IntegrityProofs.Did.PlcLog.Did do
   end
 
   def changeset(%__MODULE__{} = did, attrs) do
-    %__MODULE__{}
+    did
     |> cast(attrs, [:did])
     |> validate_required([:did])
+    |> unique_constraint(:did, name: "dids_pkey")
   end
 end

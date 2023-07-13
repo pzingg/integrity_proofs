@@ -1,12 +1,10 @@
-defmodule IntegrityProofs do
+defmodule Integrity do
   @moduledoc """
   Utilities for creating and verifying data integrity.
 
   Section references in function descriptions refer to
   [Verifiable Credential Data Integrity 1.0](https://www.w3.org/TR/vc-data-integrity/)
   """
-
-  require Record
 
   @valid_proof_purposes [
     "authentication",
@@ -15,22 +13,6 @@ defmodule IntegrityProofs do
     "capabilityDelegation",
     "capabilityInvocation"
   ]
-
-  # Named elliptic curves
-  @id_ed25519 {1, 3, 101, 112}
-  @id_p256 {1, 2, 840, 10045, 3, 1, 7}
-  @id_secp256k1 {1, 3, 132, 0, 10}
-
-  @known_curves %{
-    @id_ed25519 => :ed25519,
-    @id_p256 => :p256,
-    @id_secp256k1 => :secp256k1
-  }
-
-  @p256_code 0x1200
-  @p256_prefix <<0x80, 0x24>>
-  @secp256k1_code 0xE7
-  @secp256k1_prefix <<0xE7, 0x01>>
 
   @typedoc """
   A Keyword option passed to any of the public functions
@@ -62,43 +44,6 @@ defmodule IntegrityProofs do
           | {:dt_verified, DateTime.t()}
 
   @type integrity_options() :: [integrity_option()]
-
-  @doc """
-  Erlang record for public key.
-
-  @type ec_point() :: {
-    ECPoint,
-    point: binary()
-  }
-  """
-  Record.defrecord(:ec_point, :ECPoint, point: "")
-
-  @doc """
-  Erlang record for private key.
-
-  @type oid_tuple() :: {
-    a: byte(),
-    b: byte(),
-    c: byte(),
-    d: byte()
-  }
-
-  @type ec_private_key() :: {
-    ECPrivateKey,
-    version: integer(),
-   private_key: binary(),
-    parameters: {:ecParameters, {ECParameters, ...} |
-              {:namedCurve, oid_tuple()} |
-              {:implicitlyCA, 'NULL'},
-   public_key: bitstring()
-  }
-  """
-  Record.defrecord(:ec_private_key, :ECPrivateKey,
-    version: 1,
-    private_key: "",
-    parameters: nil,
-    public_key: <<>>
-  )
 
   defmodule ProofConfig do
     defstruct context: nil, type: nil, verification_method: nil, proof_purpose: nil
@@ -203,20 +148,6 @@ defmodule IntegrityProofs do
     end
   end
 
-  defmodule UnsupportedNamedCurveError do
-    defexception [:message]
-
-    @impl true
-    def exception(name) do
-      %__MODULE__{message: "unsupported named curve #{name}"}
-    end
-  end
-
-  @doc """
-  Returns an atom identifying a named elliptic curve from an OID.
-  """
-  def curve_from_oid(curve_oid), do: Map.get(@known_curves, curve_oid)
-
   @doc """
   Implements jcs-eddsa-2022 transformation of an untransformed
   document. § 3.2.
@@ -234,7 +165,7 @@ defmodule IntegrityProofs do
     cryptosuite = Keyword.get(options, :cryptosuite, "undefined")
 
     if type != "DataIntegrityProof" && cryptosuite != "jcs-eddsa-2022" do
-      raise IntegrityProofs.ProofTransformationError, type: type, cryptosuite: cryptosuite
+      raise Integrity.ProofTransformationError, type: type, cryptosuite: cryptosuite
     end
 
     Jcs.encode(untransformed_document)
@@ -266,13 +197,13 @@ defmodule IntegrityProofs do
     proof_purpose = Keyword.get(options, :proof_purpose, "undefined")
 
     if type != "DataIntegrityProof" || cryptosuite != "jcs-eddsa-2022" do
-      raise IntegrityProofs.InvalidProofConfigurationError, type: type, cryptosuite: cryptosuite
+      raise Integrity.InvalidProofConfigurationError, type: type, cryptosuite: cryptosuite
     end
 
     created = Keyword.get(options, :created)
 
     if !valid_datetime?(created) do
-      raise IntegrityProofs.InvalidProofDatetimeError, maybe_format_datetime(created)
+      raise Integrity.InvalidProofDatetimeError, maybe_format_datetime(created)
     end
 
     context = Keyword.get(options, :context) || Map.fetch!(unsecured_document, "@context")
@@ -320,7 +251,7 @@ defmodule IntegrityProofs do
     created = Keyword.fetch!(options, :created)
 
     transformed_document =
-      IntegrityProofs.transform_jcs_eddsa_2022!(document,
+      Integrity.transform_jcs_eddsa_2022!(document,
         type: "DataIntegrityProof",
         cryptosuite: "jcs-eddsa-2022"
       )
@@ -332,8 +263,8 @@ defmodule IntegrityProofs do
         proof_purpose: "assertionMethod"
       )
 
-    proof_config = IntegrityProofs.proof_configuration!(document, options)
-    hash_data = IntegrityProofs.hash(proof_config, transformed_document)
+    proof_config = Integrity.proof_configuration!(document, options)
+    hash_data = Integrity.hash(proof_config, transformed_document)
     proof_bytes = serialize_proof!(hash_data, options)
     proof_value = Multibase.encode!(proof_bytes, :base58_btc)
 
@@ -540,7 +471,7 @@ defmodule IntegrityProofs do
           proof_purpose: proof_purpose
         )
 
-      proof_config = IntegrityProofs.proof_configuration!(document_to_verify, options)
+      proof_config = Integrity.proof_configuration!(document_to_verify, options)
 
       transformed_document =
         transform_jcs_eddsa_2022!(document_to_verify,
@@ -572,7 +503,7 @@ defmodule IntegrityProofs do
   Retrieves the private key, from supplied data, a cache or
   via an HTTP request.
 
-  See `make_private_key/3` for details on the return
+  See `CryptoUtils.Keys.make_private_key/3` for details on the return
   formats specified in the `fmt` argument.
   """
   def retrieve_private_key!(options, fmt \\ :crypto_algo_key) do
@@ -582,7 +513,8 @@ defmodule IntegrityProofs do
 
     cond do
       !is_nil(priv) && !is_nil(pub) ->
-        make_private_key({pub, priv}, :ed25519, fmt)
+        # TODO: Don't hard code the curve name
+        CryptoUtils.Keys.make_private_key({pub, priv}, :ed25519, fmt)
 
       !is_nil(private_key_pem) ->
         case decode_pem_ssh_file(private_key_pem, :openssh_key_v1, fmt) do
@@ -599,7 +531,7 @@ defmodule IntegrityProofs do
   Retrieves the public key, from supplied data, a cache or
   via an HTTP request.
 
-  See `make_public_key/3` for details on the return
+  See `CryptoUtils.Keys.make_public_key/3` for details on the return
   formats specified in the `fmt` argument.
   """
   def retrieve_public_key!(options, fmt \\ :crypto_algo_key) do
@@ -611,11 +543,12 @@ defmodule IntegrityProofs do
     cond do
       is_map(proof) && is_map(cached_controller_document) ->
         verification_method = verification_method!(proof, options)
-        {:ok, public_key} = IntegrityProofs.extract_multikey(verification_method, fmt)
+        {:ok, public_key} = Integrity.extract_multikey(verification_method, fmt)
         public_key
 
       is_binary(pub) ->
-        make_public_key(pub, :ed25519, fmt)
+        # TODO: Don't hard code the curve name
+        CryptoUtils.Keys.make_public_key(pub, :ed25519, fmt)
 
       is_binary(public_key_pem) ->
         case decode_pem_ssh_file(public_key_pem, :public_key, fmt) do
@@ -627,155 +560,6 @@ defmodule IntegrityProofs do
         raise ArgumentError, IO.inspect(options)
     end
   end
-
-  @doc """
-  Generates a new random public-private key pair. `fmt` determines the
-  format of the keys returned. See `make_public_key/3`
-  and `make_private_key/3` for details on the return
-  formats.
-  """
-  def generate_key_pair(fmt, curve \\ :ed25519) do
-    type =
-      case curve do
-        :ed25519 -> :eddsa
-        :p256 -> :ecdh
-        :secp256k1 -> :ecdh
-        _ -> raise UnsupportedNamedCurveError, curve
-      end
-
-    priv_fmt =
-      case fmt do
-        :did_key -> :crypto_algo_key
-        _ -> fmt
-      end
-
-    {pub, priv} = :crypto.generate_key(type, curve)
-    {make_public_key(pub, curve, fmt), make_private_key({pub, priv}, curve, priv_fmt)}
-  end
-
-  @doc """
-  Returns a public key, from supplied data. `fmt` determines the
-  format of the key returned.
-
-  * `:public_key` returns a tuple `{{:ECPoint, pub}, {:namedCurve, {1, 3, 101, 112}}`.
-  * `:public_key_ed` returns a tuple `{:ed_pub, :ed25519, pub}`.
-  * `:crypto_algo_key` returns a tuple `{:eddsa, [pub, :ed25519]}`.
-  * `:multikey` returns a btc58-encoded binary starting with "z6".
-  * `:did_key` returns a binary starting with "did:key:".
-  """
-  def make_public_key(pub, curve, :did_key) do
-    multikey = make_public_key(pub, curve, :multikey)
-    "did:key:" <> multikey
-  end
-
-  def make_public_key(pub, :ed25519, :public_key)
-      when byte_size(pub) == 32 do
-    {ec_point(point: pub), {:namedCurve, @id_ed25519}}
-  end
-
-  def make_public_key(pub, :p256, :public_key) do
-    {ec_point(point: pub), {:namedCurve, @id_p256}}
-  end
-
-  def make_public_key(pub, :secp256k1, :public_key) do
-    {ec_point(point: pub), {:namedCurve, @id_secp256k1}}
-  end
-
-  def make_public_key(pub, :ed25519, :crypto_algo_key)
-      when byte_size(pub) == 32 do
-    {:eddsa, [pub, :ed25519]}
-  end
-
-  def make_public_key(pub, :p256, :crypto_algo_key) do
-    {:ecdsa, [pub, :p256]}
-  end
-
-  def make_public_key(pub, :secp256k1, :crypto_algo_key) do
-    {:ecdsa, [pub, :secp256k1]}
-  end
-
-  def make_public_key(pub, :ed25519, :multikey)
-      when byte_size(pub) == 32 do
-    pub
-    |> Multicodec.encode!("ed25519-pub")
-    |> Multibase.encode!(:base58_btc)
-  end
-
-  def make_public_key(pub, :p256, :multikey)
-      when byte_size(pub) == 33 or byte_size(pub) == 65 do
-    # Multicodec.encode!("p256")
-    <<@p256_prefix::binary, pub::binary>>
-    |> Multibase.encode!(:base58_btc)
-  end
-
-  def make_public_key(pub, :secp256k1, :multikey)
-      when byte_size(pub) == 33 or byte_size(pub) == 65 do
-    # Multicodec.encode!("secp256k1")
-    <<@secp256k1_prefix::binary, pub::binary>>
-    |> Multibase.encode!(:base58_btc)
-  end
-
-  def make_public_key(pub, :ed25519, :public_key_ed)
-      when byte_size(pub) == 32 do
-    {:ed_pub, :ed25519, pub}
-  end
-
-  def make_public_key(_, curve, _), do: raise(UnsupportedNamedCurveError, curve)
-
-  @doc """
-  Returns a private key, from supplied data. `fmt` determines the
-  format of the key returned.
-
-  * `:public_key` returns a tuple `{:ECPrivateKey, 1, priv, {:namedCurve, {1, 3, 101, 112}}, pub}`.
-  * `:public_key_ed` returns a tuple `{:ed_pri, :ed25519, pub, priv}`.
-  * `:crypto_algo_key` returns a tuple `{:eddsa, [priv, :ed25519]}`.
-  """
-  def make_private_key({pub, priv}, :ed25519, :public_key)
-      when byte_size(pub) == 32 and byte_size(priv) == 32 do
-    ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_ed25519})
-  end
-
-  def make_private_key({pub, priv}, :p256, :public_key) do
-    # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
-    # 4 means uncompressed format, x and y are curve coordinates
-    # priv is 32 bytes
-    ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_p256})
-  end
-
-  def make_private_key({pub, priv}, :secp256k1, :public_key) do
-    # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
-    # 4 means uncompressed format, x and y are curve coordinates
-    # priv is 32 bytes
-    ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_secp256k1})
-  end
-
-  def make_private_key({pub, priv}, :ed25519, :crypto_algo_key)
-      when byte_size(pub) == 32 and byte_size(priv) == 32 do
-    {:eddsa, [priv, :ed25519]}
-  end
-
-  def make_private_key({pub, priv}, :p256, :crypto_algo_key)
-      when is_binary(pub) and is_binary(priv) do
-    # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
-    # 4 means uncompressed format, x and y are curve coordinates
-    # priv is 32 bytes
-    {:ecdsa, [priv, :p256]}
-  end
-
-  def make_private_key({pub, priv}, :secp256k1, :crypto_algo_key)
-      when is_binary(pub) and is_binary(priv) do
-    # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
-    # 4 means uncompressed format, x and y are curve coordinates
-    # priv is 32 bytes
-    {:ecdsa, [priv, :secp256k1]}
-  end
-
-  def make_private_key({pub, priv}, :ed25519, :public_key_ed)
-      when byte_size(pub) == 32 and byte_size(priv) == 32 do
-    {:ed_pri, :ed25519, pub, priv}
-  end
-
-  def make_private_key(_, curve, _), do: raise(UnsupportedNamedCurveError, curve)
 
   @doc """
   Parses keys in files produced by the `ssh-keygen` command.
@@ -798,7 +582,7 @@ defmodule IntegrityProofs do
   File.read!("example") |> decode_pem_ssh_file(:openssh_key_v1)
   ```
 
-  See `make_public_key/3` and `make_private_key/3` for
+  See `CryptoUtils.Keys.make_public_key/3` and `make_private_key/3` for
   details on the formats for the returned keys.
   """
   def decode_pem_ssh_file(keys_pem, type \\ :openssh_key_v1, fmt \\ :crypto_algo_key)
@@ -812,12 +596,12 @@ defmodule IntegrityProofs do
           end)
           |> case do
             {{{:ECPoint, pub}, {:namedCurve, curve_oid}}, _attrs} ->
-              curve = curve_from_oid(curve_oid)
+              curve = CryptoUtils.Curves.curve_from_oid(curve_oid)
 
               if is_nil(curve) do
                 nil
               else
-                make_public_key(pub, curve, fmt)
+                CryptoUtils.Keys.make_public_key(pub, curve, fmt)
               end
 
             _ ->
@@ -835,12 +619,12 @@ defmodule IntegrityProofs do
           end)
           |> case do
             {{:ECPrivateKey, 1, priv, {:namedCurve, curve_oid}, pub, :asn1_NOVALUE}, _attrs} ->
-              curve = curve_from_oid(curve_oid)
+              curve = CryptoUtils.Curves.curve_from_oid(curve_oid)
 
               if is_nil(curve) do
                 nil
               else
-                make_private_key({pub, priv}, curve, fmt)
+                CryptoUtils.Keys.make_private_key({pub, priv}, curve, fmt)
               end
 
             _ ->
@@ -866,12 +650,12 @@ defmodule IntegrityProofs do
            :public_key.pem_decode(keys_pem),
          {{:ECPoint, pub}, {:namedCurve, curve_oid}} <-
            :public_key.pem_entry_decode(public_key_entry) do
-      curve = curve_from_oid(curve_oid)
+      curve = CryptoUtils.Curves.curve_from_oid(curve_oid)
 
       if is_nil(curve) do
         {:error, "Unknown curve OID #{inspect(curve_oid)}"}
       else
-        {:ok, make_public_key(pub, curve, fmt)}
+        {:ok, CryptoUtils.Keys.make_public_key(pub, curve, fmt)}
       end
     end
   end
@@ -879,7 +663,7 @@ defmodule IntegrityProofs do
   @doc """
   Extracts the public key from a "Multikey" verification method.
 
-  See `make_public_key/3` for details on the formats for the
+  See `CryptoUtils.Keys.make_public_key/3` for details on the formats for the
   returned key.
   """
   def extract_multikey(verification_method, fmt \\ :crypto_algo_key)
@@ -889,8 +673,9 @@ defmodule IntegrityProofs do
         fmt
       )
       when is_binary(multibase_value) do
+    # TODO: Don't hard code the curve name
     with {:ok, {pub, _multicodec_mapping}} <- decode_multikey(multibase_value) do
-      {:ok, make_public_key(pub, :ed25519, fmt)}
+      {:ok, CryptoUtils.Keys.make_public_key(pub, :ed25519, fmt)}
     end
   end
 
@@ -936,7 +721,7 @@ defmodule IntegrityProofs do
       when is_binary(path) do
     case String.split(path, ":") do
       [did_method | [did_value | _]] ->
-        did_method in IntegrityProofs.Did.valid_did_methods() && did_value != ""
+        did_method in Integrity.Did.valid_did_methods() && did_value != ""
 
       _ ->
         false
@@ -1033,7 +818,6 @@ defmodule IntegrityProofs do
   defp valid_verification_method?(_), do: false
 
   defp valid_purpose?(_verification_method, purpose) do
-    # TODO
     purpose in @valid_proof_purposes
   end
 end

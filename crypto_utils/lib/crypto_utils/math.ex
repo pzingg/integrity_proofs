@@ -1,8 +1,13 @@
-defmodule IntegrityProofs.Math do
+defmodule CryptoUtils.Math do
+  @moduledoc """
+  Modular math for square roots, and power functions.
+  """
+
   require Integer
 
   @doc """
-  Tonelli-Shanks algorithm to find modular square root.
+  Returns one of the modular square roots of an integer, using the
+  Tonelli-Shanks algorithm.
 
   See:
   * https://en.wikipedia.org/wiki/Tonelli%E2%80%93Shanks_algorithm
@@ -10,9 +15,9 @@ defmodule IntegrityProofs.Math do
   * https://cryptobook.nakov.com/asymmetric-key-ciphers/elliptic-curve-cryptography-ecc
   """
   def sqrt_mod(n, p) do
-    ls = jacobi_symbol(n, p)
+    jacobi = jacobi_symbol(n, p)
 
-    if ls == 1 do
+    if jacobi == 1 do
       # Step 1
       # By factoring out powers of 2, find q and s such that
       # p - 1 == q ^ (2 ^ s), with q odd
@@ -32,11 +37,55 @@ defmodule IntegrityProofs.Math do
       # Let m = s
       ts_loop(t, r, s, c, p, 0)
     else
-      {:error, "invalid jacobi: #{ls}"}
+      {:error, "value does not have a square root: Jacobi is #{jacobi}"}
     end
   end
 
-  def find_q_and_s(q, s) do
+  # From Chunky
+
+  @doc """
+  Calculates the value of an integer raised to an integral power
+  without loss of precision.
+  """
+  def pow(_x, 0), do: 1
+  def pow(x, 1), do: x
+
+  def pow(x, y) when is_integer(x) and is_integer(y) and y > 0 and Integer.is_even(y) do
+    pow(x * x, div(y, 2))
+  end
+
+  def pow(x, y) when is_integer(x) and is_integer(y) do
+    x * pow(x * x, div(y - 1, 2))
+  end
+
+  # From Chunky
+
+  @doc """
+  Calculates the modular value of an integer raised to an integral power.
+  """
+  def mod_pow(x, 0, _p) when is_integer(x), do: 1
+
+  def mod_pow(x, y, p) when is_integer(x) and is_integer(y) and y > 0 and is_integer(p) do
+    #  a^e mod p
+    :crypto.mod_pow(x, y, p) |> :binary.decode_unsigned()
+  end
+
+  # From Chunky
+
+  @doc """
+  Calculates the Jacobi symbol, used to find quadratic residues.
+  """
+  def jacobi_symbol(a, p) do
+    case mod_pow(a, div(p - 1, 2), p) do
+      1 -> 1
+      0 -> 0
+      _rem -> -1
+    end
+  end
+
+  # Tonelli-Shanks private functions
+
+  defp find_q_and_s(q, s) do
     if Bitwise.band(q, 1) == 1 do
       {q, s}
     else
@@ -44,7 +93,7 @@ defmodule IntegrityProofs.Math do
     end
   end
 
-  def non_quadratic_residue(z, p) do
+  defp non_quadratic_residue(z, p) do
     # See https://en.wikipedia.org/wiki/Jacobi_symbol
     if jacobi_symbol(z, p) == -1 do
       z
@@ -54,23 +103,23 @@ defmodule IntegrityProofs.Math do
     end
   end
 
-  def ts_loop(_t, _r, _m, _c, _p, iter) when iter >= 1000 do
+  defp ts_loop(_t, _r, _m, _c, _p, iter) when iter >= 1000 do
     {:error, "exceeded"}
   end
 
-  def ts_loop(0, _r, _m, _c, _p, _iter) do
+  defp ts_loop(0, _r, _m, _c, _p, _iter) do
     # Step 4.
     # If t == 0, return 0
     {:ok, 0}
   end
 
-  def ts_loop(1, r, _m, _c, _p, _iter) do
+  defp ts_loop(1, r, _m, _c, _p, _iter) do
     # Step 4.
     # If t == 1, return r
     {:ok, r}
   end
 
-  def ts_loop(t, r, m, c, p, iter) do
+  defp ts_loop(t, r, m, c, p, iter) do
     # Step 4.
     # Use repeated squaring to find the least i,
     # 0 < i < m, such that if z = t ^ (2 ^ i), z == 1
@@ -90,7 +139,7 @@ defmodule IntegrityProofs.Math do
     ts_loop(t, r, i, c, p, iter + 1)
   end
 
-  def least_i(i, z, m, p) do
+  defp least_i(i, z, m, p) do
     # Use repeated squaring to find the least i,
     # 0 < i < m, such that if z = t ^ (2 ^ i), z == 1
     if i == 0 || (i < m && z != 1) do
@@ -98,50 +147,5 @@ defmodule IntegrityProofs.Math do
     else
       i
     end
-  end
-
-  def parse_hex(s) do
-    case Integer.parse(s, 16) do
-      {i, ""} -> i
-      :error -> raise "could not parse"
-    end
-  end
-
-  # From Chunky
-  def pow(_x, 0), do: 1
-  def pow(x, 1), do: x
-
-  def pow(x, y) when is_integer(x) and is_integer(y) and y > 0 and Integer.is_even(y) do
-    pow(x * x, div(y, 2))
-  end
-
-  def pow(x, y) when is_integer(x) and is_integer(y) do
-    x * pow(x * x, div(y - 1, 2))
-  end
-
-  # From Chunky
-  def jacobi_symbol(a, p) do
-    case mod_pow(a, div(p - 1, 2), p) do
-      1 -> 1
-      0 -> 0
-      _rem -> -1
-    end
-  end
-
-  # From Chunky
-  def mod_pow(x, 0, _p) when is_integer(x), do: 1
-
-  def mod_pow(x, y, p) when is_integer(x) and is_integer(y) and y > 0 and is_integer(p) do
-    #  a^e mod p
-    :crypto.mod_pow(x, y, p) |> :binary.decode_unsigned()
-  end
-
-  def display_bytes(bin) do
-    out =
-      :binary.bin_to_list(bin)
-      |> Enum.map(&Integer.to_string(&1))
-      |> Enum.join(", ")
-
-    "<<" <> out <> ">>"
   end
 end

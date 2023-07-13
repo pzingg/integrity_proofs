@@ -1,4 +1,4 @@
-defmodule IntegrityProofs.Application do
+defmodule Integrity.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false
@@ -7,24 +7,31 @@ defmodule IntegrityProofs.Application do
 
   @impl true
   def start(_type, _args) do
-    plc_repo_start = System.get_env("PLC_REPO_START")
+    did_server_start = System.get_env("DID_SERVER_START")
 
-    children =
-      if is_nil(plc_repo_start) do
-        IO.puts("IntegrityProofs: not using database")
-        []
-      else
-        IO.puts("IntegrityProofs: using PlcRepo")
+    if is_nil(did_server_start) do
+      IO.puts("Integrity.Application.start: not using DID server")
+      continue_startup()
+    else
+      IO.puts("Integrity.Application.start: starting DID server")
 
-        [
-          # Start the Ecto repository
-          IntegrityProofs.Did.PlcRepo
-        ]
+      case Application.ensure_all_started(:did_server, :permanent) do
+        {:ok, _apps} ->
+          continue_startup()
+
+        {:error, reason} ->
+          IO.puts("DID server failed to start: #{inspect(reason)}")
+          {:error, reason}
       end
+    end
+  end
+
+  def continue_startup() do
+    children = []
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: IntegrityProofs.Supervisor]
+    opts = [strategy: :one_for_one, name: Integrity.Supervisor]
     Supervisor.start_link(children, opts)
   end
 end

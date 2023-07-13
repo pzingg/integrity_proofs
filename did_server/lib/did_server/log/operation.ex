@@ -1,4 +1,4 @@
-defmodule IntegrityProofs.Did.PlcLog.Operation do
+defmodule DidServer.Log.Operation do
   use Ecto.Schema
   import Ecto.Changeset
 
@@ -14,7 +14,7 @@ defmodule IntegrityProofs.Did.PlcLog.Operation do
   end
 
   def changeset(%__MODULE__{} = op, attrs) do
-    %__MODULE__{}
+    op
     |> cast(attrs, [:did, :cid, :operation, :nullified])
     |> validate_required([:did, :cid, :operation])
   end

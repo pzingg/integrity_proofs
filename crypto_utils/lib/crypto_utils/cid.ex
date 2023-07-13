@@ -1,4 +1,4 @@
-defmodule IntegrityProofs.CID do
+defmodule CryptoUtils.CID do
   @moduledoc """
   CIDs as implemented in AT Protocol. Existing Elixir multiformats and
   CID libraries do not yet seem to support "dag-cbor".
@@ -95,7 +95,7 @@ defmodule IntegrityProofs.CID do
   end
 end
 
-defimpl String.Chars, for: IntegrityProofs.CID do
+defimpl String.Chars, for: CryptoUtils.CID do
   @impl true
-  def to_string(%IntegrityProofs.CID{} = cid), do: IntegrityProofs.CID.encode!(cid, [])
+  def to_string(%CryptoUtils.CID{} = cid), do: CryptoUtils.CID.encode!(cid, [])
 end

@@ -1,0 +1,12 @@
+%{
+  "base1": {:hex, :base1, "0.1.0", "493a46bb5b34bf38d3b69ea6eaff33416d222f1621231cb1a04af42a351117ea", [:mix], [], "hexpm", "57cb13fe05f3dc4174c7fbca147b94dcfdceea1ce87fdd5f803a29d3ca75fc96"},
+  "base2": {:hex, :base2, "0.1.0", "bc9e19f1578e1439010d26b1bee456f3ac980481a46c3643b24e15c40e1db0ed", [:mix], [], "hexpm", "a25eb2892e03f609fd5634aaf9a7795fb90f98dc9a7a495ed8c03b2844bbb647"},
+  "basefiftyeight": {:hex, :basefiftyeight, "0.1.0", "3d48544743bf9aab7ab02aed803ac42af77acf268c7d8c71d4f39e7fa85ee8d3", [:mix], [], "hexpm", "af12f551429528c711e98628c029ad48d1e5ba5a284f40b2d91029a65381837a"},
+  "cbor": {:hex, :cbor, "1.0.1", "39511158e8ea5a57c1fcb9639aaa7efde67129678fee49ebbda780f6f24959b0", [:mix], [], "hexpm", "5431acbe7a7908f17f6a9cd43311002836a34a8ab01876918d8cfb709cd8b6a2"},
+  "csv": {:hex, :csv, "2.5.0", "c47b5a5221bf2e56d6e8eb79e77884046d7fd516280dc7d9b674251e0ae46246", [:mix], [{:parallel_stream, "~> 1.0.4 or ~> 1.1.0", [hex: :parallel_stream, repo: "hexpm", optional: false]}], "hexpm", "e821f541487045c7591a1963eeb42afff0dfa99bdcdbeb3410795a2f59c77d34"},
+  "multibase": {:hex, :multibase, "0.0.1", "9243bebe6f7f0f9f873c770ddcddab285cc554a8dd2374b8de6b2add087eccbc", [:mix], [{:base1, "~> 0.1.0", [hex: :base1, repo: "hexpm", optional: false]}, {:base2, "~> 0.1.0", [hex: :base2, repo: "hexpm", optional: false]}, {:basefiftyeight, "~> 0.1.0", [hex: :basefiftyeight, repo: "hexpm", optional: false]}, {:zbase32, "~> 2.0.0", [hex: :zbase32, repo: "hexpm", optional: false]}], "hexpm", "6ea13a19e47da727c2def81b241ad10a39440c5705a4abed18e8310b46f45f51"},
+  "multicodec": {:hex, :multicodec, "0.0.2", "7f2d0bca16bd37d5eefb389776bc2c955618c5903ac62c8e3293f38b0960d8e0", [:mix], [{:csv, "~> 2.1", [hex: :csv, repo: "hexpm", optional: false]}, {:varint, "~> 1.1", [hex: :varint, repo: "hexpm", optional: false]}], "hexpm", "3f04637bdb25b2948d939feaf07366c88b999a7f0e7d4095deb9f11dab0ca3ee"},
+  "parallel_stream": {:hex, :parallel_stream, "1.1.0", "f52f73eb344bc22de335992377413138405796e0d0ad99d995d9977ac29f1ca9", [:mix], [], "hexpm", "684fd19191aedfaf387bbabbeb8ff3c752f0220c8112eb907d797f4592d6e871"},
+  "varint": {:hex, :varint, "1.3.0", "e5901ea7fafdbb28cd2c402b5836878fe9480614d1152e8dbbafc44335d723aa", [:mix], [], "hexpm", "f32c332ddf730ea6a9c80e5bda774651dc9e9090552deff99f6e3fc1b4dc6519"},
+  "zbase32": {:hex, :zbase32, "2.0.0", "5a61d5ee8f39092d4a243da2a42b5b4339ef226d9b182603f63d5a3f16d192ee", [:mix], [], "hexpm", "798f81895658f9773e1dcf30ba3c118547f482502c5e1e19e72752f9a6f23e44"},
+}

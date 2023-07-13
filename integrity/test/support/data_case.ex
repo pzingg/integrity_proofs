@@ -1,4 +1,4 @@
-defmodule IntegrityProofs.DataCase do
+defmodule Integrity.DataCase do
   @moduledoc """
   This module defines the setup for tests requiring
   access to the application's data layer.
@@ -16,17 +16,17 @@ defmodule IntegrityProofs.DataCase do
 
   using do
     quote do
-      alias IntegrityProofs.Did.PlcRepo, as: Repo
+      alias Integrity.Did.PlcRepo, as: Repo
 
       import Ecto
       import Ecto.Changeset
       import Ecto.Query
-      import IntegrityProofs.DataCase
+      import Integrity.DataCase
     end
   end
 
   setup_all do
-    if IntegrityProofs.Did.PlcRepo in Ecto.Repo.all_running() do
+    if Integrity.Did.PlcRepo in Ecto.Repo.all_running() do
       :ok
     else
       raise RuntimeError, "Maybe you need to run with PLC_REPO_START=on?"
@@ -34,10 +34,10 @@ defmodule IntegrityProofs.DataCase do
   end
 
   setup tags do
-    :ok = Ecto.Adapters.SQL.Sandbox.checkout(IntegrityProofs.Did.PlcRepo)
+    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Integrity.Did.PlcRepo)
 
     unless tags[:async] do
-      Ecto.Adapters.SQL.Sandbox.mode(IntegrityProofs.Did.PlcRepo, {:shared, self()})
+      Ecto.Adapters.SQL.Sandbox.mode(Integrity.Did.PlcRepo, {:shared, self()})
     end
 
     :ok

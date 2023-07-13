@@ -1,4 +1,4 @@
-defmodule IntegrityProofs.Did.PlcRepo.Migrations.AddOperations do
+defmodule Integrity.Did.PlcRepo.Migrations.AddOperations do
   use Ecto.Migration
 
   def change do

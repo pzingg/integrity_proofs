@@ -1,10 +1,10 @@
-defmodule IntegrityProofs.DidTest do
+defmodule Integrity.DidTest do
   use ExUnit.Case
 
   @public_key_bytes <<243, 105, 212, 154, 54, 128, 250, 99, 47, 184, 242, 248, 144, 45, 17, 70,
                       176, 243, 220, 174, 103, 200, 4, 192, 33, 143, 102, 29, 234, 149, 1, 188>>
 
-  @identifier IntegrityProofs.make_public_key(@public_key_bytes, :ed25519, :did_key)
+  @identifier CryptoUtils.Keys.make_public_key(@public_key_bytes, :ed25519, :did_key)
 
   @did_document %{
     "@context" => [
@@ -36,7 +36,7 @@ defmodule IntegrityProofs.DidTest do
 
   test "builds a DID document" do
     document =
-      IntegrityProofs.Did.build_did_document!(@identifier,
+      Integrity.Did.build_did_document!(@identifier,
         signature_method_fragment: "keys-1",
         encryption_method_fragment: "keys-2",
         enable_encryption_key_derivation: false

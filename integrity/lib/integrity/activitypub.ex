@@ -1,4 +1,4 @@
-defmodule IntegrityProofs.ActivityPub do
+defmodule Integrity.ActivityPub do
   @moduledoc """
   Functions to create ActivityPub identity proof documents.
 
@@ -47,8 +47,8 @@ defmodule IntegrityProofs.ActivityPub do
   def build_identity_proof!(%{"id" => actor_id} = person, options) do
     subject = Keyword.fetch!(options, :verification_method)
 
-    if !IntegrityProofs.did_uri?(URI.parse(subject)) do
-      raise IntegrityProofs.InvalidVerificationMethodURLError, subject
+    if !Integrity.did_uri?(URI.parse(subject)) do
+      raise Integrity.InvalidVerificationMethodURLError, subject
     end
 
     attachment = %{
@@ -58,7 +58,7 @@ defmodule IntegrityProofs.ActivityPub do
     }
 
     options = Keyword.put(options, :context, @did_proof_context)
-    proof_document = IntegrityProofs.build_assertion_proof!(attachment, options)
+    proof_document = Integrity.build_assertion_proof!(attachment, options)
 
     {attachments, person} = Map.pop(person, "attachment", [])
 
@@ -99,7 +99,7 @@ defmodule IntegrityProofs.ActivityPub do
     end
 
     options = Keyword.put(options, :context, @did_proof_context)
-    IntegrityProofs.verify_proof_document!(statement, options)
+    Integrity.verify_proof_document!(statement, options)
   end
 
   defp find_proof!(person) do

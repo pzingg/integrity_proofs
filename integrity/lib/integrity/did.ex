@@ -1,4 +1,4 @@
-defmodule IntegrityProofs.Did do
+defmodule Integrity.Did do
   @moduledoc """
   Functions to create and resolve DID documents.
 
@@ -11,24 +11,6 @@ defmodule IntegrityProofs.Did do
   @known_signature_key_formats ["Multikey", "JsonWebKey2020", "Ed25519VerificationKey2020"]
   @known_encryption_key_formats ["Multikey", "JsonWebKey2020", "X25519KeyAgreementKey2020"]
 
-  defmodule InvalidDidError do
-    defexception [:message]
-
-    @impl true
-    def exception(did) do
-      %__MODULE__{message: "Invalid DID #{did}"}
-    end
-  end
-
-  defmodule UnexpectedDidMethodError do
-    defexception [:message]
-
-    @impl true
-    def exception(method) do
-      %__MODULE__{message: "Unexpected DID method #{method}"}
-    end
-  end
-
   defmodule DidResolutionError do
     defexception [:did, :reason]
 
@@ -38,30 +20,12 @@ defmodule IntegrityProofs.Did do
     end
   end
 
-  defmodule UnsupportedPublicKeyCodecError do
-    defexception [:message]
-
-    @impl true
-    def exception(prefix) do
-      %__MODULE__{message: "Unsupported public key codec #{prefix}"}
-    end
-  end
-
   defmodule UnsupportedPublicKeyTypeError do
     defexception [:message]
 
     @impl true
     def exception(format) do
       %__MODULE__{message: "Unsupported public key type #{format}"}
-    end
-  end
-
-  defmodule EllipticCurveError do
-    defexception [:message]
-
-    @impl true
-    def exception(curve) do
-      %__MODULE__{message: "Point not on elliptic curve #{curve}"}
     end
   end
 
@@ -103,7 +67,7 @@ defmodule IntegrityProofs.Did do
   12. Return document.
   """
   def build_did_document!(identifier, options \\ []) do
-    parsed_did = parse_did!(identifier)
+    parsed_did = CryptoUtils.Did.parse_did!(identifier)
 
     %{"id" => sig_vm_id} =
       signature_verification_method = build_signature_method!(parsed_did, options)
@@ -193,7 +157,7 @@ defmodule IntegrityProofs.Did do
     fragment = Keyword.get(options, :signature_method_fragment, multibase_value)
     # The did:key Method draft here seems wrong.
     {_raw_public_key_bytes, %{codec: _codec, code: _multicodec_value, prefix: _prefix}} =
-      IntegrityProofs.decode_multikey!(multibase_value)
+      Integrity.decode_multikey!(multibase_value)
 
     if !valid_signature_key_format?(public_key_format, options) do
       raise UnsupportedPublicKeyTypeError, public_key_format
@@ -251,7 +215,7 @@ defmodule IntegrityProofs.Did do
     public_key_format = Keyword.get(options, :public_key_format, "Multikey")
     # Not in standard
     fragment = Keyword.get(options, :encryption_method_fragment, multibase_value)
-    _decoded = IntegrityProofs.decode_multikey!(multibase_value)
+    _decoded = Integrity.decode_multikey!(multibase_value)
 
     if !valid_encryption_key_format?(public_key_format, options) do
       raise UnsupportedPublicKeyTypeError, public_key_format
@@ -275,7 +239,7 @@ defmodule IntegrityProofs.Did do
   fetch and decode a DID document.
   """
   def resolve_did_web!(identifier, options) when is_binary(identifier) do
-    parse_did!(identifier, options)
+    CryptoUtils.Did.parse_did!(identifier, options)
     |> resolve_did_web!(options)
   end
 
@@ -317,7 +281,7 @@ defmodule IntegrityProofs.Did do
   """
   def did_web_uri(identifier, options \\ []) do
     if String.starts_with?(identifier, "did:web:") do
-      parsed_did = parse_did!(identifier, options)
+      parsed_did = CryptoUtils.Did.parse_did!(identifier, options)
 
       {:ok,
        %URI{
@@ -329,121 +293,6 @@ defmodule IntegrityProofs.Did do
     else
       {:error, "not a did:web identifier"}
     end
-  end
-
-  @doc """
-  Parse a did
-  """
-  def parse_did!(identifier, options \\ []) do
-    parts = String.split(identifier, ":", parts: 3)
-
-    if Enum.count(parts) != 3 || hd(parts) != "did" do
-      raise InvalidDidError, identifier
-    end
-
-    [_, method, method_specific_id] = parts
-    expected_did_method = Keyword.get(options, :expected_did_method)
-
-    if !is_nil(expected_did_method) && expected_did_method != method do
-      raise UnexpectedDidMethodError, method
-    end
-
-    parsed = %{
-      did_string: identifier,
-      method: String.to_existing_atom(method),
-      method_specific_id: method_specific_id
-    }
-
-    case method do
-      "key" ->
-        validate_did!(:key, parsed, String.split(method_specific_id, ":"), options)
-
-      "web" ->
-        validate_did!(:web, parsed, String.split(method_specific_id, ":"), options)
-
-      _ ->
-        raise InvalidDidError, identifier
-    end
-  end
-
-  defp validate_did!(:key, %{did_string: identifier} = parsed, [multibase_value], _) do
-    if String.starts_with?(multibase_value, "z") do
-      Map.merge(
-        parsed,
-        %{
-          version: "1",
-          multibase_value: multibase_value
-        }
-      )
-    else
-      raise InvalidDidError, identifier
-    end
-  end
-
-  defp validate_did!(:key, %{did_string: identifier} = parsed, [version, multibase_value], _) do
-    if String.starts_with?(multibase_value, "z") do
-      Map.merge(
-        parsed,
-        %{
-          version: version,
-          multibase_value: multibase_value
-        }
-      )
-    else
-      raise InvalidDidError, identifier
-    end
-  end
-
-  defp validate_did!(:web, %{did_string: identifier} = parsed, [host_port | path_parts], options) do
-    path =
-      if Enum.all?(path_parts, fn part ->
-           part != "" && is_nil(Regex.run(~r/\s/, part))
-         end) do
-        case Enum.join(path_parts, "/") do
-          "" -> "/.well-known/did.json"
-          p -> "/" <> p <> "/did.json"
-        end
-      else
-        nil
-      end
-
-    {host, port, path} =
-      URI.decode(host_port)
-      |> String.split(":", parts: 2)
-      |> case do
-        [host] ->
-          {host, nil, path}
-
-        [host, port] ->
-          case Integer.parse(port) do
-            {p, ""} -> {host, p, path}
-            _ -> {host, 0, path}
-          end
-      end
-
-    cond do
-      is_nil(path) ->
-        raise InvalidDidError, identifier
-
-      is_integer(port) && (port == 0 || port > 65535) ->
-        raise InvalidDidError, identifier
-
-      true ->
-        scheme = Keyword.get(options, :scheme, "https")
-
-        port =
-          case {scheme, port} do
-            {"http", 80} -> nil
-            {"https", 443} -> nil
-            {_, p} -> p
-          end
-
-        Map.merge(parsed, %{scheme: scheme, host: host, port: port, path: path})
-    end
-  end
-
-  defp validate_did!(_, %{did_string: identifier}, _, _) do
-    raise InvalidDidError, identifier
   end
 
   defp valid_signature_key_format?(format, options) do
