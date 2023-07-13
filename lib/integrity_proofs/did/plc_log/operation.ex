@@ -17,6 +17,5 @@ defmodule IntegrityProofs.Did.PlcLog.Operation do
     %__MODULE__{}
     |> cast(attrs, [:did, :cid, :operation, :nullified])
     |> validate_required([:did, :cid, :operation])
-    |> validate_inclusion(:operation, ["create", "plc_operation", "plc_tombstone"])
   end
 end

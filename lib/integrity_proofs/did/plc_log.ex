@@ -15,7 +15,15 @@ defmodule IntegrityProofs.Did.PlcLog do
     nullified_strs = Enum.map(nullified, &to_string/1)
 
     did_changeset = Did.changeset(%Did{}, %{did: did})
-    op_changeset = Operation.changeset(%Operation{}, proposed)
+
+    op_attrs = %{
+      cid: IntegrityProofs.Did.Plc.make_cid(proposed),
+      did: did,
+      operation: Jason.encode!(proposed),
+      nullified: nullified
+    }
+
+    op_changeset = Operation.changeset(%Operation{}, op_attrs)
 
     multi =
       Ecto.Multi.new()

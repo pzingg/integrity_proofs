@@ -8,6 +8,7 @@ defmodule IntegrityProofs.Did.Plc do
   require Integer
 
   alias IntegrityProofs.Math, as: IM
+  alias IntegrityProofs.CID
 
   defmodule Block do
     defstruct [:cid, :bytes, :value, :codec, :hasher]
@@ -244,6 +245,12 @@ defmodule IntegrityProofs.Did.Plc do
   end
 
   def normalize_op(%{"type" => _type} = op), do: op
+
+  def make_cid(normalized_op) do
+    normalized_op
+    |> CID.from_data()
+    |> CID.encode!(truncate: 24)
+  end
 
   def ensure_http_prefix(str) do
     if String.starts_with?(str, "http://") || String.starts_with?(str, "https://") do
