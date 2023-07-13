@@ -1,6 +1,16 @@
 # CryptoUtils
 
-**TODO: Add description**
+A library of some functions used by the `integrity` application.
+
+The library defines a `CID` structure and works around limitations
+of existing Elixir projects that do not deal with certain elliptical
+curve and hashes encoded in the multiformats system. Besides relying
+on Erlang's `:crypto` and `:ssh_file` applications, the library
+makes partial use of these other Elixir projects:
+
+* `multibase`
+* `multicodec`
+* `cbor`
 
 ## Installation
 
