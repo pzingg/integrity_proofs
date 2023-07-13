@@ -102,15 +102,15 @@ defmodule IntegrityProofs.DidPlcTest do
 
   test "encodes a plc operation with CBOR" do
     {signing_key, _} = IntegrityProofs.generate_key_pair(:did_key, :secp256k1)
-    {recovery_key, _} = IntegrityProofs.generate_key_pair(:did_key, :secp256k1)
+    {recovery_key, _} = signer = IntegrityProofs.generate_key_pair(:did_key, :secp256k1)
 
-    {_normalized_op, did} =
+    {_op, did} =
       IntegrityProofs.Did.Plc.create_op(
         signing_key: signing_key,
         recovery_key: recovery_key,
-        handle: "at://user1@example.com",
-        service: "https://example.com",
-        signer: recovery_key
+        signer: signer,
+        handle: "at://bob.bsky.social",
+        service: "https://pds.example.com"
       )
 
     assert "did:plc:" <> <<_id::binary-size(24)>> = did
@@ -118,22 +118,22 @@ defmodule IntegrityProofs.DidPlcTest do
 
   test "makes a dag-cbor CID, truncated to 24 characters" do
     {signing_key, _} = IntegrityProofs.generate_key_pair(:did_key, :secp256k1)
-    {recovery_key, _} = IntegrityProofs.generate_key_pair(:did_key, :secp256k1)
+    {recovery_key, _} = signer = IntegrityProofs.generate_key_pair(:did_key, :secp256k1)
 
     assert String.starts_with?(signing_key, "did:key:z7")
     assert String.starts_with?(recovery_key, "did:key:z7")
 
-    {normalized_op, _did} =
+    {op, did} =
       IntegrityProofs.Did.Plc.create_op(
         signing_key: signing_key,
         recovery_key: recovery_key,
+        signer: signer,
         handle: "at://bob.bsky.social",
-        service: "https://pds.example.com",
-        signer: recovery_key
+        service: "https://pds.example.com"
       )
 
     cid_str =
-      normalized_op
+      op
       |> CID.from_data()
       |> CID.encode!(truncate: 24)
 

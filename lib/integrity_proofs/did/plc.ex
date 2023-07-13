@@ -15,7 +15,16 @@ defmodule IntegrityProofs.Did.Plc do
   end
 
   defmodule CreateOpV1 do
-    defstruct [:signing_key, :recovery_key, :handle, :service, :prev, :sig, type: "create"]
+    defstruct [
+      :signing_key,
+      :recovery_key,
+      :signer,
+      :handle,
+      :service,
+      :prev,
+      :sig,
+      type: "create"
+    ]
   end
 
   defmodule InvalidSignatureError do
@@ -24,6 +33,15 @@ defmodule IntegrityProofs.Did.Plc do
     @impl true
     def exception(_op) do
       %__MODULE__{message: "invalid signature"}
+    end
+  end
+
+  defmodule MissingSignatureError do
+    defexception [:message]
+
+    @impl true
+    def exception(_op) do
+      %__MODULE__{message: "operation is missing signature"}
     end
   end
 
@@ -204,20 +222,27 @@ defmodule IntegrityProofs.Did.Plc do
   # Operations
 
   def create_op(params) do
-    op = struct(CreateOpV1, params) |> normalize_op()
+    %CreateOpV1{signer: signer} = op = struct(CreateOpV1, params)
+
+    op = op |> normalize_op() |> add_signature(signer)
     did = did_for_create_op(op)
     {op, did}
   end
 
-  def did_for_create_op(%{"prev" => nil} = normalized_op) do
-    cbor = CBOR.encode(normalized_op)
-    # <<166, 107, 97, 108, 115, 111, 75, 110, 111, 119, 110, 65, 115, 129, 118, 97
+  def did_for_create_op(%{"prev" => nil} = op) do
+    cbor = CBOR.encode(op)
     hash_of_genesis = :crypto.hash(:sha256, cbor)
 
     truncated_id =
       hash_of_genesis |> Base.encode32(case: :lower, padding: false) |> String.slice(0, 24)
 
     "did:plc:#{truncated_id}"
+  end
+
+  def cid_for_op(op) do
+    op
+    |> CID.from_data()
+    |> CID.encode!(truncate: 24)
   end
 
   def normalize_op(%CreateOpV1{sig: sig} = op) do
@@ -246,10 +271,23 @@ defmodule IntegrityProofs.Did.Plc do
 
   def normalize_op(%{"type" => _type} = op), do: op
 
-  def make_cid(normalized_op) do
-    normalized_op
-    |> CID.from_data()
-    |> CID.encode!(truncate: 24)
+  # Signatures
+
+  def add_signature(op, {_, signing_key}) do
+    # {:ecdsa, [<<binary-size::32>>, :secp256k1]}
+    {algorithm, [priv, curve]} = signing_key
+
+    cbor = CBOR.encode(op)
+    signature = :crypto.sign(algorithm, :sha256, cbor, [priv, curve], [])
+    Map.put(op, "sig", Base.encode64(signature))
+  end
+
+  def verify_signature(did_key, cbor, sig_bytes) do
+    %{algo_key: algo_key} = IntegrityProofs.Did.Plc.parse_did_key!(did_key)
+    # {:ecdsa, [<<binary-size::65>>, :secp256k1]}
+    {algorithm, [pub, curve]} = algo_key
+
+    :crypto.verify(algorithm, :sha256, cbor, sig_bytes, [pub, curve], [])
   end
 
   def ensure_http_prefix(str) do
@@ -271,20 +309,23 @@ defmodule IntegrityProofs.Did.Plc do
     end
   end
 
-  def assure_valid_creation_op(did, %{"type" => type} = op) do
+  def assure_valid_creation_op(
+        did,
+        %{"type" => type, "rotationKeys" => rotation_keys, "prev" => prev} = op
+      ) do
     if type == "plc_tombstone" do
       raise MisorderedOperationError
     end
 
     assure_valid_op(op)
-    assure_valid_sig(op.rotation_keys, op)
+    assure_valid_sig(rotation_keys, op)
     expected_did = did_for_create_op(op)
 
     if did != expected_did do
       raise GenesisHashError, expected_did
     end
 
-    if !is_nil(op.prev) do
+    if !is_nil(prev) do
       raise ImproperOperationError, op: op, message: "expected null prev on create"
     end
 
@@ -301,7 +342,8 @@ defmodule IntegrityProofs.Did.Plc do
       try do
         parse_did_key!(key)
       rescue
-        _ -> raise UnsupportedKeyError, key
+        _e ->
+          raise UnsupportedKeyError, key
       end
     end)
 
@@ -318,10 +360,10 @@ defmodule IntegrityProofs.Did.Plc do
 
   def assure_valid_sig(allowed_did_keys, %{"sig" => sig} = op) when is_binary(sig) do
     with {:ok, sig_bytes} <- Base.decode64(sig),
-         data_bytes <- Map.delete(op, "sig") |> normalize_op() |> CBOR.encode() do
+         cbor <- Map.delete(op, "sig") |> normalize_op() |> CBOR.encode() do
       valid =
         Enum.find(allowed_did_keys, fn did_key ->
-          verify_signature(did_key, data_bytes, sig_bytes)
+          verify_signature(did_key, cbor, sig_bytes)
         end)
 
       if is_nil(valid) do
@@ -334,9 +376,8 @@ defmodule IntegrityProofs.Did.Plc do
     end
   end
 
-  def verify_signature(did_key, data_bytes, sig_bytes) do
-    # TODO: implement for p256 and secp256k1, according to did
-    false
+  def assure_valid_sig(_allowed_did_keys, op) do
+    raise MissingSignatureError, op
   end
 
   def format_service({service_id, %{type: type, endpoint: endpoint}}) do
@@ -379,8 +420,9 @@ defmodule IntegrityProofs.Did.Plc do
   end
 
   def decompress_curve_point(<<4, _coords::binary>> = key_bytes, _)
-      when byte_size(key_bytes) == 65,
-      do: key_bytes
+      when byte_size(key_bytes) == 65 do
+    {:ok, key_bytes}
+  end
 
   def decompress_curve_point(<<mode::size(8), x_coord::binary>>, {_name, p, a, b}) do
     test =

@@ -13,3 +13,9 @@ config :integrity_proofs,
 
 config :integrity_proofs, IntegrityProofs.Did.PlcRepo,
   url: "ecto://postgres:postgres@localhost/plc_log"
+
+if config_env() == :test do
+  config :integrity_proofs, IntegrityProofs.Did.PlcRepo,
+    pool: Ecto.Adapters.SQL.Sandbox,
+    ownership_timeout: 60_000
+end

@@ -3,7 +3,7 @@ defmodule IntegrityProofs.Did.PlcLog.Operation do
   import Ecto.Changeset
 
   @primary_key false
-  @timestamps_opts [type: :utc_datetime, updated_at: false]
+  @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
   schema "operations" do
     field(:did, :string, primary_key: true)
     field(:cid, :string, primary_key: true)

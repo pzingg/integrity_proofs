@@ -11,16 +11,16 @@ defmodule IntegrityProofs.Did.PlcLog do
 
   def validate_and_add_op(did, proposed) do
     ops = indexed_ops_for_did(did)
-    {proposed, nullified, prev} = assure_valid_next_op(did, ops, proposed)
-    nullified_strs = Enum.map(nullified, &to_string/1)
+    {proposed, nullified_strs, prev} = assure_valid_next_op(did, ops, proposed)
+    nullified? = !Enum.empty?(nullified_strs)
 
     did_changeset = Did.changeset(%Did{}, %{did: did})
 
     op_attrs = %{
-      cid: IntegrityProofs.Did.Plc.make_cid(proposed),
+      cid: IntegrityProofs.Did.Plc.cid_for_op(proposed),
       did: did,
       operation: Jason.encode!(proposed),
-      nullified: nullified
+      nullified: nullified?
     }
 
     op_changeset = Operation.changeset(%Operation{}, op_attrs)
@@ -28,13 +28,25 @@ defmodule IntegrityProofs.Did.PlcLog do
     multi =
       Ecto.Multi.new()
       # grab a row lock on did table
-      |> Ecto.Multi.insert(:dids, did_changeset, returning: true)
-      |> Ecto.Multi.insert(:operations, op_changeset, returning: true)
-      |> Ecto.Multi.update_all(:nullify, fn _multi -> nullify(did, nullified_strs) end, [])
-      |> Ecto.Multi.run(:verify, fn repo, _multi -> verify_most_recent(repo, did, prev) end)
-  end
+      |> Ecto.Multi.insert(:did, did_changeset, returning: true)
+      |> Ecto.Multi.insert(:operation, op_changeset, returning: true)
 
-  def nullify(did, []), do: :ok
+    multi =
+      if nullified? do
+        Ecto.Multi.update_all(
+          multi,
+          :nullified,
+          fn _multi -> nullify(did, nullified_strs) end,
+          []
+        )
+      else
+        multi
+      end
+
+    multi
+    |> Ecto.Multi.run(:most_recent, fn _repo, _multi -> verify_most_recent(did, prev) end)
+    |> Repo.transaction()
+  end
 
   def nullify(did, nullified_strs) do
     from(op in Operation,
@@ -44,7 +56,7 @@ defmodule IntegrityProofs.Did.PlcLog do
     )
   end
 
-  def verify_most_recent(_repo, did, prev) do
+  def verify_most_recent(did, prev) do
     most_recent =
       from(op in Operation,
         select: [:cid],
@@ -56,14 +68,7 @@ defmodule IntegrityProofs.Did.PlcLog do
       |> Repo.all()
 
     case most_recent do
-      [_last] ->
-        if is_nil(prev) do
-          :ok
-        else
-          raise PrevMismatchError, "Proposed has prev, but there is no most recent operation"
-        end
-
-      [_last, %{cid: next_to_last_cid}] ->
+      [_last | [%{cid: next_to_last_cid} | _]] ->
         cond do
           is_nil(prev) ->
             raise PrevMismatchError,
@@ -74,10 +79,15 @@ defmodule IntegrityProofs.Did.PlcLog do
                   "Proposed prev does not match the most recent operation #{next_to_last_cid}"
 
           true ->
-            :ok
+            {:ok, next_to_last_cid}
         end
 
-        !is_nil(prev) && prev == next_to_last_cid
+      _ ->
+        if is_nil(prev) do
+          {:ok, nil}
+        else
+          raise PrevMismatchError, "Proposed has prev, but there is no most recent operation"
+        end
     end
   end
 

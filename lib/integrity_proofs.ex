@@ -759,7 +759,7 @@ defmodule IntegrityProofs do
     # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
-    {:ecdh, [{pub, priv}, :p256]}
+    {:ecdsa, [priv, :p256]}
   end
 
   def make_private_key({pub, priv}, :secp256k1, :crypto_algo_key)
@@ -767,7 +767,7 @@ defmodule IntegrityProofs do
     # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
-    {:ecdh, [{pub, priv}, :secp256k1]}
+    {:ecdsa, [priv, :secp256k1]}
   end
 
   def make_private_key({pub, priv}, :ed25519, :public_key_ed)
