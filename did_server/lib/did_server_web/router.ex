@@ -14,18 +14,10 @@ defmodule DidServerWeb.Router do
     plug(:accepts, ["json"])
   end
 
-  scope "/", DidServerWeb do
+  scope "/home", DidServerWeb do
     pipe_through(:browser)
 
-    get("/", PageController, :home)
-  end
-
-  scope "/web", DidServerWeb do
-    pipe_through(:api)
-
-    # get "/:did", WebController, :show
-
-    get("/", WebController, :info)
+    get "/", PageController, :home
   end
 
   scope "/plc", DidServerWeb do
@@ -39,6 +31,19 @@ defmodule DidServerWeb.Router do
     # get "/:did/log", PlcController, :show_most_recent
     get("/:did", PlcController, :show)
     # post "/:did", PlcController, :update
+
     get("/", PlcController, :info)
+  end
+
+  scope "/.well-known", DidServerWeb do
+    pipe_through(:api)
+
+    get("/did.json", WebController, :show_root)
+  end
+
+  scope "/", DidServerWeb do
+    pipe_through(:api)
+
+    get("/*path", WebController, :show)
   end
 end

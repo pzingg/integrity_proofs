@@ -26,7 +26,7 @@ defmodule DidServerWeb.PlcController do
     with %Operation{} = last <- DidServer.Log.last_op_for_did(did) do
       doc =
         DidServer.Log.Operation.to_data(last, did)
-        |> DidServer.format_did_doc()
+        |> DidServer.format_did_plc_document()
 
       conn
       |> put_resp_content_type("application/did+ld+json")

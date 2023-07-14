@@ -14,7 +14,7 @@ defmodule Integrity.DidResolverTest do
     TestServer.add("/users/alice/did.json",
       to: fn conn ->
         body =
-          Integrity.Did.build_did_document!(@identifier,
+          DidServer.format_did_document!(@identifier,
             multibase_value: @multibase_value,
             signature_method_fragment: "keys-1"
           )

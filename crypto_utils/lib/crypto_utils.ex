@@ -13,6 +13,15 @@ defmodule CryptoUtils do
     end
   end
 
+  defmodule InvalidPublicKeyError do
+    defexception [:multibase, :reason]
+
+    @impl true
+    def message(%{multibase: multibase, reason: reason}) do
+      "Invalid public Multikey #{multibase}: #{reason}"
+    end
+  end
+
   defmodule UnexpectedDidMethodError do
     defexception [:message]
 

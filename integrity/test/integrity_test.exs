@@ -242,7 +242,8 @@ defmodule IntegrityTest do
 
     assert verification_method
 
-    assert {:ok, public_key} = Integrity.extract_multikey(verification_method, :crypto_algo_key)
+    assert {:ok, public_key} =
+             CryptoUtils.Keys.extract_multikey(verification_method, :crypto_algo_key)
 
     assert {:eddsa, [@public_key_bytes, :ed25519]} = public_key
   end
