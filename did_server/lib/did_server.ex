@@ -117,14 +117,15 @@ defmodule DidServer do
 
   @context ["https://www.w3.org/ns/did/v1"]
 
-  def format_did_doc(%{did: did, also_known_as: also_known_as} = data) when is_binary(did) do
+  def format_did_doc(%{"did" => did, "alsoKnownAs" => also_known_as} = data)
+      when is_binary(did) do
     {context, verification_methods} =
-      Map.get(data, :verification_methods, %{})
+      Map.get(data, "verificationMethods", %{})
       |> Enum.reduce(
         {@context, []},
         fn {key_id, key}, {ctx, vms} ->
           %{context: context, type: type, public_key_multibase: public_key_multibase} =
-            format_key_and_context(key)
+            context_and_key_for_did!(key)
 
           ctx =
             if context in [ctx] do
@@ -148,8 +149,8 @@ defmodule DidServer do
       )
 
     services =
-      Map.get(data, :services, %{})
-      |> Enum.map(fn {service_id, %{type: type, endpoint: endpoint}} ->
+      Map.get(data, "services", %{})
+      |> Enum.map(fn {service_id, %{"type" => type, "endpoint" => endpoint}} ->
         %{"id" => service_id, "type" => type, "serviceEndpoint" => endpoint}
       end)
 
@@ -162,7 +163,7 @@ defmodule DidServer do
     }
   end
 
-  def format_key_and_context(did) do
+  def context_and_key_for_did!(did) do
     %{jwt_alg: jwt_alg, key_bytes: key_bytes} = parse_did_key!(did)
 
     case jwt_alg do

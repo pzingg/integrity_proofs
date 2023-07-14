@@ -74,6 +74,10 @@ defmodule DidServer.Log do
     Did.changeset(did, attrs)
   end
 
+  def health_check() do
+    from(op in Operation, limit: 1) |> Repo.all() |> is_list()
+  end
+
   def validate_and_add_op(did, proposed) do
     ops = indexed_ops_for_did(did)
     {%{"prev" => prev} = proposed, nullified_strs} = assure_valid_next_op(did, ops, proposed)
@@ -124,7 +128,6 @@ defmodule DidServer.Log do
   def verify_most_recent(did, prev) do
     most_recent =
       from(op in Operation,
-        select: [:cid],
         where: op.did == ^did,
         where: op.nullified == false,
         order_by: [desc: :inserted_at],
@@ -183,7 +186,6 @@ defmodule DidServer.Log do
 
   def indexed_ops_for_did(did, false) do
     from(op in Operation,
-      select: [:cid],
       where: op.did == ^did,
       where: op.nullified == false,
       order_by: [:inserted_at]
@@ -193,7 +195,6 @@ defmodule DidServer.Log do
 
   def indexed_ops_for_did(did, true) do
     from(op in Operation,
-      select: [:cid],
       where: op.did == ^did,
       order_by: [:inserted_at]
     )
@@ -202,7 +203,6 @@ defmodule DidServer.Log do
 
   def last_op_for_did(did) do
     from(op in Operation,
-      select: [:cid],
       where: op.did == ^did,
       where: op.nullified == false,
       order_by: [desc: :inserted_at]
