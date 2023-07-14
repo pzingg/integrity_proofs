@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../misc/did-method-plc"
+		},
+		{
+			"path": "../../misc/atproto/packages/crypto"
+		}
+	],
+	"settings": {}
+}
