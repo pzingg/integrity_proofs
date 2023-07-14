@@ -46,7 +46,7 @@ defmodule DidServerWeb.WebController do
     DidServer.format_did_document!(identifier,
       multibase_value: multibase_value,
       signature_method_fragment: "keys-1",
-      also_known_as: "#{username}@#{domain}"
+      also_known_as: ["@#{username}@#{domain}", "#{username}.#{domain}"]
     )
   end
 

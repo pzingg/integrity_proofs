@@ -31,6 +31,7 @@ defmodule Integrity do
           | {:public_key_bytes, binary()}
           | {:private_key_pem, String.t()}
           | {:public_key_pem, String.t()}
+          | {:also_known_as, String.t() | [String.t()]}
           | {:multibase_value, String.t()}
           | {:public_key_format, String.t()}
           | {:signature_method_fragment, String.t()}

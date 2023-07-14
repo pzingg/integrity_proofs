@@ -1,6 +1,6 @@
 defmodule DidServerWeb.PlcJSON do
   def info(%{version: version}) do
-    %{data: %{version: version, info: "did:plc server"}}
+    %{data: %{version: version, details: "did:plc server"}}
   end
 
   def show(%{document: doc}) do
