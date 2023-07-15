@@ -17,7 +17,7 @@ defmodule DidServerWeb.WebController do
   def show(conn, %{"path" => path}) do
     if Enum.count(path) > 1 && List.last(path) == "did.json" do
       case parse_user(path) do
-        %{username: username, domain: domain} = user ->
+        %{username: _username, domain: _domain} = user ->
           doc = did_document_for_user(user)
           render(conn, :show, document: doc)
 
@@ -41,9 +41,11 @@ defmodule DidServerWeb.WebController do
 
   defp did_document_for_user(%{username: username, domain: domain} = user) do
     identifier = lookup_did_key(user)
-    %{public_key_multibase: multibase_value} = DidServer.context_and_key_for_did!(identifier)
 
-    DidServer.format_did_document!(identifier,
+    %{public_key_multibase: multibase_value} =
+      CryptoUtils.Did.context_and_key_for_did!(identifier)
+
+    CryptoUtils.Did.format_did_document!(identifier,
       multibase_value: multibase_value,
       signature_method_fragment: "keys-1",
       also_known_as: ["@#{username}@#{domain}", "#{username}.#{domain}"]

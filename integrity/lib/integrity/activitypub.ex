@@ -21,7 +21,7 @@ defmodule Integrity.ActivityPub do
 
     @impl true
     def message(_) do
-      "no VerfiableIdentityStatement in attachment"
+      "no VerifiableIdentityStatement in attachment"
     end
   end
 

@@ -45,7 +45,7 @@ defmodule DidServer.LogTest do
       assert String.starts_with?(recovery_key, "did:key:z7")
 
       {op, did} =
-        DidServer.create_op(
+        CryptoUtils.Did.create_operation(
           signing_key: signing_key,
           recovery_key: recovery_key,
           signer: signer,
@@ -55,8 +55,8 @@ defmodule DidServer.LogTest do
 
       assert "did:plc:" <> <<_id::binary-size(24)>> = did
 
-      assert {:ok, %{did: %{did: did}, operation: %{did: did}, most_recent: nil}} =
-               Log.validate_and_add_op(did, op)
+      assert {:ok, %{did: %{did: did}, operation: %Operation{did: did}, most_recent: nil}} =
+               DidServer.Log.create_operation(did, op)
     end
   end
 end

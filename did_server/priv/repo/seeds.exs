@@ -22,4 +22,4 @@
     service: "https://pds.example.com"
   )
 
-{:ok, _} = DidServer.Log.validate_and_add_op(did, op)
+{:ok, _} = CryptoUtils.create_operation(did, op)

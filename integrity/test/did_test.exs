@@ -37,7 +37,7 @@ defmodule Integrity.DidTest do
 
   test "builds a DID document" do
     document =
-      DidServer.format_did_document!(@identifier,
+      CryptoUtils.Did.format_did_document!(@identifier,
         signature_method_fragment: "keys-1",
         encryption_method_fragment: "keys-2",
         enable_encryption_key_derivation: false

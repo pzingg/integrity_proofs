@@ -673,7 +673,7 @@ defmodule Integrity do
       when is_binary(path) do
     case String.split(path, ":") do
       [did_method | [did_value | _]] ->
-        did_method in DidServer.valid_did_methods() && did_value != ""
+        did_method in CryptoUtils.Did.valid_did_methods() && did_value != ""
 
       _ ->
         false

@@ -1,7 +1,7 @@
-defmodule CryptoUtils.CID do
+defmodule CryptoUtils.Cid do
   @moduledoc """
-  CIDs as implemented in AT Protocol. Existing Elixir multiformats and
-  CID libraries do not yet seem to support "dag-cbor".
+  Cids as implemented in AT Protocol. Existing Elixir multiformats and
+  Cid libraries do not yet seem to support "dag-cbor".
 
   1. JSON data (map) is dag-cbor encoded
   2. `multihash` of `:sha2_256` digest is then `<<18, len, digest::binary>>`
@@ -10,7 +10,7 @@ defmodule CryptoUtils.CID do
 
   For string representation
 
-  1. raw CID binary is `<<1, 113, multihash::binary>>` (version 1, codec 113)
+  1. raw Cid binary is `<<1, 113, multihash::binary>>` (version 1, codec 113)
   2. raw binary is multibase base-32 lowercase encoded ("b" prefix)
   """
 
@@ -28,14 +28,14 @@ defmodule CryptoUtils.CID do
   @dag_cbor_code 0x71
 
   @doc """
-  Creates a CID struct from JSON data (map).
+  Creates a Cid struct from JSON data (map).
   """
   def from_data(data) when is_map(data) do
     CBOR.encode(data) |> from_cbor()
   end
 
   @doc """
-  Creates a CID struct from a CBOR-encoded binary.
+  Creates a Cid struct from a CBOR-encoded binary.
   """
   def from_cbor(cbor) when is_binary(cbor) do
     digest = :crypto.hash(:sha256, cbor)
@@ -44,14 +44,14 @@ defmodule CryptoUtils.CID do
   end
 
   @doc """
-  Creates a CID struct from a multihash.
+  Creates a Cid struct from a multihash.
   """
   def new(multihash, codec \\ "dag-cbor", version \\ 1) do
     %__MODULE__{codec: codec, multihash: multihash, version: version}
   end
 
   @doc """
-  Returns a base-32 lowercase string representation of the CID.
+  Returns a base-32 lowercase string representation of the Cid.
   The returned value always starts with "b".
 
   If the option `:truncate` is set to an positive integer value
@@ -75,7 +75,7 @@ defmodule CryptoUtils.CID do
   end
 
   @doc """
-  Decodes a base-32 lowercase string representation into a CID struct.
+  Decodes a base-32 lowercase string representation into a Cid struct.
   The string must always start with "b".
   """
   def decode!(str) do
@@ -95,7 +95,7 @@ defmodule CryptoUtils.CID do
   end
 end
 
-defimpl String.Chars, for: CryptoUtils.CID do
+defimpl String.Chars, for: CryptoUtils.Cid do
   @impl true
-  def to_string(%CryptoUtils.CID{} = cid), do: CryptoUtils.CID.encode!(cid, [])
+  def to_string(%CryptoUtils.Cid{} = cid), do: CryptoUtils.Cid.encode!(cid, [])
 end

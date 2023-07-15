@@ -1,12 +1,14 @@
 defmodule CryptoUtilsTest do
   use ExUnit.Case
+
+  import CryptoUtils
   doctest CryptoUtils
 
   alias CryptoUtils.Math, as: CMath
-  alias CryptoUtils.CID
+  alias CryptoUtils.Cid
 
-  describe "CIDs" do
-    test "CBOR and CID encoding" do
+  describe "Cids" do
+    test "CBOR and Cid encoding" do
       # From ipld-vectors.ts in atproto/common library
       cbor =
         <<167, 100, 98, 111, 111, 108, 245, 100, 110, 117, 108, 108, 246, 101, 97, 114, 114, 97,
@@ -21,14 +23,14 @@ defmodule CryptoUtilsTest do
 
       cid_str = "bafyreiclp443lavogvhj3d2ob2cxbfuscni2k5jk7bebjzg7khl3esabwq"
 
-      cid = CID.from_cbor(cbor)
+      cid = Cid.from_cbor(cbor)
       assert to_string(cid) == cid_str
 
-      decoded_cid = CID.decode!(cid_str)
+      decoded_cid = Cid.decode!(cid_str)
       assert decoded_cid == cid
     end
 
-    test "CID encoding from a PLC operation" do
+    test "Cid encoding from a PLC operation" do
       op = %{
         "type" => "plc_operation",
         "alsoKnownAs" => ["at://bob.bsky.social"],
@@ -53,8 +55,8 @@ defmodule CryptoUtilsTest do
 
       cid_str =
         op
-        |> CID.from_data()
-        |> CID.encode!(truncate: 24)
+        |> Cid.from_data()
+        |> Cid.encode!(truncate: 24)
 
       assert String.starts_with?(cid_str, "b")
       assert String.length(cid_str) == 24

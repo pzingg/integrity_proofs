@@ -1,17 +1,10 @@
 defmodule CryptoUtils do
   @moduledoc """
-  Definition of a CID, and some tricky math
-  to use in finding points on an elliptic curve.
+  Functions that do some tricky modular math for
+  use in finding points on an elliptic curve,
+  functions for parsing and formatting public and private keys,
+  and functions for decoding and encoding DIDs and CIDs.
   """
-
-  defmodule InvalidDidError do
-    defexception [:message]
-
-    @impl true
-    def exception(did) do
-      %__MODULE__{message: "Invalid DID #{did}"}
-    end
-  end
 
   defmodule InvalidPublicKeyError do
     defexception [:multibase, :reason]
@@ -19,15 +12,6 @@ defmodule CryptoUtils do
     @impl true
     def message(%{multibase: multibase, reason: reason}) do
       "Invalid public Multikey #{multibase}: #{reason}"
-    end
-  end
-
-  defmodule UnexpectedDidMethodError do
-    defexception [:message]
-
-    @impl true
-    def exception(method) do
-      %__MODULE__{message: "Unexpected DID method #{method}"}
     end
   end
 
@@ -40,13 +24,33 @@ defmodule CryptoUtils do
     end
   end
 
-  def parse_hex(s) do
+  @doc """
+  Parses an integer value from hexadecimal encoded string.
+
+  ## Examples
+
+      iex> parse_hex("f")
+      15
+
+  """
+  def parse_hex(s) when is_binary(s) do
     case Integer.parse(s, 16) do
       {i, ""} -> i
       :error -> raise "could not parse"
     end
   end
 
+  @doc """
+  Formats a big integer (< 2 ^ 256) into a nul-padded
+  32-byte bitstring.
+
+  ## Examples
+
+      iex> to_hex_32(15)
+      <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15>>
+
+  """
   def to_hex_32(i) do
     s = :binary.encode_unsigned(i)
     n_bytes = byte_size(s)
@@ -59,10 +63,28 @@ defmodule CryptoUtils do
     end
   end
 
-  def display_bytes(bin) do
+  @doc """
+  Formats bitstring into a easy to read representation
+  for debugging or assertions.
+
+  ## Examples
+
+      iex> display_bytes(<<15, 24>>)
+      "<<15, 24>>"
+
+      iex> display_bytes(<<15, 24>>, 16)
+      "<<0x0F, 0x18>>"
+
+  """
+  def display_bytes(bin, base \\ 10) do
     out =
       :binary.bin_to_list(bin)
-      |> Enum.map(&Integer.to_string(&1))
+      |> Enum.map(fn i ->
+        case base do
+          10 -> Integer.to_string(i, 10)
+          16 -> "0x" <> (Integer.to_string(i, 16) |> String.pad_leading(2, "0"))
+        end
+      end)
       |> Enum.join(", ")
 
     "<<" <> out <> ">>"

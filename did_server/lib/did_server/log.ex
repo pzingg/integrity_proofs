@@ -5,14 +5,8 @@ defmodule DidServer.Log do
 
   import Ecto.Query, warn: false
 
+  alias DidServer.{PrevMismatchError, Repo}
   alias DidServer.Log.{Did, Operation}
-  alias DidServer.Repo
-
-  alias DidServer.{
-    LateRecoveryError,
-    MisorderedOperationError,
-    PrevMismatchError
-  }
 
   @doc """
   Returns the list of dids.
@@ -74,19 +68,58 @@ defmodule DidServer.Log do
     Did.changeset(did, attrs)
   end
 
-  def health_check() do
-    from(op in Operation, limit: 1) |> Repo.all() |> is_list()
+  @doc """
+  Creates a DID operation.
+
+  On success, returns a tuple `{:ok, multi}`, where
+  `multi` is an Ecto.Multi` result (map) with `:did`, `:operation` and
+  `:most_recent` components.
+
+  ## Examples
+
+      iex> create_operation(%{field: value})
+      {:ok, %{operation: %Operation{}}}
+
+      iex> create_operation(%{field: bad_value})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def create_operation(params) do
+    {op, did} = CryptoUtils.Did.create_operation(params)
+    create_operation(did, op)
   end
 
-  def validate_and_add_op(did, proposed) do
-    ops = indexed_ops_for_did(did)
-    {%{"prev" => prev} = proposed, nullified_strs} = assure_valid_next_op(did, ops, proposed)
-    nullified? = !Enum.empty?(nullified_strs)
+  @doc """
+  Creates a DID operation from valid, normalized data, applying a DID.
 
+  On success, returns a tuple `{:ok, multi}`, where
+  `multi` is an Ecto.Multi` result (map) with `:did`, `:operation` and
+  `:most_recent` components.
+
+  ## Examples
+
+      iex> create_operation(did, %{field: value})
+      {:ok, %{operation: %Operation{}}}
+
+      iex> create_operation(did, %{field: bad_value})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def create_operation(did, proposed) when is_binary(did) and is_map(proposed) do
+    ops = indexed_ops_for_did(did)
+
+    {proposed, nullified_strs} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)
+
+    do_create_operation(did, proposed, nullified_strs)
+  end
+
+  def do_create_operation(did, %{"prev" => prev} = proposed, nullified_strs) do
     did_changeset = Did.changeset(%Did{}, %{did: did})
 
+    nullified? = !Enum.empty?(nullified_strs)
+
     op_attrs = %{
-      cid: DidServer.cid_for_op(proposed),
+      cid: CryptoUtils.Did.cid_for_op(proposed),
       did: did,
       operation: Jason.encode!(proposed),
       nullified: nullified?
@@ -210,75 +243,10 @@ defmodule DidServer.Log do
     |> Repo.one()
   end
 
-  def assure_valid_next_op(did, ops, proposed) do
-    proposed =
-      proposed
-      |> DidServer.normalize_op()
-      |> DidServer.assure_valid_op()
-
-    if Enum.empty?(ops) do
-      # special case if account creation
-      {DidServer.assure_valid_creation_op(did, proposed), []}
-    else
-      assure_valid_op_order_and_sig(ops, proposed)
-    end
-  end
-
-  defp assure_valid_op_order_and_sig(ops, %{"prev" => prev} = proposed) do
-    if is_nil(prev) do
-      raise MisorderedOperationError
-    end
-
-    index_of_prev = Enum.find_index(ops, fn %{cid: cid} -> prev == cid end)
-
-    if is_nil(index_of_prev) do
-      raise MisorderedOperationError
-    end
-
-    # if we are forking history, these are the ops still in the proposed
-    # canonical history
-    {ops_in_history, nullified} = Enum.split(ops, index_of_prev + 1)
-    last_op = List.last(ops_in_history)
-
-    if is_nil(last_op) do
-      raise MisorderedOperationError
-    end
-
-    %{"type" => last_op_type, "rotationKeys" => rotation_keys} = Jason.decode!(last_op.operation)
-
-    if last_op_type == "plc_tombstone" do
-      raise MisorderedOperationError
-    end
-
-    case nullified do
-      [] ->
-        # does not involve nullification
-        _did_key = DidServer.assure_valid_sig(rotation_keys, proposed)
-        {proposed, []}
-
-      _ ->
-        assure_valid_op_sig_when_nullified(rotation_keys, nullified, proposed)
-    end
-  end
-
-  defp assure_valid_op_sig_when_nullified(
-         rotation_keys,
-         [%{operation: op_json, inserted_at: inserted_at} | _] = nullified,
-         proposed
-       ) do
-    first_nullified = Jason.decode!(op_json)
-    disputed_signer = DidServer.assure_valid_sig(rotation_keys, first_nullified)
-    more_powerful_keys = Enum.take_while(rotation_keys, fn key -> key != disputed_signer end)
-
-    _did_key = DidServer.assure_valid_sig(more_powerful_keys, proposed)
-
-    # recovery key gets a 72hr window to do historical re-writes
-    time_lapsed = DateTime.diff(DateTime.utc_now(), inserted_at, :second)
-
-    if time_lapsed > 72 * 3600 do
-      raise LateRecoveryError, time_lapsed
-    end
-
-    {proposed, Enum.map(nullified, fn %{cid: cid} -> cid end)}
+  @doc """
+  Just a check to see if database is operational.
+  """
+  def health_check() do
+    from(op in Operation, limit: 1) |> Repo.all() |> is_list()
   end
 end
