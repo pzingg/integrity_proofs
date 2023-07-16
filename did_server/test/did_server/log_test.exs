@@ -39,24 +39,31 @@ defmodule DidServer.LogTest do
 
     test "inserts a new create operation" do
       {signing_key, _} = CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
-      {recovery_key, _} = signer = CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
+
+      {recovery_key, {algo, [priv, curve]}} =
+        CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
+
+      signer = [recovery_key, to_string(algo), priv, to_string(curve)]
 
       assert String.starts_with?(signing_key, "did:key:z7")
       assert String.starts_with?(recovery_key, "did:key:z7")
 
-      {op, did} =
-        CryptoUtils.Did.create_operation(
-          signing_key: signing_key,
-          recovery_key: recovery_key,
-          signer: signer,
-          handle: "at://bob.bsky.social",
-          service: "https://pds.example.com"
-        )
+      assert {:ok, {op, did}} =
+               CryptoUtils.Did.create_operation(
+                 signingKey: signing_key,
+                 recoveryKey: recovery_key,
+                 signer: signer,
+                 handle: "bob.bsky.social",
+                 service: "https://pds.example.com"
+               )
 
       assert "did:plc:" <> <<_id::binary-size(24)>> = did
 
-      assert {:ok, %{did: %{did: did}, operation: %Operation{did: did}, most_recent: nil}} =
+      assert {:ok,
+              %{did: %{did: did}, operation: %Operation{did: did} = created_op, most_recent: nil}} =
                DidServer.Log.create_operation(did, op)
+
+      IO.inspect(created_op)
     end
   end
 end

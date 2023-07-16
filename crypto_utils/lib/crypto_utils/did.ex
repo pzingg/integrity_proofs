@@ -4,6 +4,7 @@ defmodule CryptoUtils.Did do
   """
 
   alias CryptoUtils.Cid
+  alias CryptoUtils.PlcOperation.CreateParams
 
   defmodule EllipticCurveError do
     defexception [:message]
@@ -133,19 +134,6 @@ defmodule CryptoUtils.Did do
     "https://www.w3.org/ns/did/v1",
     "https://w3id.org/security/data-integrity/v1"
   ]
-
-  defmodule CreateOpV1 do
-    defstruct [
-      :signing_key,
-      :recovery_key,
-      :signer,
-      :handle,
-      :service,
-      :prev,
-      :sig,
-      type: "create"
-    ]
-  end
 
   @doc """
   Resolve the URL for a did:web identifier.
@@ -648,20 +636,51 @@ defmodule CryptoUtils.Did do
 
   # Operations
 
-  def normalize_op(%CreateOpV1{sig: sig} = op) do
+  @doc """
+  Creates a did:plc operation.
+
+  On success, returns a tuple `{:ok, {op, did}}`, where
+  `op` is the data for a DID operation (type "plc_operation" or
+  "plc_tombstone") and `did` is the DID key value.
+
+  ## Examples
+
+      iex> create_operation(%{field: value})
+      {:ok, {%{"type" => "plc_operation"}, "did:plc:012345"}
+
+      iex> create_operation(%{field: bad_value})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def create_operation(params) do
+    case CryptoUtils.PlcOperation.parse(params) do
+      {:ok, {%CreateParams{did: did} = op, signer}} ->
+        IO.inspect(params, label: :params)
+        IO.inspect(signer, label: :signer)
+
+        op = op |> normalize_op() |> add_signature(signer)
+
+        did =
+          if is_nil(did) do
+            did_for_create_op(op)
+          else
+            did
+          end
+
+        {:ok, {op, did}}
+
+      error ->
+        error
+    end
+  end
+
+  def normalize_op(%CreateParams{sig: sig} = op) do
     normalized_op = %{
-      "type" => "plc_operation",
-      "verificationMethods" => %{
-        "atproto" => op.signing_key
-      },
-      "rotationKeys" => [op.recovery_key, op.signing_key],
-      "alsoKnownAs" => [ensure_atproto_prefix(op.handle)],
-      "services" => %{
-        "atproto_pds" => %{
-          "type" => "AtprotoPersonalDataServer",
-          "endpoint" => ensure_http_prefix(op.service)
-        }
-      },
+      "type" => op.type,
+      "verificationMethods" => op.verification_methods,
+      "rotationKeys" => op.rotation_keys,
+      "alsoKnownAs" => op.also_known_as,
+      "services" => op.services,
       "prev" => op.prev
     }
 
@@ -673,14 +692,6 @@ defmodule CryptoUtils.Did do
   end
 
   def normalize_op(%{"type" => _type} = op), do: op
-
-  def create_operation(params) do
-    %CreateOpV1{signer: signer} = op = struct(CreateOpV1, params)
-
-    op = op |> normalize_op() |> add_signature(signer)
-    did = did_for_create_op(op)
-    {op, did}
-  end
 
   def assure_valid_next_op(did, ops, proposed)
       when is_binary(did) and is_list(ops) and is_map(proposed) do
@@ -707,6 +718,10 @@ defmodule CryptoUtils.Did do
     "did:plc:#{truncated_id}"
   end
 
+  def did_for_create_op(_) do
+    raise MisorderedOperationError
+  end
+
   def cid_for_op(op) do
     op
     |> Cid.from_data()
@@ -715,9 +730,10 @@ defmodule CryptoUtils.Did do
 
   # Signatures
 
-  def add_signature(op, {_, signing_key}) do
+  def add_signature(op, [_pub, algorithm, priv, curve] = _signer) do
     # {:ecdsa, [<<binary-size(32)>>, :secp256k1]}
-    {algorithm, [priv, curve]} = signing_key
+    algorithm = String.to_existing_atom(algorithm)
+    curve = String.to_existing_atom(curve)
 
     cbor = CBOR.encode(op)
     signature = :crypto.sign(algorithm, :sha256, cbor, [priv, curve], [])
@@ -733,25 +749,6 @@ defmodule CryptoUtils.Did do
   end
 
   # Private functions
-
-  defp ensure_http_prefix(str) do
-    if String.starts_with?(str, "http://") || String.starts_with?(str, "https://") do
-      str
-    else
-      "https://" <> str
-    end
-  end
-
-  defp ensure_atproto_prefix(str) do
-    if String.starts_with?(str, "at://") do
-      str
-    else
-      "at://" <>
-        (str
-         |> String.replace_leading("http://", "")
-         |> String.replace_leading("https://", ""))
-    end
-  end
 
   defp assure_valid_op_order_and_sig(ops, %{"prev" => prev} = proposed) do
     if is_nil(prev) do

@@ -30,7 +30,7 @@ defmodule DidServerWeb.Router do
     # get "/:did/log/audit", PlcController, :show_operation_log
     # get "/:did/log", PlcController, :show_most_recent
     get("/:did", PlcController, :show)
-    # post "/:did", PlcController, :update
+    post "/:did", PlcController, :new
 
     get("/", PlcController, :info)
   end

@@ -39,4 +39,22 @@ defmodule DidServerWeb.PlcController do
         |> render("404.json")
     end
   end
+
+  def new(conn, %{"did" => did} = params) do
+    with {:ok, {_op, ^did}} <- DidServer.Log.create_operation(params) do
+      render(:new, did: did)
+    else
+      {:error, %Ecto.Changeset{errors: [{field, {message, _keys}} | _]}} ->
+        conn
+        |> put_status(400)
+        |> put_view(ErrorJSON)
+        |> render("400.json", details: "#{field} #{message}")
+
+      {:error, reason} ->
+        conn
+        |> put_status(400)
+        |> put_view(ErrorJSON)
+        |> render("400.json", details: reason)
+    end
+  end
 end

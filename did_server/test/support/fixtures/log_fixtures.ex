@@ -15,4 +15,15 @@ defmodule DidServer.LogFixtures do
 
     did
   end
+
+  @operation_attrs %{}
+
+  def operation_fixture(attrs \\ @operation_attrs) do
+    {:ok, %{operation: op}} =
+      attrs
+      |> Enum.into(%{})
+      |> DidServer.Log.create_operation()
+
+    op
+  end
 end

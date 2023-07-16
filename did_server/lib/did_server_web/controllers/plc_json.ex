@@ -7,6 +7,10 @@ defmodule DidServerWeb.PlcJSON do
     %{data: doc}
   end
 
+  def new(%{did: did}) do
+    %{data: %{did: did, created: true}}
+  end
+
   def health(%{version: version} = params) do
     error = Map.get(params, :error)
 

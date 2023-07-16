@@ -69,7 +69,7 @@ defmodule DidServer.Log do
   end
 
   @doc """
-  Creates a DID operation.
+  Creates a did:plc operation.
 
   On success, returns a tuple `{:ok, multi}`, where
   `multi` is an Ecto.Multi` result (map) with `:did`, `:operation` and
@@ -85,8 +85,13 @@ defmodule DidServer.Log do
 
   """
   def create_operation(params) do
-    {op, did} = CryptoUtils.Did.create_operation(params)
-    create_operation(did, op)
+    case CryptoUtils.Did.create_operation(params) do
+      {:ok, {op, did}} ->
+        create_operation(did, op)
+
+      error ->
+        error
+    end
   end
 
   @doc """
