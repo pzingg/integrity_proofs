@@ -170,7 +170,7 @@ defmodule DidServer.Log do
            ) do
       create_operation(did, op)
     else
-      {:data, _} -> {:error, "no data in operation"}
+      {:data, _} -> {:error, "no data in last operation"}
       {:error, reason} -> {:error, reason}
     end
   end

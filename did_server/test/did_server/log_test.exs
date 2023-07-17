@@ -95,5 +95,30 @@ defmodule DidServer.LogTest do
       updated_op_data = Operation.to_data(updated_op)
       assert Map.get(updated_op_data, "alsoKnownAs") == ["at://alice.bsky.social"]
     end
+
+    test "tombstones a DID" do
+      create_params = %{
+        # type: "create",
+        signingKey: @signing_key,
+        recoveryKey: @recovery_key,
+        signer: @signer,
+        handle: "bob.bsky.social",
+        service: "https://pds.example.com"
+      }
+
+      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+
+      created_op_data = Operation.to_data(created_op)
+      assert Map.get(created_op_data, "alsoKnownAs") == ["at://bob.bsky.social"]
+
+      tombstone_params = %{
+        type: "plc_tombstone",
+        did: @genesis_did,
+        signer: @signer
+      }
+
+      assert {:ok, %{operation: tombstone}} = DidServer.Log.update_operation(tombstone_params)
+      assert Operation.tombstone?(tombstone)
+    end
   end
 end

@@ -695,6 +695,10 @@ defmodule CryptoUtils.Did do
     end
   end
 
+  def apply_updates(%{"prev" => prev}, %{type: "plc_tombstone"}) do
+    %{"type" => "plc_tombstone", "prev" => prev}
+  end
+
   def apply_updates(normalized, update) do
     updates =
       if !is_nil(update.signingKey) do
