@@ -143,7 +143,7 @@ defmodule DidServer.Log do
 
     {proposed, nullified_strs} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)
 
-    do_create_operation(did, proposed, nullified_strs)
+    multi_insert_operation(did, proposed, nullified_strs)
   end
 
   @doc """
@@ -161,89 +161,17 @@ defmodule DidServer.Log do
   def update_operation(params) do
     did = Map.get(params, :did) || Map.get(params, "did")
 
-    with {:ok, last_op} <- ensure_last_op(did),
-         op_data <- Operation.to_data(last_op),
-         {:ok, {op, _did}} <- CryptoUtils.Did.update_operation(op_data, params) do
+    with {:ok, %{did: did, cid: cid} = last_op} <- ensure_last_op(did),
+         {:data, data} when is_map(data) <- {:data, Operation.to_data(last_op)},
+         {:ok, {op, _did}} <-
+           CryptoUtils.Did.update_operation(
+             %{did: did, cid: cid, operation: data},
+             params
+           ) do
       create_operation(did, op)
-    end
-  end
-
-  defp do_create_operation(did, %{"prev" => prev} = proposed, nullified_strs) do
-    did_changeset = Did.changeset(%Did{}, %{did: did})
-
-    nullified? = !Enum.empty?(nullified_strs)
-
-    op_attrs = %{
-      cid: CryptoUtils.Did.cid_for_op(proposed),
-      did: did,
-      operation: Jason.encode!(proposed),
-      nullified: nullified?
-    }
-
-    op_changeset = Operation.changeset(%Operation{}, op_attrs)
-
-    multi =
-      Ecto.Multi.new()
-      # grab a row lock on did table
-      |> Ecto.Multi.insert(:did, did_changeset, returning: true)
-      |> Ecto.Multi.insert(:operation, op_changeset, returning: true)
-
-    multi =
-      if nullified? do
-        Ecto.Multi.update_all(
-          multi,
-          :nullified,
-          fn _multi -> nullify(did, nullified_strs) end,
-          []
-        )
-      else
-        multi
-      end
-
-    multi
-    |> Ecto.Multi.run(:most_recent, fn _repo, _multi -> verify_most_recent(did, prev) end)
-    |> Repo.transaction()
-  end
-
-  def nullify(did, nullified_strs) do
-    from(op in Operation,
-      where: op.did == ^did,
-      where: op.cid in ^nullified_strs,
-      update: [set: [nullified: true]]
-    )
-  end
-
-  def verify_most_recent(did, prev) do
-    most_recent =
-      from(op in Operation,
-        where: op.did == ^did,
-        where: op.nullified == false,
-        order_by: [desc: :inserted_at],
-        limit: 2
-      )
-      |> Repo.all()
-
-    case most_recent do
-      [_last | [%{cid: next_to_last_cid} | _]] ->
-        cond do
-          is_nil(prev) ->
-            raise PrevMismatchError,
-                  "Proposed has no prev, but there is a most recent operation #{next_to_last_cid}"
-
-          prev != next_to_last_cid ->
-            raise PrevMismatchError,
-                  "Proposed prev does not match the most recent operation #{next_to_last_cid}"
-
-          true ->
-            {:ok, next_to_last_cid}
-        end
-
-      _ ->
-        if is_nil(prev) do
-          {:ok, nil}
-        else
-          raise PrevMismatchError, "Proposed has prev, but there is no most recent operation"
-        end
+    else
+      {:data, _} -> {:error, "no data in operation"}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -291,5 +219,92 @@ defmodule DidServer.Log do
   """
   def health_check() do
     from(op in Operation, limit: 1) |> Repo.all() |> is_list()
+  end
+
+  # Private functions
+
+  defp multi_insert_operation(did, %{"prev" => prev} = proposed, nullified_strs) do
+    did_changeset = Did.changeset(%Did{}, %{did: did})
+
+    did_insert_opts =
+      if is_nil(prev) do
+        [returning: true]
+      else
+        [on_conflict: :nothing, returning: true]
+      end
+
+    nullified? = !Enum.empty?(nullified_strs)
+
+    op_attrs = %{
+      cid: CryptoUtils.Did.cid_for_op(proposed),
+      did: did,
+      operation: Jason.encode!(proposed),
+      nullified: nullified?
+    }
+
+    op_changeset = Operation.changeset(%Operation{}, op_attrs)
+
+    multi =
+      Ecto.Multi.new()
+      |> Ecto.Multi.insert(:did, did_changeset, did_insert_opts)
+      |> Ecto.Multi.insert(:operation, op_changeset, returning: true)
+
+    multi =
+      if nullified? do
+        Ecto.Multi.update_all(
+          multi,
+          :nullified,
+          fn _multi -> nullify(did, nullified_strs) end,
+          []
+        )
+      else
+        multi
+      end
+
+    multi
+    |> Ecto.Multi.run(:most_recent, fn _repo, _multi -> verify_most_recent(did, prev) end)
+    |> Repo.transaction()
+  end
+
+  defp nullify(did, nullified_strs) do
+    from(op in Operation,
+      where: op.did == ^did,
+      where: op.cid in ^nullified_strs,
+      update: [set: [nullified: true]]
+    )
+  end
+
+  defp verify_most_recent(did, prev) do
+    most_recent =
+      from(op in Operation,
+        where: op.did == ^did,
+        where: op.nullified == false,
+        order_by: [desc: :inserted_at],
+        limit: 2
+      )
+      |> Repo.all()
+
+    case most_recent do
+      [_last | [%{cid: next_to_last_cid} | _]] ->
+        cond do
+          is_nil(prev) ->
+            raise PrevMismatchError,
+                  "Proposed has no prev, but there is a most recent operation #{next_to_last_cid}"
+
+          prev != next_to_last_cid ->
+            raise PrevMismatchError,
+                  "Proposed prev does not match the most recent operation #{next_to_last_cid}"
+
+          true ->
+            {:ok, next_to_last_cid}
+        end
+
+      _ ->
+        if is_nil(prev) do
+          {:ok, nil}
+        else
+          raise PrevMismatchError, "Proposed has prev, but there is no most recent operation"
+        end
+    end
   end
 end

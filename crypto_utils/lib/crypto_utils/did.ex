@@ -61,11 +61,11 @@ defmodule CryptoUtils.Did do
   end
 
   defmodule MisorderedOperationError do
-    defexception []
+    defexception [:message]
 
     @impl true
-    def message(_) do
-      "misordered plc operation"
+    def exception(reason) do
+      %__MODULE__{message: "misordered plc operation: #{reason}"}
     end
   end
 
@@ -672,19 +672,30 @@ defmodule CryptoUtils.Did do
     end
   end
 
-  def update_operation(%{"type" => _type} = last_op, params) do
+  def update_operation(
+        %{did: prev_did, cid: prev, operation: %{"type" => _type} = last_op},
+        params
+      )
+      when is_binary(prev_did) and is_binary(prev) do
     with {:ok, %UpdateOperation{did: did, signer: signer} = update} <-
            UpdateOperation.parse(params) do
-      prev = cid_for_op(last_op)
-
       # Omit sig so it doesn't accidentally make its way into the next operation
-      {sig, unsigned_op} = normalize_op(last_op) |> Map.pop("sig")
-      update_op = do_update(unsigned_op, update) |> add_signature(signer) |> Map.put("prev", prev)
+      {_old_sig, unsigned_op} =
+        last_op
+        |> normalize_op()
+        |> Map.put("prev", prev)
+        |> Map.pop("sig")
+
+      update_op =
+        unsigned_op
+        |> apply_updates(update)
+        |> add_signature(signer)
+
       {:ok, {update_op, did}}
     end
   end
 
-  def do_update(normalized, update) do
+  def apply_updates(normalized, update) do
     updates =
       if !is_nil(update.signingKey) do
         verification_methods =
@@ -794,7 +805,7 @@ defmodule CryptoUtils.Did do
   end
 
   def did_for_create_op(_) do
-    raise MisorderedOperationError
+    raise MisorderedOperationError, "not a genesis operation"
   end
 
   def cid_for_op(op) do
@@ -805,10 +816,17 @@ defmodule CryptoUtils.Did do
 
   # Signatures
 
-  def add_signature(op, [_pub, algorithm, priv, curve] = _signer) do
+  def add_signature(%{"type" => type} = op, [_pub, algorithm, priv, curve] = _signer) do
     # {:ecdsa, [<<binary-size(32)>>, :secp256k1]}
     algorithm = String.to_existing_atom(algorithm)
     curve = String.to_existing_atom(curve)
+
+    op =
+      if type == "plc_tombstone" do
+        Map.take(op, ["type", "prev"])
+      else
+        Map.delete(op, "sig")
+      end
 
     cbor = CBOR.encode(op)
     signature = :crypto.sign(algorithm, :sha256, cbor, [priv, curve], [])
@@ -827,13 +845,13 @@ defmodule CryptoUtils.Did do
 
   defp assure_valid_op_order_and_sig(ops, %{"prev" => prev} = proposed) do
     if is_nil(prev) do
-      raise MisorderedOperationError
+      raise MisorderedOperationError, "no prev CID in operation"
     end
 
     index_of_prev = Enum.find_index(ops, fn %{cid: cid} -> prev == cid end)
 
     if is_nil(index_of_prev) do
-      raise MisorderedOperationError
+      raise MisorderedOperationError, "prev CID #{prev} not found"
     end
 
     # if we are forking history, these are the ops still in the proposed
@@ -842,13 +860,13 @@ defmodule CryptoUtils.Did do
     last_op = List.last(ops_in_history)
 
     if is_nil(last_op) do
-      raise MisorderedOperationError
+      raise MisorderedOperationError, "no prev operation at #{index_of_prev}"
     end
 
     %{"type" => last_op_type, "rotationKeys" => rotation_keys} = Jason.decode!(last_op.operation)
 
     if last_op_type == "plc_tombstone" do
-      raise MisorderedOperationError
+      raise MisorderedOperationError, "prev operation cannot be a tombstone"
     end
 
     case nullified do
@@ -884,7 +902,7 @@ defmodule CryptoUtils.Did do
   end
 
   defp assure_valid_create_op(_did, %{"type" => "plc_tombstone"}) do
-    raise MisorderedOperationError
+    raise MisorderedOperationError, "genesis operation cannot be a tombstone"
   end
 
   defp assure_valid_create_op(did, %{"rotationKeys" => rotation_keys, "prev" => prev} = op) do

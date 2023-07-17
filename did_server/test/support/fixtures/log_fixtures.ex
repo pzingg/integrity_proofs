@@ -39,6 +39,7 @@ defmodule DidServer.LogFixtures do
       attrs
       |> Enum.into(%{})
       |> DidServer.Log.create_operation()
+
     op
   end
 end

@@ -79,9 +79,10 @@ defmodule DidServer.LogTest do
         service: "https://pds.example.com"
       }
 
-      assert {:ok, %{operation: op}} = DidServer.Log.create_operation(create_params)
-      op_data = Operation.to_data(op)
-      IO.inspect(op_data, label: :created)
+      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+
+      created_op_data = Operation.to_data(created_op)
+      assert Map.get(created_op_data, "alsoKnownAs") == ["at://bob.bsky.social"]
 
       update_params = %{
         did: @genesis_did,
@@ -89,12 +90,10 @@ defmodule DidServer.LogTest do
         handle: "alice.bsky.social"
       }
 
-      assert {:ok, %{operation: %Operation{} = op}} =
-               DidServer.Log.update_operation(update_params)
+      assert {:ok, %{operation: updated_op}} = DidServer.Log.update_operation(update_params)
 
-      op_data = Operation.to_data(op)
-      IO.inspect(op_data, label: :updated)
-      assert Map.get(op_data, "alsoKnownAs") == []
+      updated_op_data = Operation.to_data(updated_op)
+      assert Map.get(updated_op_data, "alsoKnownAs") == ["at://alice.bsky.social"]
     end
   end
 end
