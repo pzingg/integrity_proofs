@@ -696,19 +696,6 @@ defmodule Integrity do
 
   def http_uri?(_), do: false
 
-  @doc """
-  Used for debugging. Displays a raw binary as a list of integer
-  byte values, comma-separated, and enclosed in "<<" ">>".
-  """
-  def display_bytes(bin) do
-    out =
-      :binary.bin_to_list(bin)
-      |> Enum.map(&Integer.to_string(&1))
-      |> Enum.join(", ")
-
-    "<<" <> out <> ">>"
-  end
-
   defp dereference_controller_document!(_controller_document_url, options) do
     built_in = Keyword.get(options, :cached_controller_document)
     built_in

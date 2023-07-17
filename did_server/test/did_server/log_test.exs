@@ -37,33 +37,64 @@ defmodule DidServer.LogTest do
   describe "operations" do
     alias DidServer.Log.Operation
 
+    import DidServer.LogFixtures
+
+    test "list_operations/0 returns all operations" do
+      %Operation{did: did} = op = operation_fixture()
+      assert Log.list_operations(did) == [op]
+    end
+
+    @signing_key "did:key:z7r8op7JkEfuM8hD4ZhppR7uS1Nq43pgMuP8q8Un4GvVJSraf1bcToVQav3eY8w9ZoQuibf1aLb9PwPBbHFBanqKVCQNf"
+    @recovery_key "did:key:z7r8or2MBTgMnfgSjS2VDou7sLbwWv37Sc3rRyJ7kmjVHzrTfcb7obqjNiV2oJvShFFi4jRD2s8itELsvig6ATvbDjsdK"
+    @signer [
+      @recovery_key,
+      "ecdsa",
+      <<253, 249, 135, 239, 146, 2, 35, 75, 76, 166, 15, 121, 230, 110, 238, 184, 210, 95, 61, 38,
+        149, 69, 224, 54, 14, 165, 233, 4, 56, 117, 164, 104>>,
+      "secp256k1"
+    ]
+    @genesis_did "did:plc:kb6whcb3dlbajvkhmnabaqmy"
+
     test "inserts a new create operation" do
-      {signing_key, _} = CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
+      params = %{
+        # type: "create",
+        signingKey: @signing_key,
+        recoveryKey: @recovery_key,
+        signer: @signer,
+        handle: "bob.bsky.social",
+        service: "https://pds.example.com"
+      }
 
-      {recovery_key, {algo, [priv, curve]}} =
-        CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
+      assert {:ok, %{operation: %Operation{did: did}}} = DidServer.Log.create_operation(params)
+      assert did == @genesis_did
+    end
 
-      signer = [recovery_key, to_string(algo), priv, to_string(curve)]
+    test "updates an operation with a new handle" do
+      create_params = %{
+        # type: "create",
+        signingKey: @signing_key,
+        recoveryKey: @recovery_key,
+        signer: @signer,
+        handle: "bob.bsky.social",
+        service: "https://pds.example.com"
+      }
 
-      assert String.starts_with?(signing_key, "did:key:z7")
-      assert String.starts_with?(recovery_key, "did:key:z7")
+      assert {:ok, %{operation: op}} = DidServer.Log.create_operation(create_params)
+      op_data = Operation.to_data(op)
+      IO.inspect(op_data, label: :created)
 
-      assert {:ok, {op, did}} =
-               CryptoUtils.Did.create_operation(
-                 signingKey: signing_key,
-                 recoveryKey: recovery_key,
-                 signer: signer,
-                 handle: "bob.bsky.social",
-                 service: "https://pds.example.com"
-               )
+      update_params = %{
+        did: @genesis_did,
+        signer: @signer,
+        handle: "alice.bsky.social"
+      }
 
-      assert "did:plc:" <> <<_id::binary-size(24)>> = did
+      assert {:ok, %{operation: %Operation{} = op}} =
+               DidServer.Log.update_operation(update_params)
 
-      assert {:ok,
-              %{did: %{did: did}, operation: %Operation{did: did} = created_op, most_recent: nil}} =
-               DidServer.Log.create_operation(did, op)
-
-      IO.inspect(created_op)
+      op_data = Operation.to_data(op)
+      IO.inspect(op_data, label: :updated)
+      assert Map.get(op_data, "alsoKnownAs") == []
     end
   end
 end

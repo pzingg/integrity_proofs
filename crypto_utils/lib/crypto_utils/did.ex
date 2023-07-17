@@ -4,7 +4,7 @@ defmodule CryptoUtils.Did do
   """
 
   alias CryptoUtils.Cid
-  alias CryptoUtils.PlcOperation.CreateParams
+  alias CryptoUtils.Plc.{CreateOperation, CreateParams, UpdateOperation}
 
   defmodule EllipticCurveError do
     defexception [:message]
@@ -653,17 +653,15 @@ defmodule CryptoUtils.Did do
 
   """
   def create_operation(params) do
-    case CryptoUtils.PlcOperation.parse(params) do
+    case CreateOperation.parse(params) do
       {:ok, {%CreateParams{did: did} = op, signer}} ->
-        IO.inspect(params, label: :params)
-        IO.inspect(signer, label: :signer)
-
         op = op |> normalize_op() |> add_signature(signer)
 
         did =
           if is_nil(did) do
             did_for_create_op(op)
           else
+            IO.puts("applying did #{did}")
             did
           end
 
@@ -674,9 +672,86 @@ defmodule CryptoUtils.Did do
     end
   end
 
-  def normalize_op(%CreateParams{sig: sig} = op) do
+  def update_operation(%{"type" => _type} = last_op, params) do
+    with {:ok, %UpdateOperation{did: did, signer: signer} = update} <-
+           UpdateOperation.parse(params) do
+      prev = cid_for_op(last_op)
+
+      # Omit sig so it doesn't accidentally make its way into the next operation
+      {sig, unsigned_op} = normalize_op(last_op) |> Map.pop("sig")
+      update_op = do_update(unsigned_op, update) |> add_signature(signer) |> Map.put("prev", prev)
+      {:ok, {update_op, did}}
+    end
+  end
+
+  def do_update(normalized, update) do
+    updates =
+      if !is_nil(update.signingKey) do
+        verification_methods =
+          Map.get(normalized, "verificationMethods", %{})
+          |> Map.merge(%{"atproto" => update.signingKey})
+
+        %{"verificationMethods" => verification_methods}
+      else
+        %{}
+      end
+
+    updates =
+      if !is_nil(update.handle) do
+        formatted = CryptoUtils.ensure_atproto_prefix(update.handle)
+
+        {also_known_as, inserted} =
+          Map.get(normalized, "alsoKnownAs", [])
+          |> Enum.reduce({[], false}, fn handle, {acc, found} ->
+            if String.starts_with?(handle, "at://") do
+              {[formatted | acc], true}
+            else
+              {[handle | acc], found}
+            end
+          end)
+
+        also_known_as =
+          if inserted do
+            Enum.reverse(also_known_as)
+          else
+            [formatted | Enum.reverse(also_known_as)]
+          end
+
+        Map.put(updates, "alsoKnownAs", also_known_as)
+      else
+        updates
+      end
+
+    updates =
+      if !is_nil(update.pds) do
+        formatted = CryptoUtils.ensure_http_prefix(update.pds)
+
+        services =
+          Map.get(normalized, "services", %{})
+          |> Map.merge(%{"type" => "AtprotoPersonalDataServer", "endpoint" => formatted})
+
+        Map.put(updates, "services", services)
+      else
+        updates
+      end
+
+    updates =
+      if !is_nil(update.rotationKeys) do
+        Map.put(updates, "rotationKeys", update.rotationKeys)
+      else
+        updates
+      end
+
+    if map_size(updates) == 0 do
+      normalized
+    else
+      Map.merge(normalized, updates)
+    end
+  end
+
+  def normalize_op(%CreateParams{type: type, sig: sig} = op) when is_binary(type) do
     normalized_op = %{
-      "type" => op.type,
+      "type" => type,
       "verificationMethods" => op.verification_methods,
       "rotationKeys" => op.rotation_keys,
       "alsoKnownAs" => op.also_known_as,
@@ -702,14 +777,14 @@ defmodule CryptoUtils.Did do
 
     if Enum.empty?(ops) do
       # special case if account creation
-      {assure_valid_creation_op(did, proposed), []}
+      {assure_valid_create_op(did, proposed), []}
     else
       assure_valid_op_order_and_sig(ops, proposed)
     end
   end
 
   def did_for_create_op(%{"prev" => nil} = op) do
-    cbor = CBOR.encode(op)
+    cbor = Map.delete(op, "sig") |> CBOR.encode()
     hash_of_genesis = :crypto.hash(:sha256, cbor)
 
     truncated_id =
@@ -808,11 +883,11 @@ defmodule CryptoUtils.Did do
     {proposed, Enum.map(nullified, fn %{cid: cid} -> cid end)}
   end
 
-  defp assure_valid_creation_op(_did, %{"type" => "plc_tombstone"}) do
+  defp assure_valid_create_op(_did, %{"type" => "plc_tombstone"}) do
     raise MisorderedOperationError
   end
 
-  defp assure_valid_creation_op(did, %{"rotationKeys" => rotation_keys, "prev" => prev} = op) do
+  defp assure_valid_create_op(did, %{"rotationKeys" => rotation_keys, "prev" => prev} = op) do
     if !is_nil(prev) do
       raise ImproperOperationError, op: op, message: "expected null prev on create"
     end
@@ -850,14 +925,6 @@ defmodule CryptoUtils.Did do
     assure_rotation_keys(op, rotation_keys)
   end
 
-  defp assure_rotation_keys(op, rotation_keys) do
-    if Enum.empty?(rotation_keys) do
-      raise ImproperOperationError, op: op, message: "need at least one rotation key"
-    end
-
-    op
-  end
-
   defp assure_valid_sig(allowed_did_keys, %{"sig" => sig} = op) when is_binary(sig) do
     _ = assure_rotation_keys(op, allowed_did_keys)
 
@@ -881,4 +948,10 @@ defmodule CryptoUtils.Did do
   defp assure_valid_sig(_allowed_did_keys, op) do
     raise MissingSignatureError, op
   end
+
+  defp assure_rotation_keys(op, []) do
+    raise ImproperOperationError, op: op, message: "need at least one rotation key"
+  end
+
+  defp assure_rotation_keys(op, _), do: op
 end

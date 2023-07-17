@@ -10,16 +10,19 @@
 # We recommend using the bang functions (`insert!`, `update!`
 # and so on) as they will fail if something goes wrong.
 
-{signing_key, _} = CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
-{recovery_key, _} = signer = CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
+if false do
+  {signing_key, _} = CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
+  {recovery_key, {algo, [priv, curve]}} = CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
 
-{op, did} =
-  DidServer.create_op(
-    signing_key: signing_key,
-    recovery_key: recovery_key,
-    signer: signer,
-    handle: "at://bob.bsky.social",
-    service: "https://pds.example.com"
-  )
+  signer = [recovery_key, to_string(algo), priv, to_string(curve)]
 
-{:ok, _} = CryptoUtils.create_operation(did, op)
+  {:ok, _} =
+    DidServer.Log.create_operation(
+      # type: "create",
+      signingKey: signing_key,
+      recoveryKey: recovery_key,
+      signer: signer,
+      handle: "at://bob.bsky.social",
+      service: "https://pds.example.com"
+    )
+end

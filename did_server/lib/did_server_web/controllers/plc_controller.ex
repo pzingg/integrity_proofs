@@ -23,7 +23,7 @@ defmodule DidServerWeb.PlcController do
   end
 
   def show(conn, %{"did" => did}) do
-    with %Operation{} = last <- DidServer.Log.last_op_for_did(did) do
+    with %Operation{} = last <- DidServer.Log.get_last_op(did) do
       doc =
         DidServer.Log.Operation.to_data(last, did)
         |> CryptoUtils.Did.format_did_plc_document()

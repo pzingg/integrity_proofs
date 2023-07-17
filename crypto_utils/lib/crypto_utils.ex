@@ -89,4 +89,23 @@ defmodule CryptoUtils do
 
     "<<" <> out <> ">>"
   end
+
+  def ensure_http_prefix(str) do
+    if String.starts_with?(str, "http://") || String.starts_with?(str, "https://") do
+      str
+    else
+      "https://" <> str
+    end
+  end
+
+  def ensure_atproto_prefix(str) do
+    if String.starts_with?(str, "at://") do
+      str
+    else
+      "at://" <>
+        (str
+         |> String.replace_leading("http://", "")
+         |> String.replace_leading("https://", ""))
+    end
+  end
 end

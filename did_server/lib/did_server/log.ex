@@ -69,6 +69,34 @@ defmodule DidServer.Log do
   end
 
   @doc """
+  Returns the list of did:plc operations for a given DID.
+
+  ## Examples
+
+      iex> list_operations("did:plc:0123456")
+      [%Operation{}, ...]
+
+  """
+  def list_operations(did, include_nullified \\ false)
+
+  def list_operations(did, false) do
+    from(op in Operation,
+      where: op.did == ^did,
+      where: op.nullified == false,
+      order_by: [:inserted_at]
+    )
+    |> Repo.all()
+  end
+
+  def list_operations(did, true) do
+    from(op in Operation,
+      where: op.did == ^did,
+      order_by: [:inserted_at]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   Creates a did:plc operation.
 
   On success, returns a tuple `{:ok, multi}`, where
@@ -86,7 +114,7 @@ defmodule DidServer.Log do
   """
   def create_operation(params) do
     case CryptoUtils.Did.create_operation(params) do
-      {:ok, {op, did}} ->
+      {:ok, {%{"sig" => sig} = op, did}} ->
         create_operation(did, op)
 
       error ->
@@ -111,14 +139,36 @@ defmodule DidServer.Log do
 
   """
   def create_operation(did, proposed) when is_binary(did) and is_map(proposed) do
-    ops = indexed_ops_for_did(did)
+    ops = list_operations(did)
 
     {proposed, nullified_strs} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)
 
     do_create_operation(did, proposed, nullified_strs)
   end
 
-  def do_create_operation(did, %{"prev" => prev} = proposed, nullified_strs) do
+  @doc """
+  Adds an operation to a DID.
+
+  ## Examples
+
+      iex> update_operation(%{field: value})
+      {:ok, %{operation: %Operation{}}}
+
+      iex> update_operation(%{field: bad_value})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def update_operation(params) do
+    did = Map.get(params, :did) || Map.get(params, "did")
+
+    with {:ok, last_op} <- ensure_last_op(did),
+         op_data <- Operation.to_data(last_op),
+         {:ok, {op, _did}} <- CryptoUtils.Did.update_operation(op_data, params) do
+      create_operation(did, op)
+    end
+  end
+
+  defp do_create_operation(did, %{"prev" => prev} = proposed, nullified_strs) do
     did_changeset = Did.changeset(%Did{}, %{did: did})
 
     nullified? = !Enum.empty?(nullified_strs)
@@ -214,32 +264,7 @@ defmodule DidServer.Log do
     end
   end
 
-  def ops_for_did(did) do
-    did
-    |> indexed_ops_for_did()
-    |> Enum.map(fn %{operation: operation} -> operation end)
-  end
-
-  def indexed_ops_for_did(did, include_nullified \\ false)
-
-  def indexed_ops_for_did(did, false) do
-    from(op in Operation,
-      where: op.did == ^did,
-      where: op.nullified == false,
-      order_by: [:inserted_at]
-    )
-    |> Repo.all()
-  end
-
-  def indexed_ops_for_did(did, true) do
-    from(op in Operation,
-      where: op.did == ^did,
-      order_by: [:inserted_at]
-    )
-    |> Repo.all()
-  end
-
-  def last_op_for_did(did) do
+  def get_last_op(did) do
     from(op in Operation,
       where: op.did == ^did,
       where: op.nullified == false,
@@ -247,6 +272,19 @@ defmodule DidServer.Log do
     )
     |> Repo.one()
   end
+
+  def ensure_last_op(did) when is_binary(did) do
+    with {:last_op, %Operation{} = op} <- {:last_op, get_last_op(did)},
+         {:tombstone, false} <- {:tombstone, Operation.tombstone?(op)} do
+      {:ok, op}
+    else
+      {:tombstone, _} -> {:error, "cannot update tombstone #{did}"}
+      {:last_op, _} -> {:error, "no operations with did #{did}"}
+      error -> error
+    end
+  end
+
+  def ensure_last_op(_), do: {:error, "did cannot be blank"}
 
   @doc """
   Just a check to see if database is operational.
