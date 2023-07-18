@@ -50,7 +50,7 @@ defmodule CryptoUtilsTest do
       did = CryptoUtils.Did.did_for_create_op(@sample_op)
       assert String.starts_with?(did, "did:plc:")
       assert String.length(did) == 32
-      assert did == "did:plc:ftvtscdg6ao3sz2drexmu4c7"
+      assert did == "did:plc:pdjoiulhevmc3k3luwomyraz"
     end
   end
 

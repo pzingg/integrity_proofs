@@ -76,10 +76,18 @@ defmodule CryptoUtils do
       "<<0x0F, 0x18>>"
 
   """
-  def display_bytes(bin, base \\ 10) do
+  def display_bytes(bin, base \\ 10, start \\ 0, length \\ 0) do
+    bytes = :binary.bin_to_list(bin)
+
+    bytes =
+      if length > 0 do
+        Enum.slice(bytes, start, length)
+      else
+        bytes
+      end
+
     out =
-      :binary.bin_to_list(bin)
-      |> Enum.map(fn i ->
+      Enum.map(bytes, fn i ->
         case base do
           10 -> Integer.to_string(i, 10)
           16 -> "0x" <> (Integer.to_string(i, 16) |> String.pad_leading(2, "0"))

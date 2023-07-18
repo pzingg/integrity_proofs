@@ -40,7 +40,7 @@ defmodule CryptoUtils.Plc.CreateOperation do
                 prev: op.prev,
                 sig: op.sig,
                 verification_methods: %{"atproto" => op.signingKey},
-                rotation_keys: [op.recoveryKey, op.signingKey],
+                rotation_keys: [op.recoveryKey],
                 also_known_as: [CryptoUtils.ensure_atproto_prefix(op.handle)],
                 services: %{
                   "atproto_pds" => %{

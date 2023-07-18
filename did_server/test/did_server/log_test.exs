@@ -58,7 +58,7 @@ defmodule DidServer.LogTest do
       }
 
       assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(params)
-      assert created_op.did == "did:plc:tuoulvfey6235ijox23kr6zj"
+      assert created_op.did == "did:plc:dwzaeljhfaoefhde3xthkcio"
       assert %{"type" => "plc_operation"} = DidServer.Log.validate_operation_log(created_op.did)
     end
 
@@ -114,9 +114,9 @@ defmodule DidServer.LogTest do
         handle: "alice.bsky.social"
       }
 
-      # Should raise
-      assert {:ok, %{operation: _updated_op}} = DidServer.Log.update_operation(update_params)
-      assert %{"type" => "plc_operation"} = DidServer.Log.validate_operation_log(created_op.did)
+      assert_raise(CryptoUtils.Did.InvalidSignatureError, fn ->
+        DidServer.Log.update_operation(update_params)
+      end)
     end
 
     test "tombstones a DID" do

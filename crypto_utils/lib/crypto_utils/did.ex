@@ -655,16 +655,7 @@ defmodule CryptoUtils.Did do
     case CreateOperation.parse(params) do
       {:ok, {%CreateParams{did: did} = op, signer}} ->
         op = op |> normalize_op() |> add_signature(signer)
-
-        did =
-          if is_nil(did) do
-            did_for_create_op(op)
-          else
-            IO.puts("applying did #{did}")
-            did
-          end
-
-        {:ok, {op, did}}
+        {:ok, {op, did || did_for_create_op(op)}}
 
       error ->
         error
@@ -856,8 +847,9 @@ defmodule CryptoUtils.Did do
 
   # Signatures
 
-  def add_signature(%{"type" => type} = op, [_pub, algorithm, priv, curve] = _signer) do
-    # {:ecdsa, [<<binary-size(32)>>, :secp256k1]}
+  def add_signature(%{"type" => type} = op, [_did_key, algorithm, priv, curve] = _signer) do
+    # ["did:key:...", "ecdsa", <<binary-size(32)>>, "secp256k1"] = signer
+
     algorithm = String.to_existing_atom(algorithm)
     curve = String.to_existing_atom(curve)
 
@@ -869,15 +861,15 @@ defmodule CryptoUtils.Did do
       end
 
     cbor = CBOR.encode(op)
-    signature = :crypto.sign(algorithm, :sha256, cbor, [priv, curve], [])
-    Map.put(op, "sig", Base.encode64(signature))
+    sig_bytes = :crypto.sign(algorithm, :sha256, cbor, [priv, curve], [])
+    Map.put(op, "sig", Base.encode64(sig_bytes))
   end
 
   def verify_signature(did_key, cbor, sig_bytes) do
     %{algo_key: algo_key} = parse_did_key!(did_key)
-    # {:ecdsa, [<<binary-size(65)>>, :secp256k1]}
-    {algorithm, [pub, curve]} = algo_key
+    # {:ecdsa, [<<binary-size(65)>>, :secp256k1]} = algo_key
 
+    {algorithm, [pub, curve]} = algo_key
     :crypto.verify(algorithm, :sha256, cbor, sig_bytes, [pub, curve], [])
   end
 
@@ -990,17 +982,10 @@ defmodule CryptoUtils.Did do
     _ = assure_rotation_keys(op, allowed_did_keys)
 
     with {:ok, sig_bytes} <- Base.decode64(sig),
-         cbor <- Map.delete(op, "sig") |> normalize_op() |> CBOR.encode() do
-      valid =
-        Enum.find(allowed_did_keys, fn did_key ->
-          verify_signature(did_key, cbor, sig_bytes)
-        end)
-
-      if is_nil(valid) do
-        :error
-      else
-        valid
-      end
+         cbor <- Map.delete(op, "sig") |> CBOR.encode(),
+         {:found, valid} when is_binary(valid) <-
+           {:found, Enum.find(allowed_did_keys, &verify_signature(&1, cbor, sig_bytes))} do
+      valid
     else
       _ -> raise InvalidSignatureError, op
     end
