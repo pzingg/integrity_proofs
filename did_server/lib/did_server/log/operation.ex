@@ -38,19 +38,16 @@ defmodule DidServer.Log.Operation do
     %__MODULE__{op | op_data: Jason.decode!(op_json)}
   end
 
-  def to_data(op, did \\ nil)
-
-  def to_data(%__MODULE__{did: op_did, operation: op_json}, did) do
+  def to_data(%__MODULE__{did: op_did, operation: op_json}) do
     %{"type" => type} = data = Jason.decode!(op_json)
 
     if type == "plc_tombstone" do
       nil
     else
-      did = did || op_did
       prev = Map.fetch!(data, "prev")
 
-      ["verificationMethods", "rotationKeys", "alsoKnownAs", "services"]
-      |> Enum.reduce(%{"type" => type, "did" => did, "prev" => prev}, fn field, acc ->
+      ["verificationMethods", "rotationKeys", "alsoKnownAs", "services", "sig"]
+      |> Enum.reduce(%{"type" => type, "prev" => prev}, fn field, acc ->
         case Map.get(data, field) do
           nil -> acc
           value -> Map.put(acc, field, value)

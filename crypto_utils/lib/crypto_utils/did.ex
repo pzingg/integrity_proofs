@@ -43,11 +43,11 @@ defmodule CryptoUtils.Did do
   end
 
   defmodule InvalidSignatureError do
-    defexception [:message]
+    defexception [:op, :allowed_keys]
 
     @impl true
-    def exception(_op) do
-      %__MODULE__{message: "invalid signature"}
+    def message(%{op: op, allowed_keys: keys}) do
+      "invalid signature, op: #{inspect(op)}, keys: #{inspect(Enum.map(keys, &CryptoUtils.display_did(&1)))}"
     end
   end
 
@@ -847,26 +847,31 @@ defmodule CryptoUtils.Did do
 
   # Signatures
 
-  def add_signature(%{"type" => type} = op, [_did_key, algorithm, priv, curve] = _signer) do
-    # ["did:key:...", "ecdsa", <<binary-size(32)>>, "secp256k1"] = signer
-
-    algorithm = String.to_existing_atom(algorithm)
-    curve = String.to_existing_atom(curve)
-
-    op =
+  def cbor_encode(%{"type" => type} = op) do
+    unsigned_op =
       if type == "plc_tombstone" do
         Map.take(op, ["type", "prev"])
       else
         Map.delete(op, "sig")
       end
 
-    cbor = CBOR.encode(op)
+    cbor = CBOR.encode(unsigned_op)
+    {cbor, unsigned_op}
+  end
+
+  def add_signature(op, [_did, algorithm, priv, curve] = _signer) do
+    # ["did:key:...", "ecdsa", <<binary-size(32)>>, "secp256k1"] = signer
+
+    algorithm = String.to_existing_atom(algorithm)
+    curve = String.to_existing_atom(curve)
+
+    {cbor, _unsigned_op} = cbor_encode(op)
     sig_bytes = :crypto.sign(algorithm, :sha256, cbor, [priv, curve], [])
     Map.put(op, "sig", Base.encode64(sig_bytes))
   end
 
-  def verify_signature(did_key, cbor, sig_bytes) do
-    %{algo_key: algo_key} = parse_did_key!(did_key)
+  def verify_signature(did, cbor, sig_bytes) do
+    %{algo_key: algo_key} = parse_did_key!(did)
     # {:ecdsa, [<<binary-size(65)>>, :secp256k1]} = algo_key
 
     {algorithm, [pub, curve]} = algo_key
@@ -923,7 +928,6 @@ defmodule CryptoUtils.Did do
     first_nullified = Jason.decode!(op_json)
     disputed_signer = assure_valid_sig(rotation_keys, first_nullified)
     more_powerful_keys = Enum.take_while(rotation_keys, fn key -> key != disputed_signer end)
-
     _did_key = assure_valid_sig(more_powerful_keys, proposed)
 
     # recovery key gets a 72hr window to do historical re-writes
@@ -980,14 +984,15 @@ defmodule CryptoUtils.Did do
 
   defp assure_valid_sig(allowed_did_keys, %{"sig" => sig} = op) when is_binary(sig) do
     _ = assure_rotation_keys(op, allowed_did_keys)
+    {cbor, _unsigned_op} = cbor_encode(op)
 
     with {:ok, sig_bytes} <- Base.decode64(sig),
-         cbor <- Map.delete(op, "sig") |> CBOR.encode(),
          {:found, valid} when is_binary(valid) <-
            {:found, Enum.find(allowed_did_keys, &verify_signature(&1, cbor, sig_bytes))} do
       valid
     else
-      _ -> raise InvalidSignatureError, op
+      _ ->
+        raise InvalidSignatureError, op: op, allowed_keys: allowed_did_keys
     end
   end
 

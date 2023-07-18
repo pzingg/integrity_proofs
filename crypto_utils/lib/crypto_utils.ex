@@ -98,6 +98,17 @@ defmodule CryptoUtils do
     "<<" <> out <> ">>"
   end
 
+  def display_op(%{"prev" => prev, "rotationKeys" => rotation_keys}) do
+    "prev #{prev} rotation_keys #{inspect(Enum.map(rotation_keys, &display_did(&1)))}"
+  end
+
+  def display_did(nil), do: "null"
+
+  def display_did(did) do
+    [_, _, specific_id] = String.split(did, ":", parts: 3)
+    String.slice(specific_id, 0, 8)
+  end
+
   def ensure_http_prefix(str) do
     if String.starts_with?(str, "http://") || String.starts_with?(str, "https://") do
       str
