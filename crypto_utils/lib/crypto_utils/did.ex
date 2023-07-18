@@ -983,7 +983,12 @@ defmodule CryptoUtils.Did do
   end
 
   defp assure_valid_sig(allowed_did_keys, %{"sig" => sig} = op) when is_binary(sig) do
-    _ = assure_rotation_keys(op, allowed_did_keys)
+    try do
+      _ = assure_rotation_keys(op, allowed_did_keys)
+    rescue
+      _ -> raise InvalidSignatureError, op: op, allowed_keys: allowed_did_keys
+    end
+
     {cbor, _unsigned_op} = cbor_encode(op)
 
     with {:ok, sig_bytes} <- Base.decode64(sig),

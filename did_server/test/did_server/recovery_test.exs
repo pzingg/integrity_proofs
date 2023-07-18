@@ -3,6 +3,7 @@ defmodule DidSever.RecoveryTest do
 
   import Ecto.Changeset
 
+  alias CryptoUtils.Did.InvalidSignatureError
   alias DidServer.{Log, Repo}
   alias DidServer.Log.Operation
 
@@ -21,92 +22,141 @@ defmodule DidSever.RecoveryTest do
     :ok
   end
 
+  def step_1(now) do
+    {:ok, %{ops: [%{did: did, cid: create_cid}, op_1, op_2] = ops}} = setup_rotation(now)
+
+    # Proposes a new operation
+    # [3] -> rotation to [key_2], signed by key_2, prev [0]
+    # key_2 asserts control over key_3
+    rotate_changeset =
+      sign_op_for_keys([@rotation_key_2], @rotation_key_2, did: did, prev: create_cid)
+
+    rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
+    # IO.inspect(rotate_op, label: :apply_changes)
+
+    # Nullified are [1, 2]
+    # Disputed signer is key_3
+    # More powerful keys are [key_1, key_2]
+    # [3] will verify with key_2
+    {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
+
+    assert Enum.count(nullified_cids) == 2
+
+    [cid_1, cid_2] = nullified_cids
+    assert cid_1 == op_1.cid
+    assert cid_2 == op_2.cid
+
+    prev = Map.get(proposed, "prev")
+    assert prev == create_cid
+
+    assert {:ok, %{operation: %Operation{cid: step_1_cid} = _rotate}} =
+             rotate_changeset
+             |> put_change(:inserted_at, DateTime.add(now, -(24 * 3600), :second))
+             |> Log.multi_insert(false)
+             |> Repo.transaction()
+
+    _ = Log.reset_log(did, [create_cid, step_1_cid])
+    ops = Log.list_operations(did, true)
+    assert Enum.count(ops) == 2
+    ops
+  end
+
+  def step_2(now) do
+    [%{did: did, cid: create_cid} | _] = ops = step_1(now)
+
+    # Proposes a new operation
+    # [3] -> rotation to [key_3], signed by key_3, prev [0]
+    rotate_changeset =
+      sign_op_for_keys([@rotation_key_3], @rotation_key_3, did: did, prev: create_cid)
+
+    rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
+
+    # Nullified are [1, 2]
+    # Disputed signer is key_3
+    # More powerful keys are [key_1, key_2]
+    # [3] fails to verify with these keys (it was signed with key_3)
+    assert_raise(InvalidSignatureError, fn ->
+      CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
+    end)
+
+    ops
+  end
+
+  def step_3(now) do
+    [%{did: did, cid: create_cid}, op_1] = ops = step_1(now)
+
+    # Proposes a new operation
+    # [2] -> rotation to [key_1], signed by key_1, prev [0]
+    rotate_changeset =
+      sign_op_for_keys([@rotation_key_1], @rotation_key_1, did: did, prev: create_cid)
+
+    rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
+
+    # Nullified are [1]
+    # Disputed signer is key_2
+    # More powerful keys are [key_1]
+    # [3] will verify with key_1
+    {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
+
+    assert Enum.count(nullified_cids) == 1
+
+    [cid_1] = nullified_cids
+    assert cid_1 == op_1.cid
+
+    prev = Map.get(proposed, "prev")
+    assert prev == create_cid
+
+    assert {:ok, %{operation: %Operation{cid: step_3_cid} = _rotate}} =
+             rotate_changeset
+             |> put_change(:inserted_at, DateTime.add(now, -(24 * 3600), :second))
+             |> Log.multi_insert(false)
+             |> Repo.transaction()
+
+    _ = Log.reset_log(did, [create_cid, step_3_cid])
+    ops = Log.list_operations(did, true)
+    assert Enum.count(ops) == 2
+    ops
+  end
+
+  def step_4(now) do
+    [%{did: did, cid: create_cid} | _] = ops = step_3(now)
+
+    rotate_changeset =
+      sign_op_for_keys([@rotation_key_3], @rotation_key_3, did: did, prev: create_cid)
+
+    rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
+
+    assert_raise(InvalidSignatureError, fn ->
+      CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
+    end)
+
+    rotate_changeset =
+      sign_op_for_keys([@rotation_key_2], @rotation_key_2, did: did, prev: create_cid)
+
+    rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
+
+    assert_raise(InvalidSignatureError, fn ->
+      CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
+    end)
+
+    ops
+  end
+
   describe "key recovery" do
     test "allows a rotation key with higher authority to rewrite history" do
-      now = DateTime.utc_now()
-      {:ok, %{ops: [%{did: did} = create, op_1, op_2] = ops}} = setup_rotation(now)
-
-      # Proposes a new operation
-      # [3] -> rotation to [key_2], signed by key_2, prev [0]
-      # key_2 asserts control over key_3
-      rotate_changeset =
-        sign_op_for_keys([@rotation_key_2], @rotation_key_2, did: did, prev: create.cid)
-
-      rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
-      # IO.inspect(rotate_op, label: :apply_changes)
-
-      # Nullified are [1, 2]
-      # Disputed signer is key_3
-      # More powerful keys are [key_1, key_2]
-      # [3] will verify with key_2
-      {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
-
-      assert Enum.count(nullified_cids) == 2
-
-      [cid_1, cid_2] = nullified_cids
-      assert cid_1 == op_1.cid
-      assert cid_2 == op_2.cid
-
-      prev = Map.get(proposed, "prev")
-      assert prev == create.cid
-
-      assert {:ok, %{operation: %Operation{} = _rotate}} =
-               rotate_changeset
-               |> put_change(:inserted_at, DateTime.add(now, -(24 * 3600), :second))
-               |> Log.multi_insert(false)
-               |> Repo.transaction()
+      DateTime.utc_now() |> step_1()
     end
 
     test "does not allow the lower authority key to take control back" do
-      now = DateTime.utc_now()
-      {:ok, %{ops: [%{did: did} = create | _] = ops}} = setup_rotation(now)
-
-      # Proposes a new operation
-      # [3] -> rotation to [key_3], signed by key_3, prev [0]
-      rotate_changeset =
-        sign_op_for_keys([@rotation_key_3], @rotation_key_3, did: did, prev: create.cid)
-
-      rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
-
-      # Nullified are [1, 2]
-      # Disputed signer is key_3
-      # More powerful keys are [key_1, key_2]
-      # [3] fails to verify with these keys (it was signed with key_3)
-      assert_raise(CryptoUtils.Did.InvalidSignatureError, fn ->
-        CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
-      end)
+      DateTime.utc_now() |> step_2()
     end
 
     test "allows a rotation key with even higher authority to rewrite history" do
-      now = DateTime.utc_now()
-      {:ok, %{ops: [%{did: did} = create, op_1, _] = ops}} = setup_rotation(now)
+      DateTime.utc_now() |> step_3()
+    end
 
-      # Proposes a new operation
-      # [3] -> rotation to [key_1], signed by key_1, prev [0]
-      rotate_changeset =
-        sign_op_for_keys([@rotation_key_1], @rotation_key_1, did: did, prev: create.cid)
-
-      rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
-
-      # Nullified are [1, 2]
-      # Disputed signer is key_3
-      # More powerful keys are [key_1, key_2]
-      # [3] will verify with key_2
-      {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
-
-      assert Enum.count(nullified_cids) == 1
-
-      [cid_1] = nullified_cids
-      assert cid_1 == op_1.cid
-
-      prev = Map.get(proposed, "prev")
-      assert prev == create.cid
-
-      assert {:ok, %{operation: %Operation{} = _rotate}} =
-               rotate_changeset
-               |> put_change(:inserted_at, DateTime.add(now, -(24 * 3600), :second))
-               |> Log.multi_insert(false)
-               |> Repo.transaction()
+    test "does not allow the either invalidated key to take control back" do
+      DateTime.utc_now() |> step_4()
     end
   end
 

@@ -203,6 +203,14 @@ defmodule DidServer.Log do
     |> Repo.one()
   end
 
+  def reset_log(did, cids) do
+    from(op in Operation,
+      where: op.did == ^did,
+      where: op.cid not in ^cids
+    )
+    |> Repo.delete_all()
+  end
+
   def ensure_last_op(did) when is_binary(did) do
     with {:last_op, %Operation{} = op} <- {:last_op, get_last_op(did)},
          {:tombstone, false} <- {:tombstone, Operation.tombstone?(op)} do
