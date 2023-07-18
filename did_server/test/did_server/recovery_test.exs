@@ -3,7 +3,7 @@ defmodule DidSever.RecoveryTest do
 
   import Ecto.Changeset
 
-  alias CryptoUtils.Did.InvalidSignatureError
+  alias CryptoUtils.Did.{InvalidSignatureError, LateRecoveryError}
   alias DidServer.{Log, Repo}
   alias DidServer.Log.Operation
 
@@ -14,25 +14,101 @@ defmodule DidSever.RecoveryTest do
   @handle "alice.example.com"
   @service "https://example.com"
 
-  setup_all do
-    # IO.puts("rotation_key_1 #{elem(@rotation_key_1, 0) |> CryptoUtils.display_did()}")
-    # IO.puts("rotation_key_2 #{elem(@rotation_key_2, 0) |> CryptoUtils.display_did()}")
-    # IO.puts("rotation_key_3 #{elem(@rotation_key_3, 0) |> CryptoUtils.display_did()}")
+  describe "key recovery" do
+    test "allows a rotation key with higher authority to rewrite history" do
+      DateTime.utc_now() |> key_2_asserts_control()
+    end
 
-    :ok
+    test "does not allow the lower authority key to take control back" do
+      DateTime.utc_now() |> key_3_attempts_control()
+    end
+
+    test "allows a rotation key with even higher authority to rewrite history" do
+      DateTime.utc_now() |> key_1_asserts_control_after_key_2()
+    end
+
+    test "does not allow the either invalidated key to take control back" do
+      DateTime.utc_now() |> invalidated_keys_fail_to_take_back_control()
+    end
+
+    test "does not allow recovery outside of 72 hrs" do
+      DateTime.utc_now() |> fails_expired_recovery()
+    end
+
+    test "allows recovery from a tombstoned DID" do
+      DateTime.utc_now() |> nullifies_tombstone()
+    end
   end
 
-  def step_1(now) do
+  defp setup_genesis(now) do
+    seven_days_ago = DateTime.add(now, -(7 * 24 * 3600), :second)
+
+    create_changeset =
+      sign_op_for_keys(
+        [@rotation_key_1, @rotation_key_2, @rotation_key_3],
+        @rotation_key_1,
+        seven_days_ago
+      )
+
+    assert {:ok, %{operation: %Operation{} = create}} =
+             create_changeset
+             |> Log.multi_insert(false)
+             |> Repo.transaction()
+
+    {:ok, create}
+  end
+
+  # Creates 3 operations
+  # [0] -> creation did with [key_1, key_2, key_3], signed by key_1
+  # [1] -> rotation to [key_3], signed by key_3
+  # [2] -> update handle (same rotation to [key_3], signed by key_3)
+  defp setup_rotation(now) do
+    {:ok, %{did: did, cid: create_cid} = create} = setup_genesis(now)
+    create_op = Operation.to_data(create)
+    assert Map.get(create_op, "rotationKeys") |> Enum.count() == 3
+
+    # key 3 tries to usurp control
+    one_day_ago = DateTime.add(now, -(24 * 3600), :second)
+
+    rotate_changeset =
+      sign_op_for_keys([@rotation_key_3], @rotation_key_3, one_day_ago, did: did, prev: create_cid)
+
+    assert {:ok, %{operation: %Operation{cid: rotate_cid}}} =
+             rotate_changeset
+             |> Log.multi_insert(false)
+             |> Repo.transaction()
+
+    # and does some additional ops
+    one_hour_ago = DateTime.add(now, -(24 * 3600), :second)
+
+    another_changeset =
+      sign_op_for_keys([@rotation_key_3], @rotation_key_3, one_hour_ago,
+        did: did,
+        prev: rotate_cid,
+        changes: %{handle: "newhandle.test"}
+      )
+
+    assert {:ok, %{operation: %Operation{cid: _another_cid}}} =
+             another_changeset
+             |> Log.multi_insert(false)
+             |> Repo.transaction()
+
+    ops = Log.list_operations(did)
+    # IO.puts("ops #{inspect(Enum.map(ops, fn %{cid: cid} -> cid end))}")
+
+    {:ok, %{ops: ops}}
+  end
+
+  # Proposes a new operation
+  # [3] -> rotation to [key_2], signed by key_2, prev [0]
+  # key_2 asserts control over key_3
+  defp key_2_asserts_control(now) do
     {:ok, %{ops: [%{did: did, cid: create_cid}, op_1, op_2] = ops}} = setup_rotation(now)
 
-    # Proposes a new operation
-    # [3] -> rotation to [key_2], signed by key_2, prev [0]
-    # key_2 asserts control over key_3
     rotate_changeset =
-      sign_op_for_keys([@rotation_key_2], @rotation_key_2, did: did, prev: create_cid)
+      sign_op_for_keys([@rotation_key_2], @rotation_key_2, now, did: did, prev: create_cid)
 
     rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
-    # IO.inspect(rotate_op, label: :apply_changes)
 
     # Nullified are [1, 2]
     # Disputed signer is key_3
@@ -40,34 +116,31 @@ defmodule DidSever.RecoveryTest do
     # [3] will verify with key_2
     {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
 
-    assert Enum.count(nullified_cids) == 2
-
-    [cid_1, cid_2] = nullified_cids
+    assert [cid_1, cid_2] = nullified_cids
     assert cid_1 == op_1.cid
     assert cid_2 == op_2.cid
 
     prev = Map.get(proposed, "prev")
     assert prev == create_cid
 
-    assert {:ok, %{operation: %Operation{cid: step_1_cid} = _rotate}} =
+    assert {:ok, %{operation: %Operation{cid: key_2_asserts_control_cid} = _rotate}} =
              rotate_changeset
-             |> put_change(:inserted_at, DateTime.add(now, -(24 * 3600), :second))
              |> Log.multi_insert(false)
              |> Repo.transaction()
 
-    _ = Log.reset_log(did, [create_cid, step_1_cid])
+    _ = Log.reset_log(did, [create_cid, key_2_asserts_control_cid])
     ops = Log.list_operations(did, true)
     assert Enum.count(ops) == 2
     ops
   end
 
-  def step_2(now) do
-    [%{did: did, cid: create_cid} | _] = ops = step_1(now)
+  # Proposes a new operation
+  # [3] -> rotation to [key_3], signed by key_3, prev [0]
+  defp key_3_attempts_control(now) do
+    [%{did: did, cid: create_cid} | _] = ops = key_2_asserts_control(now)
 
-    # Proposes a new operation
-    # [3] -> rotation to [key_3], signed by key_3, prev [0]
     rotate_changeset =
-      sign_op_for_keys([@rotation_key_3], @rotation_key_3, did: did, prev: create_cid)
+      sign_op_for_keys([@rotation_key_3], @rotation_key_3, now, did: did, prev: create_cid)
 
     rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
 
@@ -82,13 +155,13 @@ defmodule DidSever.RecoveryTest do
     ops
   end
 
-  def step_3(now) do
-    [%{did: did, cid: create_cid}, op_1] = ops = step_1(now)
+  defp key_1_asserts_control_after_key_2(now) do
+    [%{did: did, cid: create_cid}, op_1] = ops = key_2_asserts_control(now)
 
     # Proposes a new operation
     # [2] -> rotation to [key_1], signed by key_1, prev [0]
     rotate_changeset =
-      sign_op_for_keys([@rotation_key_1], @rotation_key_1, did: did, prev: create_cid)
+      sign_op_for_keys([@rotation_key_1], @rotation_key_1, now, did: did, prev: create_cid)
 
     rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
 
@@ -98,31 +171,28 @@ defmodule DidSever.RecoveryTest do
     # [3] will verify with key_1
     {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
 
-    assert Enum.count(nullified_cids) == 1
-
-    [cid_1] = nullified_cids
+    assert [cid_1] = nullified_cids
     assert cid_1 == op_1.cid
 
     prev = Map.get(proposed, "prev")
     assert prev == create_cid
 
-    assert {:ok, %{operation: %Operation{cid: step_3_cid} = _rotate}} =
+    assert {:ok, %{operation: %Operation{cid: rotate_cid} = _rotate}} =
              rotate_changeset
-             |> put_change(:inserted_at, DateTime.add(now, -(24 * 3600), :second))
              |> Log.multi_insert(false)
              |> Repo.transaction()
 
-    _ = Log.reset_log(did, [create_cid, step_3_cid])
+    _ = Log.reset_log(did, [create_cid, rotate_cid])
     ops = Log.list_operations(did, true)
     assert Enum.count(ops) == 2
     ops
   end
 
-  def step_4(now) do
-    [%{did: did, cid: create_cid} | _] = ops = step_3(now)
+  defp invalidated_keys_fail_to_take_back_control(now) do
+    [%{did: did, cid: create_cid} | _] = ops = key_1_asserts_control_after_key_2(now)
 
     rotate_changeset =
-      sign_op_for_keys([@rotation_key_3], @rotation_key_3, did: did, prev: create_cid)
+      sign_op_for_keys([@rotation_key_3], @rotation_key_3, now, did: did, prev: create_cid)
 
     rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
 
@@ -131,7 +201,7 @@ defmodule DidSever.RecoveryTest do
     end)
 
     rotate_changeset =
-      sign_op_for_keys([@rotation_key_2], @rotation_key_2, did: did, prev: create_cid)
+      sign_op_for_keys([@rotation_key_2], @rotation_key_2, now, did: did, prev: create_cid)
 
     rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
 
@@ -142,72 +212,58 @@ defmodule DidSever.RecoveryTest do
     ops
   end
 
-  describe "key recovery" do
-    test "allows a rotation key with higher authority to rewrite history" do
-      DateTime.utc_now() |> step_1()
-    end
+  defp fails_expired_recovery(now) do
+    {:ok, %{did: did, cid: create_cid}} = setup_genesis(now)
 
-    test "does not allow the lower authority key to take control back" do
-      DateTime.utc_now() |> step_2()
-    end
+    ninety_six_hours_ago = DateTime.add(now, -(4 * 24 * 3600), :second)
 
-    test "allows a rotation key with even higher authority to rewrite history" do
-      DateTime.utc_now() |> step_3()
-    end
-
-    test "does not allow the either invalidated key to take control back" do
-      DateTime.utc_now() |> step_4()
-    end
-  end
-
-  # Creates 3 operations
-  # [0] -> creation did with [key_1, key_2, key_3], signed by key_1
-  # [1] -> rotation to [key_3], signed by key_3
-  # [2] -> update handle (same rotation to [key_3], signed by key_3)
-  defp setup_rotation(now) do
-    create_changeset =
-      sign_op_for_keys([@rotation_key_1, @rotation_key_2, @rotation_key_3], @rotation_key_1)
-
-    assert {:ok, %{operation: %Operation{cid: create_cid, did: did} = create}} =
-             create_changeset
-             |> put_change(:inserted_at, DateTime.add(now, -(7 * 24 * 3600), :second))
-             |> Log.multi_insert(false)
-             |> Repo.transaction()
-
-    create_op = Operation.to_data(create)
-    assert Map.get(create_op, "rotationKeys") |> Enum.count() == 3
-
-    # key 3 tries to usurp control
     rotate_changeset =
-      sign_op_for_keys([@rotation_key_3], @rotation_key_3, did: did, prev: create_cid)
-
-    assert {:ok, %{operation: %Operation{cid: rotate_cid}}} =
-             rotate_changeset
-             |> put_change(:inserted_at, DateTime.add(now, -(24 * 3600), :second))
-             |> Log.multi_insert(false)
-             |> Repo.transaction()
-
-    # and does some additional ops
-    another_changeset =
-      sign_op_for_keys([@rotation_key_3], @rotation_key_3,
+      sign_op_for_keys([@rotation_key_3], @rotation_key_3, ninety_six_hours_ago,
         did: did,
-        prev: rotate_cid,
-        changes: %{handle: "newhandle.test"}
+        prev: create_cid
       )
 
-    assert {:ok, %{operation: %Operation{cid: _another_cid}}} =
-             another_changeset
-             |> put_change(:inserted_at, DateTime.add(now, -3600, :second))
+    assert {:ok, %{operation: %Operation{} = _rotate}} =
+             rotate_changeset
              |> Log.multi_insert(false)
              |> Repo.transaction()
 
-    ops = Log.list_operations(did)
-    # IO.puts("ops #{inspect(Enum.map(ops, fn %{cid: cid} -> cid end))}")
+    ops = Log.list_operations(did, true)
 
-    {:ok, %{ops: ops}}
+    rotate_back_changeset =
+      sign_op_for_keys([@rotation_key_2], @rotation_key_2, now, did: did, prev: create_cid)
+
+    rotate_back_op = apply_changes(rotate_back_changeset) |> Operation.to_data()
+
+    assert_raise(LateRecoveryError, fn ->
+      CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_back_op)
+    end)
   end
 
-  defp sign_op_for_keys(keys, {signer_did, {algorithm, [priv, curve]}}, opts \\ []) do
+  defp nullifies_tombstone(now) do
+    {:ok, %{did: did, cid: create_cid}} = setup_genesis(now)
+
+    op = %{"type" => "plc_tombstone", "prev" => create_cid}
+    tombstone_changeset = changeset(op, did, create_cid, now)
+
+    assert {:ok, %{operation: %Operation{} = tombstone}} =
+             tombstone_changeset
+             |> Log.multi_insert(false)
+             |> Repo.transaction()
+
+    ops = Log.list_operations(did, true)
+
+    rotate_back_changeset =
+      sign_op_for_keys([@rotation_key_1], @rotation_key_1, now, did: did, prev: create_cid)
+
+    rotate_back_op = apply_changes(rotate_back_changeset) |> Operation.to_data()
+    {_proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_back_op)
+
+    assert [cid_1] = nullified_cids
+    assert cid_1 == tombstone.cid
+  end
+
+  defp sign_op_for_keys(keys, {signer_did, {algorithm, [priv, curve]}}, inserted_at, opts \\ []) do
     prev = Keyword.get(opts, :prev)
 
     params = %{
@@ -228,16 +284,16 @@ defmodule DidSever.RecoveryTest do
       end
 
     {:ok, {op, did}} = CryptoUtils.Did.create_operation(params)
-    changeset(op, did, prev)
+    changeset(op, did, prev, inserted_at)
   end
 
-  defp changeset(op, did, prev) do
+  defp changeset(op, did, prev, inserted_at) do
     Operation.changeset_raw(%Operation{}, %{
       did: did,
       cid: CryptoUtils.Did.cid_for_op(op),
       operation: Jason.encode!(op),
       nullified: false,
-      inserted_at: DateTime.utc_now(),
+      inserted_at: inserted_at,
       prev: prev
     })
   end

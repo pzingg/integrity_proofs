@@ -982,6 +982,9 @@ defmodule CryptoUtils.Did do
     assure_rotation_keys(op, rotation_keys)
   end
 
+  # tombstones are never signed
+  defp assure_valid_sig(_allowed_did_keys, %{"type" => "plc_tombstone"}), do: true
+
   defp assure_valid_sig(allowed_did_keys, %{"sig" => sig} = op) when is_binary(sig) do
     try do
       _ = assure_rotation_keys(op, allowed_did_keys)
@@ -1001,9 +1004,8 @@ defmodule CryptoUtils.Did do
     end
   end
 
-  defp assure_valid_sig(_allowed_did_keys, op) do
-    raise MissingSignatureError, op
-  end
+  # no signature element
+  defp assure_valid_sig(_allowed_did_keys, op), do: raise MissingSignatureError, op
 
   defp assure_rotation_keys(op, []) do
     raise ImproperOperationError, op: op, message: "need at least one rotation key"
