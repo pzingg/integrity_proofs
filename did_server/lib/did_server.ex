@@ -8,4 +8,13 @@ defmodule DidServer do
   defmodule PrevMismatchError do
     defexception [:message]
   end
+
+  defmodule UpdateOperationError do
+    defexception [:message]
+
+    @impl true
+    def exception(reason) do
+      %__MODULE__{message: "update operation error: #{reason}"}
+    end
+  end
 end

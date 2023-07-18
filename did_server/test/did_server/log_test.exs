@@ -147,5 +147,39 @@ defmodule DidServer.LogTest do
       assert Operation.tombstone?(tombstone)
       assert DidServer.Log.validate_operation_log(created_op.did) == nil
     end
+
+    test "does not allow a tombstone in the middle of the log" do
+      [signing_key | _] = signing_keypair_fixture()
+      [recovery_key | _] = signer = recovery_keypair_fixture()
+
+      create_params = %{
+        # type: "create",
+        signingKey: signing_key,
+        recoveryKey: recovery_key,
+        signer: signer,
+        handle: "bob.bsky.social",
+        service: "https://pds.example.com"
+      }
+
+      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+
+      tombstone_params = %{
+        type: "plc_tombstone",
+        did: created_op.did,
+        signer: signer
+      }
+
+      _ = DidServer.Log.update_operation(tombstone_params)
+
+      update_params = %{
+        did: created_op.did,
+        signer: signer,
+        handle: "alice.bsky.social"
+      }
+
+      assert_raise(DidServer.UpdateOperationError, fn ->
+        DidServer.Log.update_operation(update_params)
+      end)
+    end
   end
 end

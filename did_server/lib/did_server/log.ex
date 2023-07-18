@@ -5,7 +5,7 @@ defmodule DidServer.Log do
 
   import Ecto.Query, warn: false
 
-  alias DidServer.{PrevMismatchError, Repo}
+  alias DidServer.{PrevMismatchError, Repo, UpdateOperationError}
   alias DidServer.Log.{Did, Operation}
 
   @doc """
@@ -170,8 +170,8 @@ defmodule DidServer.Log do
            ) do
       create_operation(did, op)
     else
-      {:data, _} -> {:error, "no data in last operation"}
-      {:error, reason} -> {:error, reason}
+      {:data, _} -> raise UpdateOperationError, "no data in last operation"
+      {:error, reason} -> raise UpdateOperationError, reason
     end
   end
 
@@ -196,7 +196,8 @@ defmodule DidServer.Log do
     from(op in Operation,
       where: op.did == ^did,
       where: op.nullified == false,
-      order_by: [desc: :inserted_at]
+      order_by: [desc: :inserted_at],
+      limit: 1
     )
     |> Repo.one()
   end
@@ -206,13 +207,13 @@ defmodule DidServer.Log do
          {:tombstone, false} <- {:tombstone, Operation.tombstone?(op)} do
       {:ok, op}
     else
-      {:tombstone, _} -> {:error, "cannot update tombstone #{did}"}
-      {:last_op, _} -> {:error, "no operations with did #{did}"}
+      {:tombstone, _} -> raise UpdateOperationError, "cannot update tombstone #{did}"
+      {:last_op, _} -> raise UpdateOperationError, "no operations with did #{did}"
       error -> error
     end
   end
 
-  def ensure_last_op(_), do: {:error, "did cannot be blank"}
+  def ensure_last_op(_), do: raise(UpdateOperationError, "did cannot be blank")
 
   def validate_operation_log(did) do
     ops = list_operations(did, true)
