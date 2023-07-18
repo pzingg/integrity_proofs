@@ -28,14 +28,14 @@ defmodule DidServer.Log do
 
   ## Examples
 
-      iex> get_did!(123)
+      iex> get_did!("did:plc:012345")
       %Did{}
 
-      iex> get_did!(456)
+      iex> get_did!("did:plc:nosuchkey")
       ** (Ecto.NoResultsError)
 
   """
-  def get_did!(id), do: Repo.get!(Did, id)
+  def get_did!(did), do: Repo.get!(Did, did)
 
   @doc """
   Creates a did.
@@ -114,7 +114,7 @@ defmodule DidServer.Log do
   """
   def create_operation(params) do
     case CryptoUtils.Did.create_operation(params) do
-      {:ok, {%{"sig" => sig} = op, did}} ->
+      {:ok, {%{"sig" => _sig} = op, did}} ->
         create_operation(did, op)
 
       error ->
@@ -214,6 +214,23 @@ defmodule DidServer.Log do
 
   def ensure_last_op(_), do: {:error, "did cannot be blank"}
 
+  def validate_operation_log(did) do
+    ops = list_operations(did, true)
+    validate_operation_log(did, ops)
+  end
+
+  def validate_operation_log(_did, []), do: nil
+
+  def validate_operation_log(did, ops) do
+    ops =
+      Enum.map(ops, fn op ->
+        %{op_data: op_data} = Operation.decode(op)
+        op_data
+      end)
+
+    CryptoUtils.Did.validate_operation_log(did, ops)
+  end
+
   @doc """
   Just a check to see if database is operational.
   """
@@ -225,13 +242,6 @@ defmodule DidServer.Log do
 
   defp multi_insert_operation(did, %{"prev" => prev} = proposed, nullified_strs) do
     did_changeset = Did.changeset(%Did{}, %{did: did})
-
-    did_insert_opts =
-      if is_nil(prev) do
-        [returning: true]
-      else
-        [on_conflict: :nothing, returning: true]
-      end
 
     nullified? = !Enum.empty?(nullified_strs)
 
@@ -245,9 +255,15 @@ defmodule DidServer.Log do
     op_changeset = Operation.changeset(%Operation{}, op_attrs)
 
     multi =
-      Ecto.Multi.new()
-      |> Ecto.Multi.insert(:did, did_changeset, did_insert_opts)
-      |> Ecto.Multi.insert(:operation, op_changeset, returning: true)
+      if is_nil(prev) do
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:did, did_changeset, returning: true)
+      else
+        Ecto.Multi.new()
+        |> Ecto.Multi.one(:did, Did)
+      end
+
+    multi = Ecto.Multi.insert(multi, :operation, op_changeset, returning: true)
 
     multi =
       if nullified? do

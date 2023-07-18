@@ -79,7 +79,7 @@ defmodule DidServerWeb.WebController do
 
   # TODO lookup did for registered user
   defp lookup_did_key(_user) do
-    {pub, _priv} = CryptoUtils.Keys.generate_key_pair(:did_key, :ed25519)
+    {pub, _priv} = CryptoUtils.Keys.generate_keypair(:did_key, :ed25519)
     pub
   end
 end

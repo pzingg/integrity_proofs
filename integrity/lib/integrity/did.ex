@@ -30,8 +30,8 @@ defmodule Integrity.Did do
       }
       |> URI.to_string()
 
-    with {:ok, body} <- apply(resolver_module, :fetch, [url, []]),
-         {:ok, document} <- Jason.decode(body) do
+    with {:ok, doc_json} <- apply(resolver_module, :fetch, [url, []]),
+         {:ok, document} <- Jason.decode(doc_json) do
       document
     else
       {:error, reason} -> raise DidResolutionError, did: identifier, reason: reason

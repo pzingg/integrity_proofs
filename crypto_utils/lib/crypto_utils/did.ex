@@ -149,7 +149,7 @@ defmodule CryptoUtils.Did do
   """
   def did_web_uri(identifier, options \\ []) do
     if String.starts_with?(identifier, "did:web:") do
-      parsed_did = CryptoUtils.Did.parse_did!(identifier, options)
+      parsed_did = parse_did!(identifier, options)
 
       {:ok,
        %URI{
@@ -312,7 +312,7 @@ defmodule CryptoUtils.Did do
   12. Return document.
   """
   def format_did_document!(identifier, options \\ []) do
-    parsed_did = CryptoUtils.Did.parse_did!(identifier)
+    parsed_did = parse_did!(identifier)
 
     %{
       context: sig_vm_context,
@@ -568,8 +568,7 @@ defmodule CryptoUtils.Did do
   end
 
   def parse_did_key!(did) do
-    %{multibase_value: multibase_value} =
-      CryptoUtils.Did.parse_did!(did, expected_did_method: "key")
+    %{multibase_value: multibase_value} = parse_did!(did, expected_did_method: "key")
 
     prefixed_bytes = Multibase.decode!(multibase_value)
     <<prefix::binary-size(2), key_bytes::binary>> = prefixed_bytes
@@ -792,7 +791,7 @@ defmodule CryptoUtils.Did do
 
     if Enum.empty?(ops) do
       # special case if account creation
-      {assure_valid_create_op(did, proposed), []}
+      {assure_valid_creation_op(did, proposed), []}
     else
       assure_valid_op_order_and_sig(ops, proposed)
     end
@@ -814,8 +813,45 @@ defmodule CryptoUtils.Did do
 
   def cid_for_op(op) do
     op
+    |> Map.delete("sig")
     |> Cid.from_data()
     |> Cid.encode!(truncate: 24)
+  end
+
+  def validate_operation_log(did, [%{"type" => first_type} = first | rest]) do
+    if first_type != "plc_operation" do
+      raise ImproperOperationError, op: first, message: "incorrect structure"
+    end
+
+    # ensure the first op is a valid & signed create operation
+    doc = assure_valid_creation_op(did, first)
+    prev = cid_for_op(first)
+
+    {%{"type" => type} = doc, _, _} =
+      Enum.reduce(rest, {doc, prev, false}, fn %{"type" => type, "prev" => op_prev} = op,
+                                               {%{"rotationKeys" => rotation_keys}, prev,
+                                                saw_tombstone} ->
+        # if tombstone found before last op, throw
+        if saw_tombstone do
+          raise MisorderedOperationError, "tombstone not last in log of #{did}"
+        end
+
+        if is_nil(op_prev) || op_prev != prev do
+          raise MisorderedOperationError,
+                "prev CID #{op_prev} does not match #{prev} in log of #{did}"
+        end
+
+        assure_valid_sig(rotation_keys, op)
+        prev = cid_for_op(op)
+        {op, prev, type == "plc_tombstone"}
+      end)
+
+    # if tombstone is last op, return nil
+    if type == "plc_tombstone" do
+      nil
+    else
+      doc
+    end
   end
 
   # Signatures
@@ -863,11 +899,14 @@ defmodule CryptoUtils.Did do
     {ops_in_history, nullified} = Enum.split(ops, index_of_prev + 1)
     last_op = List.last(ops_in_history)
 
-    if is_nil(last_op) do
-      raise MisorderedOperationError, "no prev operation at #{index_of_prev}"
-    end
+    %{"type" => last_op_type, "rotationKeys" => rotation_keys} =
+      case last_op do
+        nil ->
+          raise MisorderedOperationError, "no prev operation at #{index_of_prev}"
 
-    %{"type" => last_op_type, "rotationKeys" => rotation_keys} = Jason.decode!(last_op.operation)
+        %{operation: op_json} ->
+          Jason.decode!(op_json)
+      end
 
     if last_op_type == "plc_tombstone" do
       raise MisorderedOperationError, "prev operation cannot be a tombstone"
@@ -905,11 +944,11 @@ defmodule CryptoUtils.Did do
     {proposed, Enum.map(nullified, fn %{cid: cid} -> cid end)}
   end
 
-  defp assure_valid_create_op(_did, %{"type" => "plc_tombstone"}) do
+  defp assure_valid_creation_op(_did, %{"type" => "plc_tombstone"}) do
     raise MisorderedOperationError, "genesis operation cannot be a tombstone"
   end
 
-  defp assure_valid_create_op(did, %{"rotationKeys" => rotation_keys, "prev" => prev} = op) do
+  defp assure_valid_creation_op(did, %{"rotationKeys" => rotation_keys, "prev" => prev} = op) do
     if !is_nil(prev) do
       raise ImproperOperationError, op: op, message: "expected null prev on create"
     end

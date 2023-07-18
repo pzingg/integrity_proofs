@@ -44,37 +44,33 @@ defmodule DidServer.LogTest do
       assert Log.list_operations(did) == [op]
     end
 
-    @signing_key "did:key:z7r8op7JkEfuM8hD4ZhppR7uS1Nq43pgMuP8q8Un4GvVJSraf1bcToVQav3eY8w9ZoQuibf1aLb9PwPBbHFBanqKVCQNf"
-    @recovery_key "did:key:z7r8or2MBTgMnfgSjS2VDou7sLbwWv37Sc3rRyJ7kmjVHzrTfcb7obqjNiV2oJvShFFi4jRD2s8itELsvig6ATvbDjsdK"
-    @signer [
-      @recovery_key,
-      "ecdsa",
-      <<253, 249, 135, 239, 146, 2, 35, 75, 76, 166, 15, 121, 230, 110, 238, 184, 210, 95, 61, 38,
-        149, 69, 224, 54, 14, 165, 233, 4, 56, 117, 164, 104>>,
-      "secp256k1"
-    ]
-    @genesis_did "did:plc:kb6whcb3dlbajvkhmnabaqmy"
+    test "creates a valid create op" do
+      [signing_key | _] = signing_keypair_fixture()
+      [recovery_key | _] = signer = recovery_keypair_fixture()
 
-    test "inserts a new create operation" do
       params = %{
         # type: "create",
-        signingKey: @signing_key,
-        recoveryKey: @recovery_key,
-        signer: @signer,
+        signingKey: signing_key,
+        recoveryKey: recovery_key,
+        signer: signer,
         handle: "bob.bsky.social",
         service: "https://pds.example.com"
       }
 
-      assert {:ok, %{operation: %Operation{did: did}}} = DidServer.Log.create_operation(params)
-      assert did == @genesis_did
+      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(params)
+      assert created_op.did == "did:plc:tuoulvfey6235ijox23kr6zj"
+      assert %{"type" => "plc_operation"} = DidServer.Log.validate_operation_log(created_op.did)
     end
 
-    test "updates an operation with a new handle" do
+    test "updates handle" do
+      [signing_key | _] = signing_keypair_fixture()
+      [recovery_key | _] = signer = recovery_keypair_fixture()
+
       create_params = %{
         # type: "create",
-        signingKey: @signing_key,
-        recoveryKey: @recovery_key,
-        signer: @signer,
+        signingKey: signing_key,
+        recoveryKey: recovery_key,
+        signer: signer,
         handle: "bob.bsky.social",
         service: "https://pds.example.com"
       }
@@ -85,8 +81,8 @@ defmodule DidServer.LogTest do
       assert Map.get(created_op_data, "alsoKnownAs") == ["at://bob.bsky.social"]
 
       update_params = %{
-        did: @genesis_did,
-        signer: @signer,
+        did: created_op.did,
+        signer: signer,
         handle: "alice.bsky.social"
       }
 
@@ -94,14 +90,44 @@ defmodule DidServer.LogTest do
 
       updated_op_data = Operation.to_data(updated_op)
       assert Map.get(updated_op_data, "alsoKnownAs") == ["at://alice.bsky.social"]
+      assert %{"type" => "plc_operation"} = DidServer.Log.validate_operation_log(created_op.did)
+    end
+
+    test "does not allow operations from the signingKey" do
+      [signing_key | _] = signing_keypair = signing_keypair_fixture()
+      [recovery_key | _] = signer = recovery_keypair_fixture()
+
+      create_params = %{
+        # type: "create",
+        signingKey: signing_key,
+        recoveryKey: recovery_key,
+        signer: signer,
+        handle: "bob.bsky.social",
+        service: "https://pds.example.com"
+      }
+
+      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+
+      update_params = %{
+        did: created_op.did,
+        signer: signing_keypair,
+        handle: "alice.bsky.social"
+      }
+
+      # Should raise
+      assert {:ok, %{operation: _updated_op}} = DidServer.Log.update_operation(update_params)
+      assert %{"type" => "plc_operation"} = DidServer.Log.validate_operation_log(created_op.did)
     end
 
     test "tombstones a DID" do
+      [signing_key | _] = signing_keypair_fixture()
+      [recovery_key | _] = signer = recovery_keypair_fixture()
+
       create_params = %{
         # type: "create",
-        signingKey: @signing_key,
-        recoveryKey: @recovery_key,
-        signer: @signer,
+        signingKey: signing_key,
+        recoveryKey: recovery_key,
+        signer: signer,
         handle: "bob.bsky.social",
         service: "https://pds.example.com"
       }
@@ -113,12 +139,13 @@ defmodule DidServer.LogTest do
 
       tombstone_params = %{
         type: "plc_tombstone",
-        did: @genesis_did,
-        signer: @signer
+        did: created_op.did,
+        signer: signer
       }
 
       assert {:ok, %{operation: tombstone}} = DidServer.Log.update_operation(tombstone_params)
       assert Operation.tombstone?(tombstone)
+      assert DidServer.Log.validate_operation_log(created_op.did) == nil
     end
   end
 end

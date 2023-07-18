@@ -56,8 +56,8 @@ defmodule Integrity.DidResolverTest do
     assert url == "https://server.example/users/alice/did.json"
 
     resp = fetch(url, [])
-    assert {:ok, json} = resp
-    assert {:ok, document} = Jason.decode(json)
+    assert {:ok, doc_json} = resp
+    assert {:ok, document} = Jason.decode(doc_json)
     assert document["id"] == @identifier
   end
 

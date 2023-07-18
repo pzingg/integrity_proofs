@@ -9,19 +9,37 @@ defmodule DidServer.Log.Operation do
     field(:cid, :string, primary_key: true)
     field(:operation, :string)
     field(:nullified, :boolean)
+    field(:op_data, :map, default: %{}, virtual: true)
 
     timestamps()
   end
 
-  def tombstone?(%__MODULE__{operation: operation}) do
-    %{"type" => type} = Jason.decode!(operation)
+  def operation?(%__MODULE__{op_data: %{"type" => type}}) do
+    type == "plc_operation"
+  end
+
+  def operation?(%__MODULE__{operation: op_json}) do
+    %{"type" => type} = Jason.decode!(op_json)
+    type == "plc_operation"
+  end
+
+  def operation?(%__MODULE__{op_data: %{"type" => type}}) do
     type == "plc_tombstone"
+  end
+
+  def tombstone?(%__MODULE__{operation: op_json}) do
+    %{"type" => type} = Jason.decode!(op_json)
+    type == "plc_tombstone"
+  end
+
+  def decode(%__MODULE__{operation: op_json} = op) do
+    %__MODULE__{op | op_data: Jason.decode!(op_json)}
   end
 
   def to_data(op, did \\ nil)
 
-  def to_data(%__MODULE__{did: op_did, operation: operation}, did) do
-    %{"type" => type} = data = Jason.decode!(operation)
+  def to_data(%__MODULE__{did: op_did, operation: op_json}, did) do
+    %{"type" => type} = data = Jason.decode!(op_json)
 
     if type == "plc_tombstone" do
       nil

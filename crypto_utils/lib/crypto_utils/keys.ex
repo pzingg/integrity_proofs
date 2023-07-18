@@ -69,7 +69,7 @@ defmodule CryptoUtils.Keys do
   and `make_private_key/3` for details on the return
   formats.
   """
-  def generate_key_pair(fmt, curve \\ :ed25519) do
+  def generate_keypair(fmt, curve \\ :ed25519) do
     type =
       case curve do
         :ed25519 -> :eddsa

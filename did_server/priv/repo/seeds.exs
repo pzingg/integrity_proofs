@@ -11,8 +11,8 @@
 # and so on) as they will fail if something goes wrong.
 
 if false do
-  {signing_key, _} = CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
-  {recovery_key, {algo, [priv, curve]}} = CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
+  {signing_key, _} = CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
+  {recovery_key, {algo, [priv, curve]}} = CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
 
   signer = [recovery_key, to_string(algo), priv, to_string(curve)]
 

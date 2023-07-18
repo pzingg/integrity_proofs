@@ -16,13 +16,21 @@ defmodule DidServer.LogFixtures do
     did
   end
 
-  @signing_key "did:key:z7r8ophEwkLiGhGmrnin9ThrA2pS7NA76tSf8dDEZZHbZpwk7KKKqbfvSWt1jgvQtEsTMMeE8hvjQW4XuR3aEHKEkQgF6"
-  @recovery_key "did:key:z7r8oqrsihsuZXwqLsSn3gdCAMy5uBg7beJZ73jkABERNGawEFzJfkC5Gn9uepGJ2m3yZkYEHgrHH9MTzHvPEH757JpNs"
-  @signer [
+  @signing_key "did:key:z7r8oofvCWdL3Y8TD3NuBsKiYKz6REqmkNteXjmhdXrGMA6w4TgiEEgA3YhgJy2gLPKygzvVUgoqEcLDd2Vtn5dpPCWoX"
+  @signing_keypair [
     @signing_key,
     "ecdsa",
-    <<42, 126, 190, 208, 196, 239, 16, 83, 187, 23, 182, 230, 215, 56, 175, 139, 174, 2, 108, 46,
-      204, 90, 165, 72, 17, 108, 90, 137, 226, 35, 81, 87>>,
+    <<227, 81, 77, 119, 225, 162, 50, 158, 96, 223, 15, 66, 246, 57, 87, 47, 176, 116, 78, 73, 21,
+      219, 250, 109, 220, 154, 236, 171, 203, 29, 180, 100>>,
+    "secp256k1"
+  ]
+
+  @recovery_key "did:key:z7r8oszBBiWkYzbhCu7tqABAwXW5ppVp9TFtLf6YnmP7M8KpjaNrE31PzQWSA7rxoJeuDBPMY9LH1DSHqQ26Nc2XZSAHv"
+  @signer [
+    @recovery_key,
+    "ecdsa",
+    <<34, 223, 210, 210, 107, 172, 126, 2, 107, 67, 41, 21, 117, 47, 136, 212, 69, 148, 181, 144,
+      114, 250, 75, 19, 27, 170, 84, 119, 164, 166, 123, 57>>,
     "secp256k1"
   ]
 
@@ -33,6 +41,9 @@ defmodule DidServer.LogFixtures do
     handle: "bob.bsky.social",
     service: "https://pds.example.com"
   }
+
+  def recovery_keypair_fixture(), do: @signer
+  def signing_keypair_fixture(), do: @signing_keypair
 
   def operation_fixture(attrs \\ @operation_attrs) do
     {:ok, %{operation: op}} =
