@@ -73,8 +73,8 @@ defmodule CryptoUtils.Did do
     defexception [:message]
 
     @impl true
-    def exception(_op) do
-      %__MODULE__{message: "operation is missing signature"}
+    def exception(op) do
+      %__MODULE__{message: "operation is missing signature:\n#{Jason.encode!(op, pretty: true)}"}
     end
   end
 

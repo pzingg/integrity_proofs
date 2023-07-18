@@ -10,6 +10,8 @@ defmodule DidServer.Log.Operation do
     field(:operation, :string)
     field(:nullified, :boolean)
     field(:op_data, :map, default: %{}, virtual: true)
+    field(:prev, :string, virtual: true)
+    field(:nullified_cids, {:array, :string}, default: [], virtual: true)
 
     timestamps()
   end
@@ -45,9 +47,10 @@ defmodule DidServer.Log.Operation do
       nil
     else
       did = did || op_did
+      prev = Map.fetch!(data, "prev")
 
       ["verificationMethods", "rotationKeys", "alsoKnownAs", "services"]
-      |> Enum.reduce(%{"type" => type, "did" => did}, fn field, acc ->
+      |> Enum.reduce(%{"type" => type, "did" => did, "prev" => prev}, fn field, acc ->
         case Map.get(data, field) do
           nil -> acc
           value -> Map.put(acc, field, value)
@@ -58,7 +61,24 @@ defmodule DidServer.Log.Operation do
 
   def changeset(%__MODULE__{} = op, attrs) do
     op
-    |> cast(attrs, [:did, :cid, :operation, :nullified])
+    |> cast(attrs, [:did, :cid, :operation, :nullified, :prev, :nullified_cids])
     |> validate_required([:did, :cid, :operation])
+    |> set_nullified()
+  end
+
+  def changeset_raw(%__MODULE__{} = op, attrs) do
+    op
+    |> cast(attrs, [:did, :cid, :operation, :nullified, :inserted_at, :prev, :nullified_cids])
+    |> validate_required([:did, :cid, :operation, :nullified, :inserted_at])
+    |> set_nullified()
+  end
+
+  def set_nullified(changeset) do
+    if changed?(changeset, :nullified) do
+      changeset
+    else
+      not_nullified = get_change(changeset, :nullified_cids, []) |> Enum.empty?()
+      put_change(changeset, :nullified, !not_nullified)
+    end
   end
 end

@@ -141,9 +141,10 @@ defmodule DidServer.Log do
   def create_operation(did, proposed) when is_binary(did) and is_map(proposed) do
     ops = list_operations(did)
 
-    {proposed, nullified_strs} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)
+    {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)
 
-    multi_insert_operation(did, proposed, nullified_strs)
+    multi_insert(did, proposed, nullified_cids)
+    |> Repo.transaction()
   end
 
   @doc """
@@ -213,7 +214,7 @@ defmodule DidServer.Log do
     end
   end
 
-  def ensure_last_op(_), do: raise(UpdateOperationError, "did cannot be blank")
+  def ensure_last_op(_), do: raise(UpdateOperationError, "did can't be blank")
 
   def validate_operation_log(did) do
     ops = list_operations(did, true)
@@ -241,19 +242,23 @@ defmodule DidServer.Log do
 
   # Private functions
 
-  defp multi_insert_operation(did, %{"prev" => prev} = proposed, nullified_strs) do
-    did_changeset = Did.changeset(%Did{}, %{did: did})
-
-    nullified? = !Enum.empty?(nullified_strs)
-
+  def multi_insert(did, %{"prev" => prev} = proposed, nullified_cids) do
     op_attrs = %{
       cid: CryptoUtils.Did.cid_for_op(proposed),
       did: did,
       operation: Jason.encode!(proposed),
-      nullified: nullified?
+      prev: prev,
+      nullified_cids: nullified_cids
     }
 
-    op_changeset = Operation.changeset(%Operation{}, op_attrs)
+    Operation.changeset(%Operation{}, op_attrs)
+    |> multi_insert()
+  end
+
+  def multi_insert(op_changeset, verify? \\ true) do
+    did = Ecto.Changeset.get_change(op_changeset, :did)
+    prev = Ecto.Changeset.get_change(op_changeset, :prev)
+    did_changeset = Did.changeset(%Did{}, %{did: did})
 
     multi =
       if is_nil(prev) do
@@ -265,28 +270,32 @@ defmodule DidServer.Log do
       end
 
     multi = Ecto.Multi.insert(multi, :operation, op_changeset, returning: true)
+    nullified_cids = Ecto.Changeset.get_change(op_changeset, :nullified_cids, [])
 
     multi =
-      if nullified? do
+      if !Enum.empty?(nullified_cids) do
         Ecto.Multi.update_all(
           multi,
           :nullified,
-          fn _multi -> nullify(did, nullified_strs) end,
+          fn _multi -> nullify(did, nullified_cids) end,
           []
         )
       else
         multi
       end
 
-    multi
-    |> Ecto.Multi.run(:most_recent, fn _repo, _multi -> verify_most_recent(did, prev) end)
-    |> Repo.transaction()
+    if verify? do
+      multi
+      |> Ecto.Multi.run(:most_recent, fn _repo, _multi -> verify_most_recent(did, prev) end)
+    else
+      multi
+    end
   end
 
-  defp nullify(did, nullified_strs) do
+  defp nullify(did, nullified_cids) do
     from(op in Operation,
       where: op.did == ^did,
-      where: op.cid in ^nullified_strs,
+      where: op.cid in ^nullified_cids,
       update: [set: [nullified: true]]
     )
   end

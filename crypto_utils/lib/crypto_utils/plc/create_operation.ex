@@ -33,6 +33,12 @@ defmodule CryptoUtils.Plc.CreateOperation do
       {:ok, %{type: type} = op} ->
         case type do
           "create" ->
+            rotation_keys =
+              case op.rotationKeys do
+                [_ | _] = keys -> keys
+                _ -> [op.recoveryKey]
+              end
+
             {:ok,
              {%CreateParams{
                 did: op.did,
@@ -40,7 +46,7 @@ defmodule CryptoUtils.Plc.CreateOperation do
                 prev: op.prev,
                 sig: op.sig,
                 verification_methods: %{"atproto" => op.signingKey},
-                rotation_keys: [op.recoveryKey],
+                rotation_keys: rotation_keys,
                 also_known_as: [CryptoUtils.ensure_atproto_prefix(op.handle)],
                 services: %{
                   "atproto_pds" => %{
@@ -106,18 +112,37 @@ defmodule CryptoUtils.Plc.CreateOperation do
         validate_required(changeset, [:verificationMethods, :rotationKeys, :alsoKnownAs])
 
       {_, "create"} ->
-        validate_required(changeset, [:signingKey, :recoveryKey, :handle, :service])
+        validate_v1_params(changeset)
 
       {signing_key, nil} when is_binary(signing_key) ->
         changeset
         |> put_change(:type, "create")
-        |> validate_required([:signingKey, :recoveryKey, :handle, :service])
+        |> validate_v1_params()
 
       _ ->
         add_error(changeset, :type, "is invalid",
           validation: :inclusion,
           enum: ["create", "plc_operation", "plc_tombstone"]
         )
+    end
+  end
+
+  def validate_v1_params(changeset) do
+    changeset
+    |> validate_required([:signingKey, :handle, :service])
+    |> validate_rotation_keys()
+  end
+
+  def validate_rotation_keys(changeset) do
+    case get_change(changeset, :rotationKeys) do
+      [_ | _] ->
+        changeset
+
+      _ ->
+        case get_change(changeset, :recoveryKey) do
+          key when is_binary(key) -> changeset
+          _ -> add_error(changeset, :recoveryKey, "can't be blank")
+        end
     end
   end
 end
