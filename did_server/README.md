@@ -1,5 +1,10 @@
 # DidServer
 
+A Phoenix-based web server backed by a PostgreSQL database 
+to demonstrate delivery and updating of DID identities.
+
+Both did:web and did:plc methods are implemented.
+
 To start your Phoenix server:
 
   * Run `mix setup` to install and setup dependencies
@@ -16,3 +21,16 @@ Ready to run in production? Please [check our deployment guides](https://hexdocs
   * Docs: https://hexdocs.pm/phoenix
   * Forum: https://elixirforum.com/c/phoenix-forum
   * Source: https://github.com/phoenixframework/phoenix
+
+## did:web
+
+(Development) URLs for fetching DID documents are, e.g.
+
+* http://localhost:4000/.well-known/did.json
+* http://localhost:4000/user/alice/did.json
+
+## did:plc
+
+(Development) URLs for fetching DID documents are, e.g.
+
+* http://localhost:4000/plc/did%3Aplc%3A4heftswx5xresjexdo4nnpmj

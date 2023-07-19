@@ -31,6 +31,7 @@ defmodule Integrity do
           | {:public_key_bytes, binary()}
           | {:private_key_pem, String.t()}
           | {:public_key_pem, String.t()}
+          | {:also_known_as, String.t() | [String.t()]}
           | {:multibase_value, String.t()}
           | {:public_key_format, String.t()}
           | {:signature_method_fragment, String.t()}
@@ -47,6 +48,15 @@ defmodule Integrity do
 
   defmodule ProofConfig do
     defstruct context: nil, type: nil, verification_method: nil, proof_purpose: nil
+  end
+
+  defmodule DidResolutionError do
+    defexception [:did, :reason]
+
+    @impl true
+    def message(%{did: did, reason: reason}) do
+      "Failed to resolve DID #{did}: #{reason}"
+    end
   end
 
   defmodule ProofTransformationError do
@@ -109,15 +119,6 @@ defmodule Integrity do
     @impl true
     def message(%{method: method, purpose: purpose}) do
       "Invalid proof purpose #{purpose} for verification method #{inspect(method)}"
-    end
-  end
-
-  defmodule InvalidPublicKeyError do
-    defexception [:multibase, :reason]
-
-    @impl true
-    def message(%{multibase: multibase, reason: reason}) do
-      "Invalid public Multikey #{multibase}: #{reason}"
     end
   end
 
@@ -543,7 +544,7 @@ defmodule Integrity do
     cond do
       is_map(proof) && is_map(cached_controller_document) ->
         verification_method = verification_method!(proof, options)
-        {:ok, public_key} = Integrity.extract_multikey(verification_method, fmt)
+        {:ok, public_key} = CryptoUtils.Keys.extract_multikey(verification_method, fmt)
         public_key
 
       is_binary(pub) ->
@@ -661,55 +662,6 @@ defmodule Integrity do
   end
 
   @doc """
-  Extracts the public key from a "Multikey" verification method.
-
-  See `CryptoUtils.Keys.make_public_key/3` for details on the formats for the
-  returned key.
-  """
-  def extract_multikey(verification_method, fmt \\ :crypto_algo_key)
-
-  def extract_multikey(
-        %{"type" => "Multikey", "publicKeyMultibase" => multibase_value},
-        fmt
-      )
-      when is_binary(multibase_value) do
-    # TODO: Don't hard code the curve name
-    with {:ok, {pub, _multicodec_mapping}} <- decode_multikey(multibase_value) do
-      {:ok, CryptoUtils.Keys.make_public_key(pub, :ed25519, fmt)}
-    end
-  end
-
-  def extract_multikey(_, _), do: {:error, "not a Multikey verification method"}
-
-  @doc """
-  Decodes the public key from a "Multikey" verification method's
-  multibase value.
-
-  Returns `{:ok, {raw_public_key_bytes, multicodec_mapping}}` on success.
-  """
-  def decode_multikey(multibase_value) do
-    with {:ok, {public_key, :base58_btc}} <- Multibase.codec_decode(multibase_value),
-         {:ok, {raw_public_key_bytes, codec}} <- Multicodec.codec_decode(public_key),
-         {:ok, mapping} <- find_multicodec_mapping(codec) do
-      {:ok, {raw_public_key_bytes, mapping}}
-    end
-  end
-
-  @doc """
-  Decodes the public key from a "Multikey" verification method's
-  multibase value.
-
-  Returns `{raw_public_key_bytes, codec, multicodec_mapping}` on success.
-  Raises `InvalidPublicKeyError` on failure.
-  """
-  def decode_multikey!(multibase_value) do
-    case decode_multikey(multibase_value) do
-      {:ok, tuple} -> tuple
-      {:error, reason} -> raise InvalidPublicKeyError, multibase: multibase_value, reason: reason
-    end
-  end
-
-  @doc """
   Returns `true` if a binary or URI is a recognized DID method
   that has a non-empty method-specific id.
   """
@@ -721,7 +673,7 @@ defmodule Integrity do
       when is_binary(path) do
     case String.split(path, ":") do
       [did_method | [did_value | _]] ->
-        did_method in Integrity.Did.valid_did_methods() && did_value != ""
+        did_method in CryptoUtils.Did.valid_did_methods() && did_value != ""
 
       _ ->
         false
@@ -744,19 +696,6 @@ defmodule Integrity do
 
   def http_uri?(_), do: false
 
-  @doc """
-  Used for debugging. Displays a raw binary as a list of integer
-  byte values, comma-separated, and enclosed in "<<" ">>".
-  """
-  def display_bytes(bin) do
-    out =
-      :binary.bin_to_list(bin)
-      |> Enum.map(&Integer.to_string(&1))
-      |> Enum.join(", ")
-
-    "<<" <> out <> ">>"
-  end
-
   defp dereference_controller_document!(_controller_document_url, options) do
     built_in = Keyword.get(options, :cached_controller_document)
     built_in
@@ -772,15 +711,6 @@ defmodule Integrity do
       vm when is_map(vm) -> Map.fetch!(vm, "id") == vm_url
       _ -> false
     end)
-  end
-
-  defp find_multicodec_mapping(codec) do
-    Multicodec.mappings()
-    |> Enum.find(fn %Multicodec.MulticodecMapping{codec: c} -> c == codec end)
-    |> case do
-      %Multicodec.MulticodecMapping{} = mapping -> {:ok, mapping}
-      _ -> {:error, "mapping for codec #{codec} not found"}
-    end
   end
 
   defp maybe_format_datetime(dt) when is_binary(dt), do: dt
@@ -809,7 +739,7 @@ defmodule Integrity do
   defp valid_datetime?(_), do: false
 
   defp valid_verification_method?(verification_method) when is_map(verification_method) do
-    case extract_multikey(verification_method) do
+    case CryptoUtils.Keys.extract_multikey(verification_method) do
       {:ok, _key} -> true
       _ -> false
     end

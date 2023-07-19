@@ -9,7 +9,8 @@ defmodule Integrity.DidTest do
   @did_document %{
     "@context" => [
       "https://www.w3.org/ns/did/v1",
-      "https://w3id.org/security/data-integrity/v1"
+      "https://w3id.org/security/data-integrity/v1",
+      "https://w3id.org/security/suites/ed25519-2020/v1"
     ],
     "id" => @identifier,
     "assertionMethod" => [
@@ -36,7 +37,7 @@ defmodule Integrity.DidTest do
 
   test "builds a DID document" do
     document =
-      Integrity.Did.build_did_document!(@identifier,
+      CryptoUtils.Did.format_did_document!(@identifier,
         signature_method_fragment: "keys-1",
         encryption_method_fragment: "keys-2",
         enable_encryption_key_derivation: false

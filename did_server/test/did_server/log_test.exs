@@ -37,26 +37,149 @@ defmodule DidServer.LogTest do
   describe "operations" do
     alias DidServer.Log.Operation
 
-    test "inserts a new create operation" do
-      {signing_key, _} = CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
-      {recovery_key, _} = signer = CryptoUtils.Keys.generate_key_pair(:did_key, :secp256k1)
+    import DidServer.LogFixtures
 
-      assert String.starts_with?(signing_key, "did:key:z7")
-      assert String.starts_with?(recovery_key, "did:key:z7")
+    test "list_operations/0 returns all operations" do
+      %Operation{did: did} = op = operation_fixture()
+      assert Log.list_operations(did) == [op]
+    end
 
-      {op, did} =
-        DidServer.create_op(
-          signing_key: signing_key,
-          recovery_key: recovery_key,
-          signer: signer,
-          handle: "at://bob.bsky.social",
-          service: "https://pds.example.com"
-        )
+    test "creates a valid create op" do
+      [signing_key | _] = signing_keypair_fixture()
+      [recovery_key | _] = signer = recovery_keypair_fixture()
 
-      assert "did:plc:" <> <<_id::binary-size(24)>> = did
+      params = %{
+        # type: "create",
+        signingKey: signing_key,
+        recoveryKey: recovery_key,
+        signer: signer,
+        handle: "bob.bsky.social",
+        service: "https://pds.example.com"
+      }
 
-      assert {:ok, %{did: %{did: did}, operation: %{did: did}, most_recent: nil}} =
-               Log.validate_and_add_op(did, op)
+      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(params)
+      assert created_op.did == "did:plc:dwzaeljhfaoefhde3xthkcio"
+      assert %{"type" => "plc_operation"} = DidServer.Log.validate_operation_log(created_op.did)
+    end
+
+    test "updates handle" do
+      [signing_key | _] = signing_keypair_fixture()
+      [recovery_key | _] = signer = recovery_keypair_fixture()
+
+      create_params = %{
+        # type: "create",
+        signingKey: signing_key,
+        recoveryKey: recovery_key,
+        signer: signer,
+        handle: "bob.bsky.social",
+        service: "https://pds.example.com"
+      }
+
+      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+
+      created_op_data = Operation.to_data(created_op)
+      assert Map.get(created_op_data, "alsoKnownAs") == ["at://bob.bsky.social"]
+
+      update_params = %{
+        did: created_op.did,
+        signer: signer,
+        handle: "alice.bsky.social"
+      }
+
+      assert {:ok, %{operation: updated_op}} = DidServer.Log.update_operation(update_params)
+
+      updated_op_data = Operation.to_data(updated_op)
+      assert Map.get(updated_op_data, "alsoKnownAs") == ["at://alice.bsky.social"]
+      assert %{"type" => "plc_operation"} = DidServer.Log.validate_operation_log(created_op.did)
+    end
+
+    test "does not allow operations from the signingKey" do
+      [signing_key | _] = signing_keypair = signing_keypair_fixture()
+      [recovery_key | _] = signer = recovery_keypair_fixture()
+
+      create_params = %{
+        # type: "create",
+        signingKey: signing_key,
+        recoveryKey: recovery_key,
+        signer: signer,
+        handle: "bob.bsky.social",
+        service: "https://pds.example.com"
+      }
+
+      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+
+      update_params = %{
+        did: created_op.did,
+        signer: signing_keypair,
+        handle: "alice.bsky.social"
+      }
+
+      assert_raise(CryptoUtils.Did.InvalidSignatureError, fn ->
+        DidServer.Log.update_operation(update_params)
+      end)
+    end
+
+    test "tombstones a DID" do
+      [signing_key | _] = signing_keypair_fixture()
+      [recovery_key | _] = signer = recovery_keypair_fixture()
+
+      create_params = %{
+        # type: "create",
+        signingKey: signing_key,
+        recoveryKey: recovery_key,
+        signer: signer,
+        handle: "bob.bsky.social",
+        service: "https://pds.example.com"
+      }
+
+      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+
+      created_op_data = Operation.to_data(created_op)
+      assert Map.get(created_op_data, "alsoKnownAs") == ["at://bob.bsky.social"]
+
+      tombstone_params = %{
+        type: "plc_tombstone",
+        did: created_op.did,
+        signer: signer
+      }
+
+      assert {:ok, %{operation: tombstone}} = DidServer.Log.update_operation(tombstone_params)
+      assert Operation.tombstone?(tombstone)
+      assert DidServer.Log.validate_operation_log(created_op.did) == nil
+    end
+
+    test "does not allow a tombstone in the middle of the log" do
+      [signing_key | _] = signing_keypair_fixture()
+      [recovery_key | _] = signer = recovery_keypair_fixture()
+
+      create_params = %{
+        # type: "create",
+        signingKey: signing_key,
+        recoveryKey: recovery_key,
+        signer: signer,
+        handle: "bob.bsky.social",
+        service: "https://pds.example.com"
+      }
+
+      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+
+      tombstone_params = %{
+        type: "plc_tombstone",
+        did: created_op.did,
+        signer: signer
+      }
+
+      _ = DidServer.Log.update_operation(tombstone_params)
+
+      update_params = %{
+        did: created_op.did,
+        signer: signer,
+        handle: "alice.bsky.social"
+      }
+
+      assert_raise(DidServer.UpdateOperationError, fn ->
+        DidServer.Log.update_operation(update_params)
+      end)
     end
   end
 end

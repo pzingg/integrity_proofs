@@ -14,7 +14,7 @@ defmodule Integrity.DidResolverTest do
     TestServer.add("/users/alice/did.json",
       to: fn conn ->
         body =
-          Integrity.Did.build_did_document!(@identifier,
+          CryptoUtils.Did.format_did_document!(@identifier,
             multibase_value: @multibase_value,
             signature_method_fragment: "keys-1"
           )
@@ -51,13 +51,13 @@ defmodule Integrity.DidResolverTest do
   end
 
   test "resolves a did:web identifier" do
-    {:ok, uri} = Integrity.Did.did_web_uri(@identifier)
+    {:ok, uri} = CryptoUtils.Did.did_web_uri(@identifier)
     url = URI.to_string(uri)
     assert url == "https://server.example/users/alice/did.json"
 
     resp = fetch(url, [])
-    assert {:ok, json} = resp
-    assert {:ok, document} = Jason.decode(json)
+    assert {:ok, doc_json} = resp
+    assert {:ok, document} = Jason.decode(doc_json)
     assert document["id"] == @identifier
   end
 

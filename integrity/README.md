@@ -29,15 +29,10 @@ be found at <https://hexdocs.pm/integrity>.
 
 ## Dependencies
 
-See the README files in the `crypto_utils` and `did_server` folders
-in the parent project for more information on these libraries and applications.
+See the README files in the `crypto_utils` folder
+in the parent project for more information on this library.
 The application also depends on the [jcs](https://github.com/pzingg/jcs) library,
 not yet published on HexDocs.
-
-## Optional DID server
-
-The `did_server` web server and database application is not automatically
-started, unless the environment variable "START_DID_SERVER" is set.
 
 ## Status and roadmap
 
