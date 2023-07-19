@@ -20,7 +20,9 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def exception(expected_did) do
-      %__MODULE__{message: "expected did #{expected_did} for genesis operation"}
+      %__MODULE__{
+        message: "expected did #{CryptoUtils.display_did(expected_did)} for genesis operation"
+      }
     end
   end
 
@@ -29,7 +31,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def message(%{op: op, message: message}) do
-      "#{message}, op: #{inspect(op)}"
+      "#{message}, #{CryptoUtils.display_op(op)}"
     end
   end
 
@@ -47,7 +49,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def message(%{op: op, allowed_keys: keys}) do
-      "invalid signature, op: #{inspect(op)}, keys: #{inspect(Enum.map(keys, &CryptoUtils.display_did(&1)))}"
+      "invalid signature, #{CryptoUtils.display_op(op)} keys #{inspect(Enum.map(keys, &CryptoUtils.display_did(&1)))}"
     end
   end
 
@@ -61,11 +63,11 @@ defmodule CryptoUtils.Did do
   end
 
   defmodule MisorderedOperationError do
-    defexception [:message]
+    defexception [:op, :message]
 
     @impl true
-    def exception(reason) do
-      %__MODULE__{message: "misordered plc operation: #{reason}"}
+    def message(%{op: op, message: message}) do
+      "misordered plc operation: #{message}, #{CryptoUtils.display_op(op)}"
     end
   end
 
@@ -74,7 +76,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def exception(op) do
-      %__MODULE__{message: "operation is missing signature:\n#{Jason.encode!(op, pretty: true)}"}
+      %__MODULE__{message: "operation is missing signature, #{CryptoUtils.display_op(op)}"}
     end
   end
 
@@ -754,8 +756,21 @@ defmodule CryptoUtils.Did do
     end
   end
 
+  # tombstones must have "prev"
+  def normalize_op(%CreateParams{type: "plc_tombstone", prev: nil} = op) do
+    raise MisorderedOperationError, op: op, message: "genesis operation cannot be a tombstone"
+  end
+
+  def normalize_op(%CreateParams{type: "plc_tombstone", prev: prev, sig: sig}) do
+    %{
+      "type" => "plc_tombstone",
+      "prev" => prev
+    }
+    |> maybe_add_sig(sig)
+  end
+
   def normalize_op(%CreateParams{type: type, sig: sig} = op) when is_binary(type) do
-    normalized_op = %{
+    %{
       "type" => type,
       "verificationMethods" => op.verification_methods,
       "rotationKeys" => op.rotation_keys,
@@ -763,15 +778,13 @@ defmodule CryptoUtils.Did do
       "services" => op.services,
       "prev" => op.prev
     }
-
-    if is_nil(sig) do
-      normalized_op
-    else
-      Map.put(normalized_op, "sig", sig)
-    end
+    |> maybe_add_sig(sig)
   end
 
   def normalize_op(%{"type" => _type} = op), do: op
+
+  def maybe_add_sig(op, nil), do: op
+  def maybe_add_sig(op, sig), do: Map.put(op, "sig", sig)
 
   def assure_valid_next_op(did, ops, proposed)
       when is_binary(did) and is_list(ops) and is_map(proposed) do
@@ -798,8 +811,8 @@ defmodule CryptoUtils.Did do
     "did:plc:#{truncated_id}"
   end
 
-  def did_for_create_op(_) do
-    raise MisorderedOperationError, "not a genesis operation"
+  def did_for_create_op(op) do
+    raise MisorderedOperationError, op: op, message: "not a genesis operation"
   end
 
   def cid_for_op(op) do
@@ -824,12 +837,13 @@ defmodule CryptoUtils.Did do
                                                 saw_tombstone} ->
         # if tombstone found before last op, throw
         if saw_tombstone do
-          raise MisorderedOperationError, "tombstone not last in log of #{did}"
+          raise MisorderedOperationError, op: op, message: "tombstone not last in log of #{did}"
         end
 
         if is_nil(op_prev) || op_prev != prev do
           raise MisorderedOperationError,
-                "prev CID #{op_prev} does not match #{prev} in log of #{did}"
+            op: op,
+            message: "prev CID #{op_prev} does not match #{prev} in log of #{did}"
         end
 
         assure_valid_sig(rotation_keys, op)
@@ -882,13 +896,13 @@ defmodule CryptoUtils.Did do
 
   defp assure_valid_op_order_and_sig(ops, %{"prev" => prev} = proposed) do
     if is_nil(prev) do
-      raise MisorderedOperationError, "no prev CID in operation"
+      raise MisorderedOperationError, op: proposed, message: "no prev CID in operation"
     end
 
     index_of_prev = Enum.find_index(ops, fn %{cid: cid} -> prev == cid end)
 
     if is_nil(index_of_prev) do
-      raise MisorderedOperationError, "prev CID #{prev} not found"
+      raise MisorderedOperationError, op: proposed, message: "prev CID #{prev} not found"
     end
 
     # if we are forking history, these are the ops still in the proposed
@@ -899,14 +913,18 @@ defmodule CryptoUtils.Did do
     %{"type" => last_op_type, "rotationKeys" => rotation_keys} =
       case last_op do
         nil ->
-          raise MisorderedOperationError, "no prev operation at #{index_of_prev}"
+          raise MisorderedOperationError,
+            op: proposed,
+            message: "no prev operation at #{index_of_prev}"
 
         %{operation: op_json} ->
           Jason.decode!(op_json)
       end
 
     if last_op_type == "plc_tombstone" do
-      raise MisorderedOperationError, "prev operation cannot be a tombstone"
+      raise MisorderedOperationError,
+        op: proposed,
+        message: "prev operation cannot be a tombstone"
     end
 
     case nullified do
@@ -940,8 +958,9 @@ defmodule CryptoUtils.Did do
     {proposed, Enum.map(nullified, fn %{cid: cid} -> cid end)}
   end
 
-  defp assure_valid_creation_op(_did, %{"type" => "plc_tombstone"}) do
-    raise MisorderedOperationError, "genesis operation cannot be a tombstone"
+  # tombstones must have "prev"
+  defp assure_valid_creation_op(_did, %{"type" => "plc_tombstone"} = op) do
+    raise MisorderedOperationError, op: op, message: "genesis operation cannot be a tombstone"
   end
 
   defp assure_valid_creation_op(did, %{"rotationKeys" => rotation_keys, "prev" => prev} = op) do
@@ -982,9 +1001,6 @@ defmodule CryptoUtils.Did do
     assure_rotation_keys(op, rotation_keys)
   end
 
-  # tombstones are never signed
-  defp assure_valid_sig(_allowed_did_keys, %{"type" => "plc_tombstone"}), do: true
-
   defp assure_valid_sig(allowed_did_keys, %{"sig" => sig} = op) when is_binary(sig) do
     try do
       _ = assure_rotation_keys(op, allowed_did_keys)
@@ -1005,7 +1021,7 @@ defmodule CryptoUtils.Did do
   end
 
   # no signature element
-  defp assure_valid_sig(_allowed_did_keys, op), do: raise MissingSignatureError, op
+  defp assure_valid_sig(_allowed_did_keys, op), do: raise(MissingSignatureError, op)
 
   defp assure_rotation_keys(op, []) do
     raise ImproperOperationError, op: op, message: "need at least one rotation key"

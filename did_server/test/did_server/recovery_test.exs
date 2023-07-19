@@ -243,8 +243,14 @@ defmodule DidSever.RecoveryTest do
   defp nullifies_tombstone(now) do
     {:ok, %{did: did, cid: create_cid}} = setup_genesis(now)
 
-    op = %{"type" => "plc_tombstone", "prev" => create_cid}
-    tombstone_changeset = changeset(op, did, create_cid, now)
+    twenty_four_hours_ago = DateTime.add(now, -(24 * 3600), :second)
+
+    tombstone_changeset =
+      sign_op_for_keys([@rotation_key_3], @rotation_key_3, twenty_four_hours_ago,
+        did: did,
+        prev: create_cid,
+        type: "plc_tombstone"
+      )
 
     assert {:ok, %{operation: %Operation{} = tombstone}} =
              tombstone_changeset
@@ -264,10 +270,11 @@ defmodule DidSever.RecoveryTest do
   end
 
   defp sign_op_for_keys(keys, {signer_did, {algorithm, [priv, curve]}}, inserted_at, opts \\ []) do
+    type = Keyword.get(opts, :type, "create")
     prev = Keyword.get(opts, :prev)
 
     params = %{
-      type: "create",
+      type: type,
       did: Keyword.get(opts, :did),
       prev: prev,
       signingKey: elem(@signing_key, 0),
