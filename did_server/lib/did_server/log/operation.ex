@@ -38,7 +38,7 @@ defmodule DidServer.Log.Operation do
     %__MODULE__{op | op_data: Jason.decode!(op_json)}
   end
 
-  def to_data(%__MODULE__{did: op_did, operation: op_json}) do
+  def to_data(%__MODULE__{operation: op_json}) do
     %{"type" => type} = data = Jason.decode!(op_json)
 
     if type == "plc_tombstone" do
