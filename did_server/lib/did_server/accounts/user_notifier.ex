@@ -22,7 +22,10 @@ defmodule DidServer.Accounts.UserNotifier do
     end
     """
 
-    IO.puts("mail #{subject} #{body} delivered to #{recipient}")
+    IO.puts("To: #{recipient}\n\n#{body}")
+
+    {:ok,
+     %{to: recipient, from: "DidServer <contact@example.com>", subject: subject, text_body: body}}
   end
 
   @doc """

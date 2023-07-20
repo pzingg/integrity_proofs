@@ -16,27 +16,27 @@ defmodule DidSever.RecoveryTest do
 
   describe "key recovery" do
     test "allows a rotation key with higher authority to rewrite history" do
-      NaiveDateTime.utc_now() |> key_2_asserts_control()
+      DateTime.utc_now() |> key_2_asserts_control()
     end
 
     test "does not allow the lower authority key to take control back" do
-      NaiveDateTime.utc_now() |> key_3_attempts_control()
+      DateTime.utc_now() |> key_3_attempts_control()
     end
 
     test "allows a rotation key with even higher authority to rewrite history" do
-      NaiveDateTime.utc_now() |> key_1_asserts_control_after_key_2()
+      DateTime.utc_now() |> key_1_asserts_control_after_key_2()
     end
 
     test "does not allow the either invalidated key to take control back" do
-      NaiveDateTime.utc_now() |> invalidated_keys_fail_to_take_back_control()
+      DateTime.utc_now() |> invalidated_keys_fail_to_take_back_control()
     end
 
     test "does not allow recovery outside of 72 hrs" do
-      NaiveDateTime.utc_now() |> fails_expired_recovery()
+      DateTime.utc_now() |> fails_expired_recovery()
     end
 
     test "allows recovery from a tombstoned DID" do
-      NaiveDateTime.utc_now() |> nullifies_tombstone()
+      DateTime.utc_now() |> nullifies_tombstone()
     end
   end
 
@@ -281,7 +281,8 @@ defmodule DidSever.RecoveryTest do
       rotationKeys: Enum.map(keys, &elem(&1, 0)),
       handle: @handle,
       service: @service,
-      signer: [signer_did, to_string(algorithm), priv, to_string(curve)]
+      signer: [signer_did, to_string(algorithm), priv, to_string(curve)],
+      password: "bluesky"
     }
 
     params =
@@ -290,7 +291,7 @@ defmodule DidSever.RecoveryTest do
         nil -> params
       end
 
-    {:ok, {op, did}} = CryptoUtils.Did.create_operation(params)
+    {:ok, {op, did, _password}} = CryptoUtils.Did.create_operation(params)
     changeset(op, did, prev, inserted_at)
   end
 

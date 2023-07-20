@@ -7,7 +7,7 @@ defmodule DidServer.LogFixtures do
   @doc """
   Generate a did.
   """
-  def did_fixture(attrs \\ %{did: "did:plc:y54rrfl37i5wqztksze4bddl"}) do
+  def did_fixture(attrs \\ %{did: "did:plc:y54rrfl37i5wqztksze4bddl", password: "bluesky"}) do
     {:ok, did} =
       attrs
       |> Enum.into(%{})
@@ -39,7 +39,8 @@ defmodule DidServer.LogFixtures do
     recoveryKey: @recovery_key,
     signer: @signer,
     handle: "bob.bsky.social",
-    service: "https://pds.example.com"
+    service: "https://pds.example.com",
+    password: "bluesky"
   }
 
   def recovery_keypair_fixture(), do: @signer

@@ -278,6 +278,7 @@ defmodule DidServer.Log do
       end
 
     multi = Ecto.Multi.insert(multi, :operation, op_changeset, returning: true)
+
     nullified_cids = Ecto.Changeset.get_change(op_changeset, :nullified_cids, [])
 
     multi =

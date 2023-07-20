@@ -8,7 +8,7 @@ defmodule DidServer.LogTest do
 
     import DidServer.LogFixtures
 
-    @invalid_attrs %{"did" => nil}
+    @invalid_attrs %{"did" => nil, "password" => nil}
 
     test "list_dids/0 returns all dids" do
       did = did_fixture()
@@ -21,7 +21,8 @@ defmodule DidServer.LogTest do
     end
 
     test "create_did/1 succeeds with valid attributes" do
-      {:ok, %Did{}} = Log.create_did(%{did: "did:plc:y54rrfl37i5wqztksze4bddl"})
+      {:ok, %Did{}} =
+        Log.create_did(%{did: "did:plc:y54rrfl37i5wqztksze4bddl", password: "bluesky"})
     end
 
     test "create_did/1 fails with invalid attributes" do
@@ -41,7 +42,7 @@ defmodule DidServer.LogTest do
 
     test "list_operations/0 returns all operations" do
       %Operation{did: did} = op = operation_fixture()
-      assert Log.list_operations(did) == [op]
+      assert Log.list_operations(did) == [%{op | password: nil}]
     end
 
     test "creates a valid create op" do
@@ -54,7 +55,8 @@ defmodule DidServer.LogTest do
         recoveryKey: recovery_key,
         signer: signer,
         handle: "bob.bsky.social",
-        service: "https://pds.example.com"
+        service: "https://pds.example.com",
+        password: "bluesky"
       }
 
       assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(params)
@@ -72,7 +74,8 @@ defmodule DidServer.LogTest do
         recoveryKey: recovery_key,
         signer: signer,
         handle: "bob.bsky.social",
-        service: "https://pds.example.com"
+        service: "https://pds.example.com",
+        password: "bluesky"
       }
 
       assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
@@ -103,7 +106,8 @@ defmodule DidServer.LogTest do
         recoveryKey: recovery_key,
         signer: signer,
         handle: "bob.bsky.social",
-        service: "https://pds.example.com"
+        service: "https://pds.example.com",
+        password: "bluesky"
       }
 
       assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
@@ -129,7 +133,8 @@ defmodule DidServer.LogTest do
         recoveryKey: recovery_key,
         signer: signer,
         handle: "bob.bsky.social",
-        service: "https://pds.example.com"
+        service: "https://pds.example.com",
+        password: "bluesky"
       }
 
       assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
@@ -158,7 +163,8 @@ defmodule DidServer.LogTest do
         recoveryKey: recovery_key,
         signer: signer,
         handle: "bob.bsky.social",
-        service: "https://pds.example.com"
+        service: "https://pds.example.com",
+        password: "bluesky"
       }
 
       assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
