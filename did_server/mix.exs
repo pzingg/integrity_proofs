@@ -19,7 +19,7 @@ defmodule DidServer.MixProject do
   def application do
     [
       mod: {DidServer.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :xmerl, :inets]
     ]
   end
 
@@ -32,6 +32,7 @@ defmodule DidServer.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
+      {:bcrypt_elixir, "~> 3.0"},
       {:phoenix, "~> 1.7.1"},
       {:phoenix_ecto, "~> 4.4"},
       {:ecto_sql, "~> 3.6"},

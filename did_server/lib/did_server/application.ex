@@ -34,8 +34,19 @@ defmodule DidServer.Application do
     :ok
   end
 
+  def name() do
+    # TODO: specify in config
+    "DID Server"
+  end
+
   def version() do
     {:ok, vsn} = :application.get_key(:did_server, :vsn)
     List.to_string(vsn)
   end
+
+  def protocols() do
+    # TODO: specify in config
+    ["activitypub"]
+  end
+
 end

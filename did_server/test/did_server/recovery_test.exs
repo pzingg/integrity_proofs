@@ -16,27 +16,27 @@ defmodule DidSever.RecoveryTest do
 
   describe "key recovery" do
     test "allows a rotation key with higher authority to rewrite history" do
-      DateTime.utc_now() |> key_2_asserts_control()
+      NaiveDateTime.utc_now() |> key_2_asserts_control()
     end
 
     test "does not allow the lower authority key to take control back" do
-      DateTime.utc_now() |> key_3_attempts_control()
+      NaiveDateTime.utc_now() |> key_3_attempts_control()
     end
 
     test "allows a rotation key with even higher authority to rewrite history" do
-      DateTime.utc_now() |> key_1_asserts_control_after_key_2()
+      NaiveDateTime.utc_now() |> key_1_asserts_control_after_key_2()
     end
 
     test "does not allow the either invalidated key to take control back" do
-      DateTime.utc_now() |> invalidated_keys_fail_to_take_back_control()
+      NaiveDateTime.utc_now() |> invalidated_keys_fail_to_take_back_control()
     end
 
     test "does not allow recovery outside of 72 hrs" do
-      DateTime.utc_now() |> fails_expired_recovery()
+      NaiveDateTime.utc_now() |> fails_expired_recovery()
     end
 
     test "allows recovery from a tombstoned DID" do
-      DateTime.utc_now() |> nullifies_tombstone()
+      NaiveDateTime.utc_now() |> nullifies_tombstone()
     end
   end
 

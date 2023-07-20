@@ -1,0 +1,308 @@
+defmodule DidServerWeb.WebFinger do
+  @moduledoc """
+  From Pleroma: A lightweight social networking server
+  Copyright © 2017-2021 Pleroma Authors <https://pleroma.social/>
+  SPDX-License-Identifier: AGPL-3.0-only
+  """
+
+  require Logger
+
+  alias DidServerWeb.Utils
+  alias DidServer.Accounts
+  alias DidServer.Accounts.User
+  alias DidServerWeb.XMLBuilder
+
+  @accept_header_value_xml "application/xrd+xml"
+  @accept_header_value_json "application/jrd+json"
+
+  def host_meta do
+    base_url = DidServerWeb.Endpoint.url()
+
+    {
+      :XRD,
+      %{xmlns: "http://docs.oasis-open.org/ns/xri/xrd-1.0"},
+      {
+        :Link,
+        %{
+          rel: "lrdd",
+          type: @accept_header_value_xml,
+          template: "#{base_url}/.well-known/webfinger?resource={uri}"
+        }
+      }
+    }
+    |> XMLBuilder.to_doc()
+  end
+
+  def webfinger(resource, fmt) when is_binary(resource) and fmt in [:xml, :json] do
+    host = DidServerWeb.Endpoint.host()
+
+    regex =
+      if webfinger_domain = Application.get_env(:fedi_server, :web_finger_domain) do
+        ~r/(acct:)?(?<username>[a-z0-9A-Z_\.-]+)@(#{host}|#{webfinger_domain})/
+      else
+        ~r/(acct:)?(?<username>[a-z0-9A-Z_\.-]+)@#{host}/
+      end
+
+    with %{"username" => nickname} <- Regex.named_captures(regex, resource),
+         %User{} = user <- Accounts.get_user_by_username(nickname) do
+      {:ok, represent_user(user, fmt)}
+    else
+      _ ->
+        resource = Utils.to_uri(resource)
+
+        with %User{} = user <- Accounts.get_user_by_ap_id(resource) do
+          {:ok, represent_user(user, fmt)}
+        else
+          _ ->
+            {:error, "User not found"}
+        end
+    end
+  end
+
+  defp gather_links(%User{} = user) do
+    [
+      %{
+        "rel" => "self",
+        "type" => "application/activity+json",
+        "href" => User.ap_id(user)
+      }
+      # %{
+      #  "rel" => "http://webfinger.net/rel/profile-page",
+      #  "type" => "text/html",
+      #  "href" => User.ap_id(user)
+      # }
+    ]
+  end
+
+  defp gather_aliases(%User{} = user) do
+    # | user.also_known_as]
+    [User.ap_id(user)]
+  end
+
+  def represent_user(user, :json) do
+    %{
+      "subject" => "acct:#{user.nickname}@#{domain()}",
+      "aliases" => gather_aliases(user),
+      "links" => gather_links(user)
+    }
+  end
+
+  def represent_user(user, :xml) do
+    aliases =
+      user
+      |> gather_aliases()
+      |> Enum.map(&{:Alias, &1})
+
+    links =
+      gather_links(user)
+      |> Enum.map(fn link -> {:Link, link} end)
+
+    {
+      :XRD,
+      %{xmlns: "http://docs.oasis-open.org/ns/xri/xrd-1.0"},
+      [
+        {:Subject, "acct:#{user.nickname}@#{domain()}"}
+      ] ++ aliases ++ links
+    }
+    |> XMLBuilder.to_doc()
+  end
+
+  defp domain do
+    Application.get_env(:fedi_server, :web_finger_domain) || DidServerWeb.Endpoint.host()
+  end
+
+  defp webfinger_from_xml(body) do
+    with {:ok, doc} <- parse_document(body) do
+      subject = string_from_xpath("//Subject", doc)
+
+      subscribe_address =
+        ~s{//Link[@rel="http://ostatus.org/schema/1.0/subscribe"]/@template}
+        |> string_from_xpath(doc)
+
+      ap_id =
+        ~s{//Link[@rel="self" and @type="application/activity+json"]/@href}
+        |> string_from_xpath(doc)
+
+      data = %{
+        "subject" => subject,
+        "subscribe_address" => subscribe_address,
+        "ap_id" => ap_id
+      }
+
+      {:ok, data}
+    end
+  end
+
+  defp webfinger_from_json(body) do
+    with {:ok, doc} <- Jason.decode(body) do
+      data =
+        Enum.reduce(doc["links"], %{"subject" => doc["subject"]}, fn link, data ->
+          case {link["type"], link["rel"]} do
+            {"application/activity+json", "self"} ->
+              Map.put(data, "ap_id", link["href"])
+
+            {"application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", "self"} ->
+              Map.put(data, "ap_id", link["href"])
+
+            {nil, "http://ostatus.org/schema/1.0/subscribe"} ->
+              Map.put(data, "subscribe_address", link["template"])
+
+            _ ->
+              Logger.debug("Unhandled type: #{inspect(link["type"])}")
+              data
+          end
+        end)
+
+      {:ok, data}
+    end
+  end
+
+  def get_template_from_xml(body) do
+    xpath = "//Link[@rel='lrdd']/@template"
+
+    with {:ok, doc} <- parse_document(body),
+         template when template != nil <- string_from_xpath(xpath, doc) do
+      {:ok, template}
+    end
+  end
+
+  def find_lrdd_template(domain) do
+    # WebFinger is restricted to HTTPS - https://tools.ietf.org/html/rfc7033#section-9.1
+    meta_url = "https://#{domain}/.well-known/host-meta"
+
+    with {:ok, body, _headers} <- fetch(meta_url, method: :get, headers: [{"accept", "application/json"}]) do
+      get_template_from_xml(body)
+    else
+      error ->
+        Logger.warn("Can't find LRDD template in #{inspect(meta_url)}: #{inspect(error)}")
+        {:error, :lrdd_not_found}
+    end
+  end
+
+  defp get_address_from_domain(domain, encoded_account) when is_binary(domain) do
+    case find_lrdd_template(domain) do
+      {:ok, template} ->
+        String.replace(template, "{uri}", encoded_account)
+
+      _ ->
+        "https://#{domain}/.well-known/webfinger?resource=#{encoded_account}"
+    end
+  end
+
+  defp get_address_from_domain(_, _), do: {:error, :webfinger_no_domain}
+
+  def finger(%URI{host: domain} = account) do
+    if Utils.http_uri?(account) do
+      finger(URI.to_string(account), domain)
+    else
+      {:error, "WebFinger: account is not an HTTP URL"}
+    end
+  end
+
+  def finger(account) when is_binary(account) do
+    account = String.trim_leading(account, "@")
+
+    with [_name, domain] <- String.split(account, "@") do
+      finger(account, domain)
+    else
+      _ ->
+        {:error, "WebFinger: account is not an '@' address"}
+    end
+  end
+
+  def finger(account, domain) do
+    encoded_account = URI.encode("acct:#{account}")
+    address = get_address_from_domain(domain, encoded_account)
+
+    with {:ok, body, headers} <-
+           fetch(address,
+             method: :get,
+             headers: [
+               {"accept", @accept_header_value_xml},
+               {"accept", @accept_header_value_json}
+             ]
+           ) do
+      case List.keyfind(headers, "content-type", 0) do
+        {_, content_type} ->
+          case Plug.Conn.Utils.media_type(content_type) do
+            {:ok, "application", subtype, _} when subtype in ~w(xrd+xml xml) ->
+              webfinger_from_xml(body)
+
+            {:ok, "application", subtype, _} when subtype in ~w(jrd+json json) ->
+              webfinger_from_json(body)
+
+            _ ->
+              {:error, {:content_type, content_type}}
+          end
+
+        _ ->
+          {:error, {:content_type, nil}}
+      end
+    else
+      {:error, reason} ->
+        Logger.error("Couldn't finger #{account}: #{reason}")
+        {:error, reason}
+    end
+  end
+
+  def string_from_xpath(_, :error), do: nil
+
+  def string_from_xpath(xpath, doc) do
+    try do
+      {:xmlObj, :string, res} = :xmerl_xpath.string('string(#{xpath})', doc)
+
+      res =
+        res
+        |> to_string
+        |> String.trim()
+
+      if res == "", do: nil, else: res
+    catch
+      _e ->
+        Logger.debug("Couldn't find xpath #{xpath} in XML doc")
+        nil
+    end
+  end
+
+  def parse_document(text) do
+    try do
+      {doc, _rest} =
+        text
+        |> :binary.bin_to_list()
+        |> :xmerl_scan.string(quiet: true)
+
+      {:ok, doc}
+    rescue
+      _e ->
+        Logger.debug("Couldn't parse XML: #{inspect(text)}")
+        :error
+    catch
+      :exit, _error ->
+        Logger.debug("Couldn't parse XML: #{inspect(text)}")
+        :error
+    end
+  end
+
+  def fetch(url, opts) do
+    httpc_http_opts = Keyword.get(opts, :http_opts, [])
+    httpc_opts = Keyword.get(opts, :opts, [])
+    headers = Keyword.get(opts, :headers, [])
+    content_type = Keyword.get(opts, :content_type, "plain/text")
+    body = Keyword.get(opts, :body, "OK")
+
+    opts
+    |> Keyword.get(:method, :get)
+    |> case do
+      :post ->
+        :httpc.request(:post, {url, headers, content_type, body}, httpc_http_opts, httpc_opts)
+
+      :get ->
+        :httpc.request(:get, {url, headers}, httpc_http_opts, httpc_opts)
+    end
+    |> case do
+      {:ok, {{_, 200, _}, _headers, body}} -> {:ok, to_string(body)}
+      {:ok, {{_, _, _}, _headers, body}} -> {:error, to_string(body)}
+      {:error, error} -> {:error, error}
+    end
+  end
+end
