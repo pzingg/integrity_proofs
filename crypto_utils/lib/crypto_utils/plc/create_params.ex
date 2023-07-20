@@ -7,6 +7,7 @@ defmodule CryptoUtils.Plc.CreateParams do
     :verification_methods,
     :rotation_keys,
     :also_known_as,
-    :services
+    :services,
+    :password
   ]
 end

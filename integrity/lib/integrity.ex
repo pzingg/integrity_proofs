@@ -443,7 +443,7 @@ defmodule Integrity do
     acceptable_created_time_deviation =
       Keyword.get(options, :acceptable_created_time_deviation, 0)
 
-    dt_verified = Keyword.get(options, :dt_verified, DateTime.utc_now())
+    dt_verified = Keyword.get(options, :dt_verified, NaiveDateTime.utc_now())
 
     {proof, document_to_verify} = Map.pop!(proof_document, "proof")
 

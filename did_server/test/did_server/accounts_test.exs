@@ -49,25 +49,31 @@ defmodule DidServer.AccountsTest do
   end
 
   describe "register_user/1" do
-    test "requires email and password to be set" do
+    test "requires email and username to be set" do
       {:error, changeset} = Accounts.register_user(%{})
 
       assert %{
-               password: ["can't be blank"],
+               email: ["can't be blank"],
                username: ["can't be blank"],
-               domain: ["can't be blank"],
-               email: ["can't be blank"]
+               domain: ["can't be blank"]
+               # password: ["can't be blank"],
              } = errors_on(changeset)
     end
 
     test "validates email and password when given" do
-      {:error, changeset} = Accounts.register_user(%{email: "not valid", username: "not", domain: "not", password: "not valid"})
+      {:error, changeset} =
+        Accounts.register_user(%{
+          email: "not valid",
+          username: "not",
+          domain: "not"
+          # password: "not valid"
+        })
 
       assert %{
                email: ["must have the @ sign and no spaces"],
                username: ["should be at least 6 character(s)"],
                domain: ["must have a . and no spaces"],
-               password: ["should be at least 7 character(s)"]
+               # password: ["should be at least 7 character(s)"]
              } = errors_on(changeset)
     end
 
@@ -75,7 +81,7 @@ defmodule DidServer.AccountsTest do
       too_long = String.duplicate("db", 100)
       {:error, changeset} = Accounts.register_user(%{email: too_long, password: too_long})
       assert "should be at most 160 character(s)" in errors_on(changeset).email
-      assert "should be at most 72 character(s)" in errors_on(changeset).password
+      # assert "should be at most 72 character(s)" in errors_on(changeset).password
     end
 
     test "validates email uniqueness" do
@@ -92,9 +98,9 @@ defmodule DidServer.AccountsTest do
       email = unique_user_email()
       {:ok, user} = Accounts.register_user(valid_user_attributes(email: email))
       assert user.email == email
-      assert is_binary(user.hashed_password)
       assert is_nil(user.confirmed_at)
-      assert is_nil(user.password)
+      # assert is_binary(user.hashed_password)
+      # assert is_nil(user.password)
     end
   end
 
@@ -116,8 +122,8 @@ defmodule DidServer.AccountsTest do
 
       assert changeset.valid?
       assert get_change(changeset, :email) == email
-      assert get_change(changeset, :password) == password
-      assert is_nil(get_change(changeset, :hashed_password))
+      # assert get_change(changeset, :password) == password
+      # assert is_nil(get_change(changeset, :hashed_password))
     end
   end
 

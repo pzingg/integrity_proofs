@@ -8,7 +8,7 @@ defmodule DidServer.Repo.Migrations.CreateUsersAuthTables do
       add :email, :citext, null: false
       add :username, :citext, null: false
       add :domain, :citext, null: false
-      add :hashed_password, :string, null: false
+      # add :hashed_password, :string, null: false
       add :confirmed_at, :naive_datetime
       timestamps()
     end

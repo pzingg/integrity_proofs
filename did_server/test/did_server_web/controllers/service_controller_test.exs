@@ -4,5 +4,4 @@ defmodule DidServerWeb.ServiceControllerTest do
   alias DidServer.Accounts
   alias DidServer.Repo
   import DidServer.AccountsFixtures
-
 end

@@ -170,7 +170,8 @@ defmodule DidServerWeb.WebFinger do
     # WebFinger is restricted to HTTPS - https://tools.ietf.org/html/rfc7033#section-9.1
     meta_url = "https://#{domain}/.well-known/host-meta"
 
-    with {:ok, body, _headers} <- fetch(meta_url, method: :get, headers: [{"accept", "application/json"}]) do
+    with {:ok, body, _headers} <-
+           fetch(meta_url, method: :get, headers: [{"accept", "application/json"}]) do
       get_template_from_xml(body)
     else
       error ->

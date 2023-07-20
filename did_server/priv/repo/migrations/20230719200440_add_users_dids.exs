@@ -3,15 +3,16 @@ defmodule DidServer.Repo.Migrations.AddUsersDids do
 
   def change do
     create table(:users_dids) do
-      add :did, :string, null: false
-      add :username, :string, null: false
-      add :domain, :string, null: false
+      add(:user_id, references(:users, on_delete: :delete_all), null: false)
+
+      add(:did_key, references(:dids, column: :did, type: :string, on_delete: :delete_all),
+        null: false
+      )
 
       timestamps()
     end
 
-    create index(:users_dids, [:did])
-    create index(:users_dids, [:username])
-    create index(:users_dids, [:domain])
+    create(index(:users_dids, [:user_id]))
+    create(index(:users_dids, [:did_key]))
   end
 end

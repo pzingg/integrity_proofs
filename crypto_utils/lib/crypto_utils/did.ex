@@ -647,7 +647,7 @@ defmodule CryptoUtils.Did do
   ## Examples
 
       iex> create_operation(%{field: value})
-      {:ok, {%{"type" => "plc_operation"}, "did:plc:012345"}
+      {:ok, {%{"type" => "plc_operation"}, "did:plc:012345", "cleartext_password"}}
 
       iex> create_operation(%{field: bad_value})
       {:error, %Ecto.Changeset{}}
@@ -655,9 +655,13 @@ defmodule CryptoUtils.Did do
   """
   def create_operation(params) do
     case CreateOperation.parse(params) do
-      {:ok, {%CreateParams{did: did} = op, signer}} ->
+      {:ok, {%CreateParams{prev: prev, did: did, password: password} = op, signer}} ->
         op = op |> normalize_op() |> add_signature(signer)
-        {:ok, {op, did || did_for_create_op(op)}}
+        if is_nil(prev) do
+          {:ok, {op, did_for_create_op(op), password}}
+        else
+          {:ok, {op, did, password}}
+        end
 
       error ->
         error

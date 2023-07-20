@@ -66,8 +66,8 @@ defmodule DidServerWeb do
       # HTML escaping functionality
       import Phoenix.HTML
 
-       # Core UI components and translation
-       import DidServerWeb.CoreComponents
+      # Core UI components and translation
+      import DidServerWeb.CoreComponents
 
       # Routes generation with the ~p sigil
       unquote(verified_routes())

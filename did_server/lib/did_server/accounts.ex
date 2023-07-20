@@ -59,9 +59,8 @@ defmodule DidServer.Accounts do
 
   def list_dids_by_user(user) do
     from(user_did in UserDid,
-      select: [:did],
-      where: user_did.username == ^user.username,
-      where: user_did.domain == ^user.domain
+      select: %{did: user_did.did_key},
+      where: user_did.user_id == ^user.id
     )
     |> Repo.all()
   end
@@ -69,8 +68,8 @@ defmodule DidServer.Accounts do
   def list_users_by_did(did) when is_binary(did) do
     from(user in User,
       join: user_did in UserDid,
-      on: user_did.username == user.username and user_did.domain == user.domain,
-      where: user_did.did == ^did
+      on: user_did.user_id == user.id,
+      where: user_did.did_key == ^did
     )
     |> Repo.all()
   end
@@ -165,7 +164,7 @@ defmodule DidServer.Accounts do
 
   """
   def change_user_registration(%User{} = user, attrs \\ %{}) do
-    User.registration_changeset(user, attrs, hash_password: false, validate_email: false)
+    User.registration_changeset(user, attrs, validate_email: false)
   end
 
   ## Settings
@@ -290,47 +289,6 @@ defmodule DidServer.Accounts do
     end
   end
 
-  @doc """
-  Returns an `%Ecto.Changeset{}` for changing the user password.
-
-  ## Examples
-
-      iex> change_user_password(user)
-      %Ecto.Changeset{data: %User{}}
-
-  """
-  def change_user_password(user, attrs \\ %{}) do
-    User.password_changeset(user, attrs, hash_password: false)
-  end
-
-  @doc """
-  Updates the user password.
-
-  ## Examples
-
-      iex> update_user_password(user, "valid password", %{password: ...})
-      {:ok, %User{}}
-
-      iex> update_user_password(user, "invalid password", %{password: ...})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def update_user_password(user, password, attrs) do
-    changeset =
-      user
-      |> User.password_changeset(attrs)
-      |> User.validate_current_password(password)
-
-    Ecto.Multi.new()
-    |> Ecto.Multi.update(:user, changeset)
-    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, :all))
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{user: user}} -> {:ok, user}
-      {:error, :user, changeset, _} -> {:error, changeset}
-    end
-  end
-
   ## Did
 
   @doc """
@@ -346,8 +304,8 @@ defmodule DidServer.Accounts do
     nil
   end
 
-  def link_did_to_user(did, %{username: username, domain: domain}) do
-    UserDid.build_link(did, username, domain)
+  def link_did_to_user(did, user) do
+    UserDid.build_link(did, user)
     |> Repo.insert!()
   end
 
@@ -461,29 +419,6 @@ defmodule DidServer.Accounts do
       user
     else
       _ -> nil
-    end
-  end
-
-  @doc """
-  Resets the user password.
-
-  ## Examples
-
-      iex> reset_user_password(user, %{password: "new long password", password_confirmation: "new long password"})
-      {:ok, %User{}}
-
-      iex> reset_user_password(user, %{password: "valid", password_confirmation: "not the same"})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def reset_user_password(user, attrs) do
-    Ecto.Multi.new()
-    |> Ecto.Multi.update(:user, User.password_changeset(user, attrs))
-    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, :all))
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{user: user}} -> {:ok, user}
-      {:error, :user, changeset, _} -> {:error, changeset}
     end
   end
 end

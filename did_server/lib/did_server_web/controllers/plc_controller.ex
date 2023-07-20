@@ -42,7 +42,7 @@ defmodule DidServerWeb.PlcController do
   end
 
   def new(conn, %{"did" => did} = params) do
-    with {:ok, {_op, ^did}} <- DidServer.Log.create_operation(params) do
+    with {:ok, %{operation: %{did: ^did}}} <- DidServer.Log.create_operation(params) do
       render(:new, did: did)
     else
       {:error, %Ecto.Changeset{errors: [{field, {message, _keys}} | _]}} ->

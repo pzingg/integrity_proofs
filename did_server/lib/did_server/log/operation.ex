@@ -12,6 +12,7 @@ defmodule DidServer.Log.Operation do
     field(:op_data, :map, default: %{}, virtual: true)
     field(:prev, :string, virtual: true)
     field(:nullified_cids, {:array, :string}, default: [], virtual: true)
+    field(:password, :string, virtual: true)
 
     timestamps()
   end
@@ -58,14 +59,23 @@ defmodule DidServer.Log.Operation do
 
   def changeset(%__MODULE__{} = op, attrs) do
     op
-    |> cast(attrs, [:did, :cid, :operation, :nullified, :prev, :nullified_cids])
+    |> cast(attrs, [:did, :cid, :operation, :nullified, :prev, :nullified_cids, :password])
     |> validate_required([:did, :cid, :operation])
     |> set_nullified()
   end
 
   def changeset_raw(%__MODULE__{} = op, attrs) do
     op
-    |> cast(attrs, [:did, :cid, :operation, :nullified, :inserted_at, :prev, :nullified_cids])
+    |> cast(attrs, [
+      :did,
+      :cid,
+      :operation,
+      :nullified,
+      :inserted_at,
+      :prev,
+      :nullified_cids,
+      :password
+    ])
     |> validate_required([:did, :cid, :operation, :nullified, :inserted_at])
     |> set_nullified()
   end

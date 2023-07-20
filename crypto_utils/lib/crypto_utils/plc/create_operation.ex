@@ -24,6 +24,7 @@ defmodule CryptoUtils.Plc.CreateOperation do
     field(:rotationKeys, {:array, :string})
     field(:alsoKnownAs, {:array, :string})
     field(:services, :map)
+    field(:password, :string)
   end
 
   def parse(params) when is_list(params), do: Map.new(params) |> parse()
@@ -53,7 +54,8 @@ defmodule CryptoUtils.Plc.CreateOperation do
                     "type" => "AtprotoPersonalDataServer",
                     "endpoint" => CryptoUtils.ensure_http_prefix(op.service)
                   }
-                }
+                },
+                password: op.password
               }, op.signer}}
 
           "plc_operation" ->
@@ -66,7 +68,8 @@ defmodule CryptoUtils.Plc.CreateOperation do
                 verification_methods: op.verificationMethods,
                 rotation_keys: op.rotationKeys,
                 also_known_as: op.alsoKnownAs,
-                services: op.services
+                services: op.services,
+                password: op.password
               }, op.signer}}
 
           "plc_tombstone" ->
@@ -96,7 +99,8 @@ defmodule CryptoUtils.Plc.CreateOperation do
         :rotationKeys,
         :alsoKnownAs,
         :verificationMethods,
-        :services
+        :services,
+        :password
       ])
 
     changeset

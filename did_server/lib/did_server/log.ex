@@ -114,8 +114,8 @@ defmodule DidServer.Log do
   """
   def create_operation(params) do
     case CryptoUtils.Did.create_operation(params) do
-      {:ok, {%{"sig" => _sig} = op, did}} ->
-        create_operation(did, op)
+      {:ok, {%{"sig" => _sig} = op, did, password}} ->
+        create_operation(did, op, password)
 
       error ->
         error
@@ -131,19 +131,19 @@ defmodule DidServer.Log do
 
   ## Examples
 
-      iex> create_operation(did, %{field: value})
+      iex> create_operation(did, %{field: value}, "new password")
       {:ok, %{operation: %Operation{}}}
 
       iex> create_operation(did, %{field: bad_value})
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_operation(did, proposed) when is_binary(did) and is_map(proposed) do
+  def create_operation(did, proposed, password \\ nil) when is_binary(did) and is_map(proposed) do
     ops = list_operations(did)
 
     {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)
 
-    multi_insert(did, proposed, nullified_cids)
+    multi_insert(did, proposed, nullified_cids, password)
     |> Repo.transaction()
   end
 
@@ -248,15 +248,14 @@ defmodule DidServer.Log do
     from(op in Operation, limit: 1) |> Repo.all() |> is_list()
   end
 
-  # Private functions
-
-  def multi_insert(did, %{"prev" => prev} = proposed, nullified_cids) do
+  def multi_insert(did, %{"prev" => prev} = proposed, nullified_cids, password) do
     op_attrs = %{
       cid: CryptoUtils.Did.cid_for_op(proposed),
       did: did,
       operation: Jason.encode!(proposed),
       prev: prev,
-      nullified_cids: nullified_cids
+      nullified_cids: nullified_cids,
+      password: password
     }
 
     Operation.changeset(%Operation{}, op_attrs)
@@ -266,7 +265,8 @@ defmodule DidServer.Log do
   def multi_insert(op_changeset, verify? \\ true) do
     did = Ecto.Changeset.get_change(op_changeset, :did)
     prev = Ecto.Changeset.get_change(op_changeset, :prev)
-    did_changeset = Did.changeset(%Did{}, %{did: did})
+    password = Ecto.Changeset.get_change(op_changeset, :password)
+    did_changeset = Did.changeset(%Did{}, %{did: did, password: password})
 
     multi =
       if is_nil(prev) do
@@ -299,6 +299,72 @@ defmodule DidServer.Log do
       multi
     end
   end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for changing the DID password.
+
+  ## Examples
+
+      iex> change_did_password(user)
+      %Ecto.Changeset{data: %User{}}
+
+  """
+  def change_did_password(did, attrs \\ %{}) do
+    Did.password_changeset(did, attrs, hash_password: false)
+  end
+
+  @doc """
+  Updates the DID password.
+
+  ## Examples
+
+      iex> update_did_password(user, "valid password", %{password: ...})
+      {:ok, %User{}}
+
+      iex> update_did_password(user, "invalid password", %{password: ...})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def update_did_password(did, password, attrs) do
+    changeset =
+      did
+      |> Did.password_changeset(attrs)
+      |> Did.validate_current_password(password)
+
+    Ecto.Multi.new()
+    |> Ecto.Multi.update(:did, changeset)
+    # |> Ecto.Multi.del|ete_all(:tokens, UserToken.user_and_contexts_query(user, :all))
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{did: did}} -> {:ok, did}
+      {:error, :did, changeset, _} -> {:error, changeset}
+    end
+  end
+
+  @doc """
+  Resets the DID password.
+
+  ## Examples
+
+      iex> reset_did_password(user, %{password: "new long password", password_confirmation: "new long password"})
+      {:ok, %User{}}
+
+      iex> reset_did_password(user, %{password: "valid", password_confirmation: "not the same"})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def reset_did_password(did, attrs) do
+    Ecto.Multi.new()
+    |> Ecto.Multi.update(:did, Did.password_changeset(did, attrs))
+    # |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, :all))
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{did: did}} -> {:ok, did}
+      {:error, :did, changeset, _} -> {:error, changeset}
+    end
+  end
+
+  # Private functions
 
   defp nullify(did, nullified_cids) do
     from(op in Operation,

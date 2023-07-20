@@ -48,5 +48,4 @@ defmodule DidServer.Application do
     # TODO: specify in config
     ["activitypub"]
   end
-
 end

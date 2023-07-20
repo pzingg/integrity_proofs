@@ -4,6 +4,9 @@ defmodule Integrity.Did.PlcRepo.Migrations.AddOperations do
   def change do
     create table(:dids, primary_key: false) do
       add :did, :string, primary_key: true
+      add :hashed_password, :string, null: false
+
+      timestamps()
     end
 
     create table(:operations, primary_key: false) do
