@@ -64,14 +64,14 @@ defmodule DidServer.AccountsTest do
       {:error, changeset} =
         Accounts.register_user(%{
           email: "not valid",
-          username: "not",
-          domain: "not"
+          username: "no",
+          domain: "no"
           # password: "not valid"
         })
 
       assert %{
                email: ["must have the @ sign and no spaces"],
-               username: ["should be at least 6 character(s)"],
+               username: ["should be at least 3 character(s)"],
                domain: ["must have a . and no spaces"]
                # password: ["should be at least 7 character(s)"]
              } = errors_on(changeset)

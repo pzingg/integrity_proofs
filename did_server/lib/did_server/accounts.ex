@@ -57,26 +57,24 @@ defmodule DidServer.Accounts do
     Repo.get_by(User, username: username)
   end
 
-  def list_dids_by_user(user) do
-    from(user_did in UserDid,
-      select: %{did: user_did.did_key},
-      where: user_did.user_id == ^user.id
-    )
-    |> Repo.all()
+  def list_dids_by_user(user, return_structs? \\ false) do
+    user = Repo.preload(user, :dids)
+
+    if return_structs? do
+      user.dids
+    else
+      Enum.map(user.dids, fn %{did: did} -> did end)
+    end
   end
 
   def list_users_by_did(did) when is_binary(did) do
-    from(user in User,
-      join: user_did in UserDid,
-      on: user_did.user_id == user.id,
-      where: user_did.did_key == ^did
-    )
-    |> Repo.all()
+    did = DidServer.Log.get_did!(did)
+    did.users
   end
 
   def list_also_known_as_users(user) do
     list_dids_by_user(user)
-    |> Enum.map(fn %{did: did} -> list_users_by_did(did) end)
+    |> Enum.map(&list_users_by_did(&1))
     |> List.flatten()
   end
 

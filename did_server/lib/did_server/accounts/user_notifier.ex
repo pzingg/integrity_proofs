@@ -4,12 +4,11 @@ defmodule DidServer.Accounts.UserNotifier do
   """
 
   # import Swoosh.Email
-
-  alias DidServer.Mailer
+  # alias DidServer.Mailer
 
   # Delivers the email using the application mailer.
   defp deliver(recipient, subject, body) do
-    """
+    _old_code = """
     email =
       new()
       |> to(recipient)
@@ -22,7 +21,7 @@ defmodule DidServer.Accounts.UserNotifier do
     end
     """
 
-    IO.puts("To: #{recipient}\n\n#{body}")
+    # IO.puts("To: #{recipient}\n\n#{body}")
 
     {:ok,
      %{to: recipient, from: "DidServer <contact@example.com>", subject: subject, text_body: body}}

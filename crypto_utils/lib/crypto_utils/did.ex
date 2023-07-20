@@ -497,7 +497,7 @@ defmodule CryptoUtils.Did do
   @doc """
   Returns a list of the DID methods understood by this module, as strings.
   """
-  def valid_did_methods(), do: @valid_did_methods
+  def valid_did_methods, do: @valid_did_methods
 
   defp valid_signature_key_format?(format, options) do
     Keyword.get(options, :enable_experimental_key_types, false) ||
@@ -953,7 +953,7 @@ defmodule CryptoUtils.Did do
     _did_key = assure_valid_sig(more_powerful_keys, proposed)
 
     # recovery key gets a 72hr window to do historical re-writes
-    time_lapsed = DateTime.diff(DateTime.utc_now(), inserted_at, :second)
+    time_lapsed = NaiveDateTime.diff(NaiveDateTime.utc_now(), inserted_at, :second)
 
     if time_lapsed > 72 * 3600 do
       raise LateRecoveryError, time_lapsed

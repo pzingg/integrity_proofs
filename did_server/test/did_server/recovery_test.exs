@@ -291,18 +291,19 @@ defmodule DidSever.RecoveryTest do
         nil -> params
       end
 
-    {:ok, {op, did, _password}} = CryptoUtils.Did.create_operation(params)
-    changeset(op, did, prev, inserted_at)
+    {:ok, {op, did, password}} = CryptoUtils.Did.create_operation(params)
+    changeset(op, did, prev, inserted_at, password)
   end
 
-  defp changeset(op, did, prev, inserted_at) do
+  defp changeset(op, did, prev, inserted_at, password) do
     Operation.changeset_raw(%Operation{}, %{
       did: did,
       cid: CryptoUtils.Did.cid_for_op(op),
       operation: Jason.encode!(op),
       nullified: false,
       inserted_at: inserted_at,
-      prev: prev
+      prev: prev,
+      password: password
     })
   end
 end

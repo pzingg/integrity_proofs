@@ -4,11 +4,13 @@ defmodule DidServer.AccountsFixtures do
   entities via the `DidServer.Accounts` context.
   """
 
+  alias DidServer.Accounts.User
+
   @example_domain "example.com"
 
   def unique_user_email, do: "#{unique_user_username()}@#{@example_domain}"
   def unique_user_username, do: "user#{System.unique_integer()}"
-  def valid_user_password, do: "hello world!"
+  defdelegate valid_user_password, to: DidServer.LogFixtures, as: :valid_did_password
 
   def valid_user_attributes(attrs \\ %{}) do
     username = unique_user_username()
@@ -18,8 +20,7 @@ defmodule DidServer.AccountsFixtures do
     Enum.into(attrs, %{
       email: email,
       username: username,
-      domain: domain,
-      password: valid_user_password()
+      domain: domain
     })
   end
 
@@ -28,6 +29,9 @@ defmodule DidServer.AccountsFixtures do
       attrs
       |> valid_user_attributes()
       |> DidServer.Accounts.register_user()
+
+    did = DidServer.LogFixtures.did_fixture(%{handle: User.domain_handle(user)})
+    _link = DidServer.Accounts.link_did_to_user(did, user)
 
     user
   end

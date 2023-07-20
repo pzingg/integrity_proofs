@@ -99,8 +99,7 @@ defmodule DidServer.Accounts.User do
   """
   def valid_password?(%__MODULE__{} = user, password) when byte_size(password) > 0 do
     did_that_validated =
-      user
-      |> DidServer.Accounts.list_dids_by_user()
+      DidServer.Accounts.list_dids_by_user(user, true)
       |> Enum.find(fn did -> DidServer.Log.Did.valid_password?(did, password) end)
 
     !is_nil(did_that_validated)

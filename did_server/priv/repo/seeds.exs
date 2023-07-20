@@ -40,8 +40,8 @@ if Mix.env() == :dev do
       password: "bluesky"
     })
 
-  link = DidServer.Accounts.link_did_to_user(did, bob_example_com)
-  link = DidServer.Accounts.link_did_to_user(did, bob_bsky_social)
+  _link = DidServer.Accounts.link_did_to_user(did, bob_example_com)
+  _link = DidServer.Accounts.link_did_to_user(did, bob_bsky_social)
 
   also_known_as = DidServer.Accounts.list_also_known_as_users(bob_example_com)
   IO.inspect(also_known_as)

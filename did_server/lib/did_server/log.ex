@@ -35,7 +35,7 @@ defmodule DidServer.Log do
       ** (Ecto.NoResultsError)
 
   """
-  def get_did!(did), do: Repo.get!(Did, did)
+  def get_did!(did), do: Repo.get!(Did, did, preload: :users)
 
   @doc """
   Creates a did.

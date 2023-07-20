@@ -72,7 +72,8 @@ defmodule DidServer.Log.Did do
     Bcrypt.verify_pass(password, hashed_password)
   end
 
-  def valid_password?(_, _) do
+  def valid_password?(did, _) do
+    IO.puts("Did.valid_password? without hashed_password: #{inspect(did)}")
     Bcrypt.no_user_verify()
     false
   end

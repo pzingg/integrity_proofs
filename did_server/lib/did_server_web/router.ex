@@ -1,7 +1,7 @@
 defmodule DidServerWeb.Router do
   use DidServerWeb, :router
 
-  import DidServerWeb.UserAuth
+  # import DidServerWeb.UserAuth
 
   pipeline :browser do
     plug(:accepts, ["html"])
@@ -9,8 +9,8 @@ defmodule DidServerWeb.Router do
     # plug :fetch_live_flash
     plug(:put_root_layout, {DidServerWeb.Layouts, :root})
     # plug :protect_from_forgery
-    plug :put_secure_browser_headers
-    plug :fetch_current_user
+    # plug :put_secure_browser_headers
+    # plug :fetch_current_user
   end
 
   pipeline :api do

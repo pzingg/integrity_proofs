@@ -12,17 +12,18 @@ defmodule DidServer.LogTest do
 
     test "list_dids/0 returns all dids" do
       did = did_fixture()
-      assert Log.list_dids() == [did]
+      assert [%Did{did: ^did}] = Log.list_dids()
     end
 
     test "get_did!/1 returns the did with given id" do
       did = did_fixture()
-      assert Log.get_did!(did.did) == did
+      assert %Did{did: ^did} = Log.get_did!(did)
     end
 
     test "create_did/1 succeeds with valid attributes" do
-      {:ok, %Did{}} =
-        Log.create_did(%{did: "did:plc:y54rrfl37i5wqztksze4bddl", password: "bluesky"})
+      did = "did:plc:y54rrfl37i5wqztksze4bddl"
+      password = "bluesky"
+      {:ok, %Did{did: ^did}} = Log.create_did(%{did: did, password: password})
     end
 
     test "create_did/1 fails with invalid attributes" do
@@ -31,7 +32,7 @@ defmodule DidServer.LogTest do
 
     test "create_did/1 fails for an existing did" do
       did = did_fixture()
-      {:error, _} = Log.create_did(%{did: did.did})
+      {:error, _} = Log.create_did(%{did: did})
     end
   end
 
