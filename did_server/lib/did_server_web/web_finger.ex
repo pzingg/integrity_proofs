@@ -7,7 +7,6 @@ defmodule DidServerWeb.WebFinger do
 
   require Logger
 
-  alias DidServerWeb.Utils
   alias DidServer.Accounts
   alias DidServer.Accounts.User
   alias DidServerWeb.XMLBuilder
@@ -48,7 +47,7 @@ defmodule DidServerWeb.WebFinger do
       {:ok, represent_user(user, fmt)}
     else
       _ ->
-        resource = Utils.to_uri(resource)
+        resource = CryptoUtils.to_uri(resource)
 
         with %User{} = user <- Accounts.get_user_by_ap_id(resource) do
           {:ok, represent_user(user, fmt)}
@@ -193,7 +192,7 @@ defmodule DidServerWeb.WebFinger do
   defp get_address_from_domain(_, _), do: {:error, :webfinger_no_domain}
 
   def finger(%URI{host: domain} = account) do
-    if Utils.http_uri?(account) do
+    if CryptoUtils.http_uri?(account) do
       finger(URI.to_string(account), domain)
     else
       {:error, "WebFinger: account is not an HTTP URL"}

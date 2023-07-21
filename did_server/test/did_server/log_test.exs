@@ -74,7 +74,7 @@ defmodule DidServer.LogTest do
         signingKey: signing_key,
         recoveryKey: recovery_key,
         signer: signer,
-        handle: "bob.bsky.social",
+        alsoKnownAs: ["bob.bsky.social"],
         service: "https://pds.example.com",
         password: "bluesky"
       }
@@ -87,7 +87,7 @@ defmodule DidServer.LogTest do
       update_params = %{
         did: created_op.did,
         signer: signer,
-        handle: "alice.bsky.social"
+        alsoKnownAs: ["alice.bsky.social"]
       }
 
       assert {:ok, %{operation: updated_op}} = DidServer.Log.update_operation(update_params)
@@ -106,7 +106,7 @@ defmodule DidServer.LogTest do
         signingKey: signing_key,
         recoveryKey: recovery_key,
         signer: signer,
-        handle: "bob.bsky.social",
+        alsoKnownAs: ["bob.bsky.social"],
         service: "https://pds.example.com",
         password: "bluesky"
       }
@@ -116,7 +116,7 @@ defmodule DidServer.LogTest do
       update_params = %{
         did: created_op.did,
         signer: signing_keypair,
-        handle: "alice.bsky.social"
+        alsoKnownAs: ["alice.bsky.social"]
       }
 
       assert_raise(CryptoUtils.Did.InvalidSignatureError, fn ->

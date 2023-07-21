@@ -49,7 +49,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def message(%{op: op, allowed_keys: keys}) do
-      "invalid signature, #{CryptoUtils.display_op(op)} keys #{inspect(Enum.map(keys, &CryptoUtils.display_did(&1)))}"
+      "invalid signature, #{CryptoUtils.display_op(op)} keys #{inspect(Enum.map(keys, &CryptoUtils.display_did/1))}"
     end
   end
 
@@ -657,6 +657,7 @@ defmodule CryptoUtils.Did do
     case CreateOperation.parse(params) do
       {:ok, {%CreateParams{prev: prev, did: did, password: password} = op, signer}} ->
         op = op |> normalize_op() |> add_signature(signer)
+
         if is_nil(prev) do
           {:ok, {op, did_for_create_op(op), password}}
         else
@@ -708,29 +709,19 @@ defmodule CryptoUtils.Did do
       end
 
     updates =
-      if !is_nil(update.handle) do
-        formatted = CryptoUtils.ensure_atproto_prefix(update.handle)
+      case update.alsoKnownAs do
+        [_ | _] = aka ->
+          atproto_handles = Enum.map(aka, &CryptoUtils.ensure_atproto_prefix/1)
 
-        {also_known_as, inserted} =
-          Map.get(normalized, "alsoKnownAs", [])
-          |> Enum.reduce({[], false}, fn handle, {acc, found} ->
-            if String.starts_with?(handle, "at://") do
-              {[formatted | acc], true}
-            else
-              {[handle | acc], found}
-            end
-          end)
+          other_proto_handles =
+            Map.get(normalized, "alsoKnownAs", [])
+            |> Enum.filter(fn handle -> !CryptoUtils.atproto_uri?(handle) end)
 
-        also_known_as =
-          if inserted do
-            Enum.reverse(also_known_as)
-          else
-            [formatted | Enum.reverse(also_known_as)]
-          end
+          also_known_as = atproto_handles ++ other_proto_handles
+          Map.put(updates, "alsoKnownAs", also_known_as)
 
-        Map.put(updates, "alsoKnownAs", also_known_as)
-      else
-        updates
+        _ ->
+          updates
       end
 
     updates =

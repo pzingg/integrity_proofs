@@ -47,7 +47,7 @@ defmodule Integrity.ActivityPub do
   def build_identity_proof!(%{"id" => actor_id} = person, options) do
     subject = Keyword.fetch!(options, :verification_method)
 
-    if !Integrity.did_uri?(URI.parse(subject)) do
+    if !CryptoUtils.did_uri?(subject) do
       raise Integrity.InvalidVerificationMethodURLError, subject
     end
 

@@ -35,6 +35,15 @@ defmodule DidServer.Log.Operation do
     type == "plc_tombstone"
   end
 
+  def also_known_as(%__MODULE__{op_data: %{"alsoKnownAs" => aka}}) do
+    aka
+  end
+
+  def also_known_as(%__MODULE__{operation: op_json}) do
+    %{"alsoKnownAs" => aka} = Jason.decode!(op_json)
+    aka
+  end
+
   def decode(%__MODULE__{operation: op_json} = op) do
     %__MODULE__{op | op_data: Jason.decode!(op_json)}
   end

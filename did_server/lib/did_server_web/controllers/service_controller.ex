@@ -9,12 +9,12 @@ defmodule DidServerWeb.ServiceController do
 
   require Logger
 
-  alias DidServerWeb.{Utils, WebFinger}
+  alias DidServerWeb.WebFinger
 
   def nodeinfo(conn, _params) do
-    endpoint_uri = DidServerWeb.Endpoint.url() |> Utils.to_uri()
+    endpoint_uri = DidServerWeb.Endpoint.url() |> CryptoUtils.to_uri()
 
-    nodeinfo_version_url = Utils.base_uri(endpoint_uri, "/nodeinfo/2.0") |> URI.to_string()
+    nodeinfo_version_url = CryptoUtils.base_uri(endpoint_uri, "/nodeinfo/2.0") |> URI.to_string()
 
     links = %{
       links: [

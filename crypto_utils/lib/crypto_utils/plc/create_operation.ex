@@ -33,11 +33,42 @@ defmodule CryptoUtils.Plc.CreateOperation do
     case changeset(%__MODULE__{}, params) |> apply_action(:create) do
       {:ok, %{type: type} = op} ->
         case type do
-          "create" ->
+          "plc_tombstone" ->
+            {:ok,
+             {%CreateParams{did: op.did, type: "plc_tombstone", prev: op.prev, sig: op.sig},
+              op.signer}}
+
+          _ ->
             rotation_keys =
               case op.rotationKeys do
                 [_ | _] = keys -> keys
                 _ -> [op.recoveryKey]
+              end
+
+            also_known_as =
+              case op.alsoKnownAs do
+                [_ | _] = aka -> Enum.map(aka, &CryptoUtils.ensure_atproto_prefix/1)
+                _ -> [CryptoUtils.ensure_atproto_prefix(op.handle)]
+              end
+
+            verification_methods =
+              case op.verificationMethods do
+                vms when is_map(vms) and map_size(vms) != 0 -> vms
+                _ -> %{"atproto" => op.signingKey}
+              end
+
+            services =
+              case op.services do
+                svcs when is_map(svcs) and map_size(svcs) != 0 ->
+                  svcs
+
+                _ ->
+                  %{
+                    "atproto_pds" => %{
+                      "type" => "AtprotoPersonalDataServer",
+                      "endpoint" => CryptoUtils.ensure_http_prefix(op.service)
+                    }
+                  }
               end
 
             {:ok,
@@ -46,36 +77,12 @@ defmodule CryptoUtils.Plc.CreateOperation do
                 type: "plc_operation",
                 prev: op.prev,
                 sig: op.sig,
-                verification_methods: %{"atproto" => op.signingKey},
+                verification_methods: verification_methods,
                 rotation_keys: rotation_keys,
-                also_known_as: [CryptoUtils.ensure_atproto_prefix(op.handle)],
-                services: %{
-                  "atproto_pds" => %{
-                    "type" => "AtprotoPersonalDataServer",
-                    "endpoint" => CryptoUtils.ensure_http_prefix(op.service)
-                  }
-                },
+                also_known_as: also_known_as,
+                services: services,
                 password: op.password
               }, op.signer}}
-
-          "plc_operation" ->
-            {:ok,
-             {%CreateParams{
-                did: op.did,
-                type: "plc_operation",
-                prev: op.prev,
-                sig: op.sig,
-                verification_methods: op.verificationMethods,
-                rotation_keys: op.rotationKeys,
-                also_known_as: op.alsoKnownAs,
-                services: op.services,
-                password: op.password
-              }, op.signer}}
-
-          "plc_tombstone" ->
-            {:ok,
-             {%CreateParams{did: op.did, type: "plc_tombstone", prev: op.prev, sig: op.sig},
-              op.signer}}
         end
 
       error ->
@@ -133,8 +140,12 @@ defmodule CryptoUtils.Plc.CreateOperation do
 
   def validate_v1_params(changeset) do
     changeset
-    |> validate_required([:signingKey, :handle, :service])
+    |> validate_required([:signingKey])
     |> validate_rotation_keys()
+    |> validate_also_known_as()
+    |> validate_services()
+
+    # |> validate_verification_methods()
   end
 
   def validate_rotation_keys(changeset) do
@@ -146,6 +157,45 @@ defmodule CryptoUtils.Plc.CreateOperation do
         case get_change(changeset, :recoveryKey) do
           key when is_binary(key) -> changeset
           _ -> add_error(changeset, :recoveryKey, "can't be blank")
+        end
+    end
+  end
+
+  def validate_also_known_as(changeset) do
+    case get_change(changeset, :alsoKnownAs) do
+      [_ | _] ->
+        changeset
+
+      _ ->
+        case get_change(changeset, :handle) do
+          key when is_binary(key) -> changeset
+          _ -> add_error(changeset, :handle, "can't be blank")
+        end
+    end
+  end
+
+  def validate_verification_methods(changeset) do
+    case get_change(changeset, :verificationMethods) do
+      vms when is_map(vms) and map_size(vms) != 0 ->
+        changeset
+
+      _ ->
+        case get_change(changeset, :recoveryKey) do
+          key when is_binary(key) -> changeset
+          _ -> add_error(changeset, :recoveryKey, "can't be blank")
+        end
+    end
+  end
+
+  def validate_services(changeset) do
+    case get_change(changeset, :services) do
+      svcs when is_map(svcs) and map_size(svcs) != 0 ->
+        changeset
+
+      _ ->
+        case get_change(changeset, :service) do
+          key when is_binary(key) -> changeset
+          _ -> add_error(changeset, :service, "can't be blank")
         end
     end
   end

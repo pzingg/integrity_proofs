@@ -367,7 +367,7 @@ defmodule Integrity do
     vm_identifier = URI.parse(verification_method)
     vm_fragment = vm_identifier.fragment
 
-    if !did_uri?(vm_identifier) && !http_uri?(vm_identifier) do
+    if !CryptoUtils.did_uri?(vm_identifier) && !CryptoUtils.http_uri?(vm_identifier) do
       raise InvalidVerificationMethodURLError, verification_method
     end
 
@@ -660,41 +660,6 @@ defmodule Integrity do
       end
     end
   end
-
-  @doc """
-  Returns `true` if a binary or URI is a recognized DID method
-  that has a non-empty method-specific id.
-  """
-  def did_uri?(url) when is_binary(url) do
-    URI.parse(url) |> did_uri?()
-  end
-
-  def did_uri?(%URI{scheme: "did", host: nil, path: path})
-      when is_binary(path) do
-    case String.split(path, ":") do
-      [did_method | [did_value | _]] ->
-        did_method in CryptoUtils.Did.valid_did_methods() && did_value != ""
-
-      _ ->
-        false
-    end
-  end
-
-  def did_uri?(_), do: false
-
-  @doc """
-  Returns `true` if a binary or URI has an "http" or "https"
-  scheme with non-empty host and path components.
-  """
-  def http_uri?(url) when is_binary(url) do
-    URI.parse(url) |> http_uri?()
-  end
-
-  def http_uri?(%URI{scheme: scheme, host: host, path: path}) do
-    scheme in ["http", "https"] && !is_nil(host) && !is_nil(path)
-  end
-
-  def http_uri?(_), do: false
 
   defp dereference_controller_document!(_controller_document_url, options) do
     built_in = Keyword.get(options, :cached_controller_document)

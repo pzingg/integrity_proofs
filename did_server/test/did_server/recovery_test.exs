@@ -85,7 +85,7 @@ defmodule DidSever.RecoveryTest do
       sign_op_for_keys([@rotation_key_3], @rotation_key_3, one_hour_ago,
         did: did,
         prev: rotate_cid,
-        changes: %{handle: "newhandle.test"}
+        changes: %{alsoKnownAs: ["newhandle.test"]}
       )
 
     assert {:ok, %{operation: %Operation{cid: _another_cid}}} =
