@@ -269,7 +269,12 @@ defmodule DidSever.RecoveryTest do
     assert cid_1 == tombstone.cid
   end
 
-  defp sign_op_for_keys(keys, {signer_did, {algorithm, [priv, curve]}}, inserted_at, opts \\ []) do
+  defp sign_op_for_keys(
+         keys,
+         {signer_did, {algorithm, [priv, curve]}} = signer,
+         inserted_at,
+         opts \\ []
+       ) do
     type = Keyword.get(opts, :type, "create")
     prev = Keyword.get(opts, :prev)
 
@@ -291,11 +296,23 @@ defmodule DidSever.RecoveryTest do
         nil -> params
       end
 
+    keys_pem =
+      if is_nil(prev) do
+        case CryptoUtils.Keys.encode_pem_public_key(signer) do
+          {:ok, pem} -> pem
+          _ ->
+            # TODO raise error?
+            nil
+        end
+      else
+        nil
+      end
+
     {:ok, {op, did, password}} = CryptoUtils.Did.create_operation(params)
-    changeset(op, did, prev, inserted_at, password)
+    changeset(op, did, prev, inserted_at, password, keys_pem)
   end
 
-  defp changeset(op, did, prev, inserted_at, password) do
+  defp changeset(op, did, prev, inserted_at, password, keys_pem) do
     Operation.changeset_raw(%Operation{}, %{
       did: did,
       cid: CryptoUtils.Did.cid_for_op(op),
@@ -303,7 +320,8 @@ defmodule DidSever.RecoveryTest do
       nullified: false,
       inserted_at: inserted_at,
       prev: prev,
-      password: password
+      password: password,
+      keys_pem: keys_pem
     })
   end
 end

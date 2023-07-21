@@ -23,7 +23,7 @@ defmodule DidServerWeb.PlcController do
   end
 
   def domain_did(conn, _params) do
-    did = DidServer.Log.get_domain_did()
+    did = DidServer.Log.get_domain_key()
 
     case to_document(did) do
       {:ok, doc} ->

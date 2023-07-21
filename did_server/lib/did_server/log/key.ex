@@ -1,23 +1,22 @@
-defmodule DidServer.Log.Did do
+defmodule DidServer.Log.Key do
   use Ecto.Schema
   import Ecto.Changeset
 
   @primary_key false
-  schema "dids" do
-    field :did, :string, primary_key: true
-    field :password, :string, virtual: true, redact: true
-    field :hashed_password, :string, redact: true
+  schema "keys" do
+    field(:did, :string, primary_key: true)
+    field(:method, :string)
+    field(:password, :string, virtual: true, redact: true)
+    field(:hashed_password, :string, redact: true)
 
-    has_many :users_dids, DidServer.Accounts.UserDid, references: :did, foreign_key: :did_key
-    has_many :users, through: [:users_dids, :user]
-    has_many :keys_secrets, DidServer.Vault.KeySecret, references: :did, foreign_key: :did_key
-    has_many :secrets, through: [:keys_secrets, :secret]
+    has_many(:users_keys, DidServer.Accounts.UserKey, references: :did, foreign_key: :key_id)
+    has_many(:users, through: [:users_keys, :user])
 
     timestamps()
   end
 
   @doc """
-  A changeset for creating a new did.
+  A changeset for creating a new did key.
 
   It is important to validate the length of the password.
   Otherwise databases may truncate it without warnings, which
@@ -34,11 +33,12 @@ defmodule DidServer.Log.Did do
       Defaults to `true`.
 
   """
-  def changeset(%__MODULE__{} = did, attrs, opts \\ []) do
-    did
-    |> cast(attrs, [:did, :password])
+  def changeset(%__MODULE__{} = key, attrs, opts \\ []) do
+    key
+    |> cast(attrs, [:did, :method, :password])
     |> validate_required([:did, :password])
-    |> unique_constraint(:did, name: "dids_pkey")
+    |> unique_constraint(:did, name: "keys_pkey")
+    |> maybe_set_method()
     |> validate_password(opts)
   end
 
@@ -72,8 +72,8 @@ defmodule DidServer.Log.Did do
     Bcrypt.verify_pass(password, hashed_password)
   end
 
-  def valid_password?(did, _) do
-    IO.puts("Did.valid_password? without hashed_password: #{inspect(did)}")
+  def valid_password?(key, _) do
+    IO.puts("Did.valid_password? without hashed_password: #{inspect(key)}")
     Bcrypt.no_user_verify()
     false
   end
@@ -86,6 +86,17 @@ defmodule DidServer.Log.Did do
       changeset
     else
       add_error(changeset, :current_password, "is not valid")
+    end
+  end
+
+  def maybe_set_method(changeset) do
+    did = get_change(changeset, :did)
+
+    if is_nil(get_change(changeset, :method)) && !is_nil(did) do
+      %{method: method} = CryptoUtils.Did.parse_did!(did, method_only: true)
+      put_change(changeset, :method, to_string(method))
+    else
+      changeset
     end
   end
 

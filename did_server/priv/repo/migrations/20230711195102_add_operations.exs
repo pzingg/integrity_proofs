@@ -2,8 +2,9 @@ defmodule Integrity.Did.PlcRepo.Migrations.AddOperations do
   use Ecto.Migration
 
   def change do
-    create table(:dids, primary_key: false) do
+    create table(:keys, primary_key: false) do
       add :did, :string, primary_key: true
+      add :method, :string, null: false
       add :hashed_password, :string, null: false
 
       timestamps()

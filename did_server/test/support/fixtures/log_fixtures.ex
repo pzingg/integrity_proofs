@@ -64,9 +64,12 @@ defmodule DidServer.LogFixtures do
   @doc """
   Generate a did.
   """
-  def did_fixture(attrs \\ %{}) do
-    %{did: did} = operation_fixture(attrs)
+  def key_fixture(attrs \\ @operation_attrs) do
+    {:ok, %{key: key}} =
+      attrs
+      |> valid_create_op_attributes()
+      |> DidServer.Log.create_operation()
 
-    did
+    key
   end
 end

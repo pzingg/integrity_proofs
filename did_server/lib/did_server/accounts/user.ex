@@ -10,8 +10,8 @@ defmodule DidServer.Accounts.User do
     # field :hashed_password, :string, redact: true
     field :confirmed_at, :naive_datetime
 
-    has_many(:user_dids, DidServer.Accounts.UserDid)
-    has_many(:dids, through: [:user_dids, :did])
+    has_many(:users_keys, DidServer.Accounts.UserKey)
+    has_many(:keys, through: [:users_keys, :key])
 
     timestamps()
   end
@@ -36,7 +36,6 @@ defmodule DidServer.Accounts.User do
   def ap_acct(%__MODULE__{username: username, domain: domain}, prefix \\ "") do
     "#{prefix}#{username}@#{domain}"
   end
-
 
   @doc """
   A user changeset for registration.
@@ -113,8 +112,8 @@ defmodule DidServer.Accounts.User do
   """
   def valid_password?(%__MODULE__{} = user, password) when byte_size(password) > 0 do
     did_that_validated =
-      DidServer.Accounts.list_dids_by_user(user, true)
-      |> Enum.find(fn did -> DidServer.Log.Did.valid_password?(did, password) end)
+      DidServer.Accounts.list_keys_by_user(user, true)
+      |> Enum.find(fn did -> DidServer.Log.Key.valid_password?(did, password) end)
 
     !is_nil(did_that_validated)
   end

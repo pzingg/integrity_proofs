@@ -3,36 +3,36 @@ defmodule DidServer.LogTest do
 
   alias DidServer.Log
 
-  describe "dids" do
-    alias DidServer.Log.Did
+  describe "keys" do
+    alias DidServer.Log.Key
 
     import DidServer.LogFixtures
 
     @invalid_attrs %{"did" => nil, "password" => nil}
 
-    test "list_dids/0 returns all dids" do
-      did = did_fixture()
-      assert [%Did{did: ^did}] = Log.list_dids()
+    test "list_keys/0 returns all dids" do
+      %{did: did} = key_fixture()
+      assert [%Key{did: ^did}] = Log.list_keys()
     end
 
-    test "get_did!/1 returns the did with given id" do
-      did = did_fixture()
-      assert %Did{did: ^did} = Log.get_did!(did)
+    test "get_key!/1 returns the did with given id" do
+      %{did: did} = key_fixture()
+      assert %Key{did: ^did} = Log.get_key!(did)
     end
 
-    test "create_did/1 succeeds with valid attributes" do
+    test "create_key/1 succeeds with valid attributes" do
       did = "did:plc:y54rrfl37i5wqztksze4bddl"
       password = "bluesky"
-      {:ok, %Did{did: ^did}} = Log.create_did(%{did: did, password: password})
+      {:ok, %Key{did: ^did}} = Log.create_key(%{did: did, password: password})
     end
 
-    test "create_did/1 fails with invalid attributes" do
-      {:error, _} = Log.create_did(@invalid_attrs)
+    test "create_key/1 fails with invalid attributes" do
+      {:error, _} = Log.create_key(@invalid_attrs)
     end
 
-    test "create_did/1 fails for an existing did" do
-      did = did_fixture()
-      {:error, _} = Log.create_did(%{did: did})
+    test "create_key/1 fails for an existing did" do
+      %{did: did} = key_fixture()
+      {:error, _} = Log.create_key(%{did: did})
     end
   end
 

@@ -55,7 +55,7 @@ and then call `:crypto.sign/5` and `:crypto.verify/6`.
 ## Generating and parsing ED25119 key pairs
 
 "PEM" encoded key pairs that use the ED25519 curve can be parsed by
-`Integrity.decode_pem_ssh_file/3` function. These key pairs
+`CryptoUtils.Keys.decode_pem_ssh_file/3` function. These key pairs
 can be generated from the command line with:
 
 ```sh

@@ -130,7 +130,7 @@ defmodule IntegrityTest do
   test "decodes an ed25519 public key" do
     {:ok, pem} = File.read("./test/fixtures/bob_example_ed25519.pub")
 
-    {:ok, public_key, _priv} = Integrity.decode_pem_ssh_file(pem, :public_key, :public_key)
+    {:ok, public_key, _priv} = CryptoUtils.Keys.decode_pem_ssh_file(pem, :public_key, :public_key)
 
     assert {{:ECPoint, pub}, {:namedCurve, _curve}} = public_key
     assert byte_size(pub) == 32
@@ -140,7 +140,8 @@ defmodule IntegrityTest do
   test "decodes an ed25519 private key" do
     {:ok, pem} = File.read("./test/fixtures/bob_example_ed25519.priv")
 
-    {:ok, _pub, private_key} = Integrity.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
+    {:ok, _pub, private_key} =
+      CryptoUtils.Keys.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
 
     assert {:ECPrivateKey, 1, priv, {:namedCurve, _curve}, pub} = private_key
     assert byte_size(priv) == 32

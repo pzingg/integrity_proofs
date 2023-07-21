@@ -243,23 +243,23 @@ defmodule DidServer.Accounts do
 
   ## DIDs
 
-  def list_dids_by_user(user, return_structs? \\ false) do
-    user = Repo.preload(user, :dids)
+  def list_keys_by_user(user, return_structs? \\ false) do
+    user = Repo.preload(user, :keys)
 
     if return_structs? do
-      user.dids
+      user.keys
     else
-      Enum.map(user.dids, fn %{did: did} -> did end)
+      Enum.map(user.keys, fn %{did: did} -> did end)
     end
   end
 
   def list_users_by_did(did) when is_binary(did) do
-    did = DidServer.Log.get_did!(did)
+    did = DidServer.Log.get_key!(did)
     did.users
   end
 
   def list_also_known_as_users(user) do
-    list_dids_by_user(user)
+    list_keys_by_user(user)
     |> Enum.map(&list_users_by_did(&1))
     |> List.flatten()
   end

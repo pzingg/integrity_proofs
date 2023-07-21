@@ -184,19 +184,23 @@ defmodule CryptoUtils.Did do
 
     parsed = %{
       did_string: identifier,
-      method: String.to_existing_atom(method),
+      method: String.to_atom(method),
       method_specific_id: method_specific_id
     }
 
-    case method do
-      "key" ->
-        validate_did!(:key, parsed, String.split(method_specific_id, ":"), options)
+    if Keyword.get(options, :method_only, false) do
+      parsed
+    else
+      case method do
+        "key" ->
+          validate_did!(:key, parsed, String.split(method_specific_id, ":"), options)
 
-      "web" ->
-        validate_did!(:web, parsed, String.split(method_specific_id, ":"), options)
+        "web" ->
+          validate_did!(:web, parsed, String.split(method_specific_id, ":"), options)
 
-      _ ->
-        raise InvalidDidError, identifier
+        _ ->
+          raise InvalidDidError, identifier
+      end
     end
   end
 

@@ -30,7 +30,7 @@ defmodule DidServer.AccountsFixtures do
       |> valid_user_attributes()
       |> DidServer.Accounts.register_user()
 
-    did = DidServer.LogFixtures.did_fixture(%{handle: User.domain_handle(user)})
+    %{did: did} = DidServer.LogFixtures.key_fixture(%{handle: User.domain_handle(user)})
     _link = DidServer.Log.add_also_known_as(did, user)
 
     user
