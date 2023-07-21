@@ -6,6 +6,8 @@ defmodule DidServer.Log do
   import Ecto.Query, warn: false
 
   alias DidServer.{PrevMismatchError, Repo, UpdateOperationError}
+  alias DidServer.Accounts
+  alias DidServer.Accounts.{User, UserDid}
   alias DidServer.Log.{Did, Operation}
 
   @doc """
@@ -37,6 +39,17 @@ defmodule DidServer.Log do
   """
   def get_did!(did), do: Repo.get!(Did, did, preload: :users)
 
+  def get_domain_did() do
+    domain = DidServer.Application.domain()
+
+    with %User{} = user <- Accounts.get_user_by_username("admin", domain),
+         [did | _] <- Accounts.list_dids_by_user(user) do
+      {:ok, did}
+    else
+      _ -> {:error, "not found"}
+    end
+  end
+
   @doc """
   Creates a did.
 
@@ -66,6 +79,37 @@ defmodule DidServer.Log do
   """
   def change_did(%Did{} = did, attrs \\ %{}) do
     Did.changeset(did, attrs)
+  end
+
+  @doc """
+  Links a user to a DID.
+  """
+  def add_also_known_as(did, nil) do
+    _ =
+      from(did_user in UserDid,
+        where: did_user.did_key == ^did
+      )
+      |> Repo.delete_all()
+
+    nil
+  end
+
+  def add_also_known_as(did, user) do
+    UserDid.build_link(did, user)
+    |> Repo.insert!()
+
+    {:ok, user}
+  end
+
+  def remove_also_known_as(did, user) do
+    _ =
+      from(did_user in UserDid,
+        where: did_user.user_id == ^user.id,
+        where: did_user.did_key == ^did
+      )
+      |> Repo.delete_all()
+
+    {:ok, user}
   end
 
   @doc """

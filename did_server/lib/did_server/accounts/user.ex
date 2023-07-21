@@ -3,12 +3,12 @@ defmodule DidServer.Accounts.User do
   import Ecto.Changeset
 
   schema "users" do
-    field(:email, :string)
-    field(:username, :string)
-    field(:domain, :string)
+    field :email, :string
+    field :username, :string
+    field :domain, :string
     # field :password, :string, virtual: true, redact: true
     # field :hashed_password, :string, redact: true
-    field(:confirmed_at, :naive_datetime)
+    field :confirmed_at, :naive_datetime
 
     has_many(:user_dids, DidServer.Accounts.UserDid)
     has_many(:dids, through: [:user_dids, :did])
@@ -16,13 +16,27 @@ defmodule DidServer.Accounts.User do
     timestamps()
   end
 
-  def ap_id(%__MODULE__{username: username, domain: domain}, scheme \\ "https") do
-    "#{scheme}://#{domain}/user/#{username}"
+  @doc """
+  `prefix` could be "", or "at://"
+  """
+  def domain_handle(%__MODULE__{username: username, domain: domain}, prefix \\ "") do
+    "#{prefix}#{username}.#{domain}"
   end
 
-  def domain_handle(%__MODULE__{username: username, domain: domain}) do
-    "#{username}/#{domain}"
+  @doc """
+  `prefix` could be "user/", or "@"
+  """
+  def ap_id(%__MODULE__{username: username, domain: domain}, prefix \\ "user/", scheme \\ "https") do
+    "#{scheme}://#{domain}/#{prefix}#{username}"
   end
+
+  @doc """
+  `prefix` could be "", "@", "acct:", or "acct:@"
+  """
+  def ap_acct(%__MODULE__{username: username, domain: domain}, prefix \\ "") do
+    "#{prefix}#{username}@#{domain}"
+  end
+
 
   @doc """
   A user changeset for registration.

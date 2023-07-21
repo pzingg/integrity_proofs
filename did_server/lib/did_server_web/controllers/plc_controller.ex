@@ -22,22 +22,46 @@ defmodule DidServerWeb.PlcController do
     end
   end
 
-  def show(conn, %{"did" => did}) do
-    with %Operation{} = last <- DidServer.Log.get_last_op(did) do
-      doc =
-        DidServer.Log.Operation.to_data(last)
-        |> Map.put("did", did)
-        |> CryptoUtils.Did.format_did_plc_document()
+  def domain_did(conn, _params) do
+    did = DidServer.Log.get_domain_did()
 
-      conn
-      |> put_resp_content_type("application/did+ld+json")
-      |> render(:show, document: doc)
-    else
+    case to_document(did) do
+      {:ok, doc} ->
+        conn
+        |> put_resp_content_type("application/did+ld+json")
+        |> render(:show, document: doc)
+
       _ ->
         conn
         |> put_status(404)
         |> put_view(ErrorJSON)
         |> render("404.json")
+    end
+  end
+
+  def show(conn, %{"did" => did}) do
+    case to_document(did) do
+      {:ok, doc} ->
+        conn
+        |> put_resp_content_type("application/did+ld+json")
+        |> render(:show, document: doc)
+
+      _ ->
+        conn
+        |> put_status(404)
+        |> put_view(ErrorJSON)
+        |> render("404.json")
+    end
+  end
+
+  def to_document(did) do
+    with %Operation{} = last <- DidServer.Log.get_last_op(did) do
+      {:ok,
+       DidServer.Log.Operation.to_data(last)
+       |> Map.put("did", did)
+       |> CryptoUtils.Did.format_did_plc_document()}
+    else
+      _ -> {:error, "did not found"}
     end
   end
 

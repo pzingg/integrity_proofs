@@ -9,13 +9,13 @@ defmodule CryptoUtils.Plc.UpdateOperation do
   import Ecto.Changeset
 
   embedded_schema do
-    field(:did, :string)
-    field(:type, :string)
-    field(:signer, {:array, :string})
-    field(:signingKey, :string)
-    field(:alsoKnownAs, {:array, :string})
-    field(:rotationKeys, {:array, :string})
-    field(:pds, :string)
+    field :did, :string
+    field :type, :string
+    field :signer, {:array, :string}
+    field :signingKey, :string
+    field :alsoKnownAs, {:array, :string}
+    field :rotationKeys, {:array, :string}
+    field :pds, :string
   end
 
   def parse(params) when is_list(params), do: Map.new(params) |> parse()

@@ -4,14 +4,14 @@ defmodule DidServer.Log.Did do
 
   @primary_key false
   schema "dids" do
-    field(:did, :string, primary_key: true)
-    field(:password, :string, virtual: true, redact: true)
-    field(:hashed_password, :string, redact: true)
+    field :did, :string, primary_key: true
+    field :password, :string, virtual: true, redact: true
+    field :hashed_password, :string, redact: true
 
-    has_many(:users_dids, DidServer.Accounts.UserDid, references: :did, foreign_key: :did_key)
-    has_many(:users, through: [:users_dids, :user])
-    has_many(:keys_secrets, DidServer.Vault.KeySecret, references: :did, foreign_key: :did_key)
-    has_many(:secrets, through: [:keys_secrets, :secret])
+    has_many :users_dids, DidServer.Accounts.UserDid, references: :did, foreign_key: :did_key
+    has_many :users, through: [:users_dids, :user]
+    has_many :keys_secrets, DidServer.Vault.KeySecret, references: :did, foreign_key: :did_key
+    has_many :secrets, through: [:keys_secrets, :secret]
 
     timestamps()
   end

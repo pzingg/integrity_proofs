@@ -6,36 +6,9 @@ defmodule DidServer.Accounts do
   import Ecto.Query, warn: false
   alias DidServer.Repo
 
-  alias DidServer.Accounts.{User, UserDid, UserToken, UserNotifier}
-
-  @doc """
-  Usage for nodeinfo requests.
-  """
-  def usage() do
-    %{
-      users: count_users(),
-      localPosts: 0
-    }
-  end
+  alias DidServer.Accounts.{User, UserToken, UserNotifier}
 
   ## Database getters
-
-  def count_users() do
-    now = NaiveDateTime.utc_now()
-    one_month = DateTime.add(now, -(31 * 24 * 3600), :second)
-    half_year = DateTime.add(now, -(184 * 24 * 3600), :second)
-    total = Repo.aggregate(User, :count)
-
-    active_month =
-      from(user in User, where: user.updated_at >= ^one_month)
-      |> Repo.aggregate(:count)
-
-    active_half_year =
-      from(user in User, where: user.updated_at >= ^half_year)
-      |> Repo.aggregate(:count)
-
-    %{total: total, activeMonth: active_month, activeHalfYear: active_half_year}
-  end
 
   @doc """
   Gets a user by email.
@@ -51,51 +24,6 @@ defmodule DidServer.Accounts do
   """
   def get_user_by_email(email) when is_binary(email) do
     Repo.get_by(User, email: email)
-  end
-
-  def get_user_by_username(username) when is_binary(username) do
-    Repo.get_by(User, username: username)
-  end
-
-  def list_dids_by_user(user, return_structs? \\ false) do
-    user = Repo.preload(user, :dids)
-
-    if return_structs? do
-      user.dids
-    else
-      Enum.map(user.dids, fn %{did: did} -> did end)
-    end
-  end
-
-  def list_users_by_did(did) when is_binary(did) do
-    did = DidServer.Log.get_did!(did)
-    did.users
-  end
-
-  def list_also_known_as_users(user) do
-    list_dids_by_user(user)
-    |> Enum.map(&list_users_by_did(&1))
-    |> List.flatten()
-  end
-
-  def get_user_by_ap_id(ap_id) when is_binary(ap_id) do
-    case URI.parse(ap_id) do
-      %{host: domain, path: path} when is_binary(domain) ->
-        case String.split(path, "/") do
-          ["", "user", username] ->
-            from(user in User,
-              where: user.username == ^username,
-              where: user.domain == ^domain
-            )
-            |> Repo.one()
-
-          _ ->
-            nil
-        end
-
-      _ ->
-        nil
-    end
   end
 
   @doc """
@@ -114,6 +42,154 @@ defmodule DidServer.Accounts do
       when is_binary(email) and is_binary(password) do
     user = Repo.get_by(User, email: email)
     if User.valid_password?(user, password), do: user
+  end
+
+  def get_user_by_username(username, domain) when is_binary(username) and is_binary(domain) do
+    from(user in User,
+      where: user.username == ^username,
+      where: user.domain == ^domain
+    )
+    |> Repo.one()
+  end
+
+  def get_user_by_identifier(handle) when is_binary(handle) do
+    case parse_user_identifier(handle) do
+      {username, domain} -> get_user_by_username(username, domain)
+      _ -> nil
+    end
+  end
+
+  def get_user_by_domain_handle(handle) when is_binary(handle) do
+    case parse_domain_handle(handle) do
+      {username, domain} -> get_user_by_username(username, domain)
+      _ -> nil
+    end
+  end
+
+  def get_user_by_ap_id(ap_id) when is_binary(ap_id) do
+    case parse_ap_id(ap_id) do
+      {username, domain} -> get_user_by_username(username, domain)
+      _ -> nil
+    end
+  end
+
+  def get_user_by_ap_acct(acct) when is_binary(acct) do
+    case parse_ap_acct(acct) do
+      {username, domain} -> get_user_by_username(username, domain)
+      _ -> nil
+    end
+  end
+
+  def parse_user_identifier(handle) do
+    case URI.parse(handle) do
+      %URI{scheme: "at"} ->
+        parse_domain_handle(handle)
+
+      %URI{scheme: "http"} = uri ->
+        parse_ap_id(uri)
+
+      %URI{scheme: "https"} = uri ->
+        parse_ap_id(uri)
+
+      %URI{scheme: "acct"} = uri ->
+        parse_ap_acct(uri)
+
+      uri ->
+        with nil <- parse_domain_handle(handle),
+             nil <- parse_ap_id(uri),
+             nil <- parse_ap_acct(uri) do
+          nil
+        else
+          {username, domain} -> {username, domain}
+        end
+    end
+  end
+
+  def parse_domain_handle(handle) when is_binary(handle) do
+    parts =
+      handle
+      |> String.replace_leading("at://", "")
+      |> String.split(".", parts: 2)
+
+    case parts do
+      [username, domain] -> ensure_valid_username_and_domain(username, domain)
+      _ -> nil
+    end
+  end
+
+  def parse_ap_acct(acct) when is_binary(acct) do
+    URI.parse(acct) |> parse_ap_acct()
+  end
+
+  def parse_ap_acct(%URI{scheme: scheme, path: path}) when is_binary(path) do
+    if is_nil(scheme) || scheme == "acct" do
+      parts =
+        path
+        |> String.replace_leading("@", "")
+        |> String.split("@", parts: 2)
+
+      case parts do
+        [username, domain] -> ensure_valid_username_and_domain(username, domain)
+        _ -> nil
+      end
+    end
+  end
+
+  def parse_ap_acct(_), do: nil
+
+  def parse_ap_id(ap_id) when is_binary(ap_id) do
+    URI.parse(ap_id) |> parse_ap_id()
+  end
+
+  def parse_ap_id(%URI{scheme: nil, path: path}) when is_binary(path) do
+    case String.split(path, "/") do
+      [domain, "user", username] -> ensure_valid_username_and_domain(username, domain)
+      [domain, "@" <> username] -> ensure_valid_username_and_domain(username, domain)
+      _ -> nil
+    end
+  end
+
+  def parse_ap_id(%URI{scheme: scheme, host: domain, path: path})
+      when is_binary(domain) and is_binary(path) do
+    if scheme in ["http", "https"] do
+      case String.split(path, "/") do
+        ["", "user", username] -> ensure_valid_username_and_domain(username, domain)
+        ["", "@" <> username] -> ensure_valid_username_and_domain(username, domain)
+        _ -> nil
+      end
+    else
+      nil
+    end
+  end
+
+  def parse_ap_id(_), do: nil
+
+  defp ensure_valid_username_and_domain(username, domain) do
+    username = String.trim(username) |> String.downcase()
+    domain = String.trim(domain) |> String.downcase()
+
+    valid? =
+      [username | String.split(domain, ".")]
+      |> Enum.reverse()
+      |> Enum.with_index()
+      |> Enum.all?(fn {segment, i} -> valid_segment?(segment, i == 0) end)
+
+    if valid? do
+      {username, domain}
+    else
+      nil
+    end
+  end
+
+  # Per https://atproto.com/specs/handle
+  defp valid_segment?(s, top_level)
+
+  defp valid_segment?(s, true) do
+    !String.ends_with?(s, "-") && Regex.match?(~r/^[a-z]([.-a-z0-9]*)$/, s)
+  end
+
+  defp valid_segment?(s, _) do
+    !String.ends_with?(s, "-") && Regex.match?(~r/^[a-z0-9]([-a-z0-9]*)$/, s)
   end
 
   @doc """
@@ -163,6 +239,58 @@ defmodule DidServer.Accounts do
   """
   def change_user_registration(%User{} = user, attrs \\ %{}) do
     User.registration_changeset(user, attrs, validate_email: false)
+  end
+
+  ## DIDs
+
+  def list_dids_by_user(user, return_structs? \\ false) do
+    user = Repo.preload(user, :dids)
+
+    if return_structs? do
+      user.dids
+    else
+      Enum.map(user.dids, fn %{did: did} -> did end)
+    end
+  end
+
+  def list_users_by_did(did) when is_binary(did) do
+    did = DidServer.Log.get_did!(did)
+    did.users
+  end
+
+  def list_also_known_as_users(user) do
+    list_dids_by_user(user)
+    |> Enum.map(&list_users_by_did(&1))
+    |> List.flatten()
+  end
+
+  ## Server statistics
+
+  @doc """
+  Usage for nodeinfo requests.
+  """
+  def usage() do
+    %{
+      users: count_users(),
+      localPosts: 0
+    }
+  end
+
+  def count_users() do
+    now = NaiveDateTime.utc_now()
+    one_month = DateTime.add(now, -(31 * 24 * 3600), :second)
+    half_year = DateTime.add(now, -(184 * 24 * 3600), :second)
+    total = Repo.aggregate(User, :count)
+
+    active_month =
+      from(user in User, where: user.updated_at >= ^one_month)
+      |> Repo.aggregate(:count)
+
+    active_half_year =
+      from(user in User, where: user.updated_at >= ^half_year)
+      |> Repo.aggregate(:count)
+
+    %{total: total, activeMonth: active_month, activeHalfYear: active_half_year}
   end
 
   ## Settings
@@ -285,26 +413,6 @@ defmodule DidServer.Accounts do
       {:ok, %{user: user}} -> {:ok, user}
       {:error, :user, changeset, _} -> {:error, changeset}
     end
-  end
-
-  ## Did
-
-  @doc """
-  Links a did to a user.
-  """
-  def link_did_to_user(did, nil) do
-    _ =
-      from(did_user in UserDid,
-        where: did_user.did == ^did
-      )
-      |> Repo.delete_all()
-
-    nil
-  end
-
-  def link_did_to_user(did, user) do
-    UserDid.build_link(did, user)
-    |> Repo.insert!()
   end
 
   ## Session

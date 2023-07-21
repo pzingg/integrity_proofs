@@ -6,11 +6,11 @@ defmodule DidServer.Vault.Secret do
 
   @primary_key {:id, :binary_id, autogenerate: true}
   schema "secrets" do
-    field(:name, :string)
-    field(:description, :string)
-    field(:secret, :string)
-    field(:key_id, Ecto.UUID)
-    field(:nonce, :string)
+    field :name, :string
+    field :description, :string
+    field :secret, :string
+    field :key_id, Ecto.UUID
+    field :nonce, :string
 
     timestamps()
   end

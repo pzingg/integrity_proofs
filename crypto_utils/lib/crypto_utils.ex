@@ -224,7 +224,8 @@ defmodule CryptoUtils do
   def did_uri?(_), do: false
 
   @doc """
-  Returns `true` if a binary or URI has the scheme "at://".
+  Returns `true` if a binary or URI has the scheme "at://" and
+  there are username and domain parts in the `:host` component.
   """
   def atproto_uri?(url) when is_binary(url) do
     URI.parse(url) |> atproto_uri?()
@@ -232,7 +233,7 @@ defmodule CryptoUtils do
 
   def atproto_uri?(%URI{scheme: "at", host: host, path: nil})
       when is_binary(host) do
-    true
+    String.contains?(host, ".")
   end
 
   def atproto_uri?(_), do: false

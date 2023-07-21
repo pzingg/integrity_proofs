@@ -13,6 +13,10 @@ defmodule DidServerWeb.Router do
     # plug :fetch_current_user
   end
 
+  pipeline :plain do
+    plug(:accepts, ["text", "html"])
+  end
+
   pipeline :api do
     plug(:accepts, ["json"])
   end
@@ -35,7 +39,13 @@ defmodule DidServerWeb.Router do
   scope "/.well-known", DidServerWeb do
     pipe_through(:api)
 
-    get("/did.json", WebController, :show_root)
+    get("/did.json", WebController, :domain_did)
+  end
+
+  scope "/.well-known", DidServerWeb do
+    pipe_through(:plain)
+
+    get("/atproto-did", PlcController, :domain_did)
   end
 
   ## Authentication routes

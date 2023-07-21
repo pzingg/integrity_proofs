@@ -11,20 +11,20 @@ defmodule CryptoUtils.Plc.CreateOperation do
   alias CryptoUtils.Plc.CreateParams
 
   embedded_schema do
-    field(:did, :string)
-    field(:type, :string)
-    field(:prev, :string)
-    field(:signer, {:array, :string})
-    field(:sig, :string)
-    field(:signingKey, :string)
-    field(:recoveryKey, :string)
-    field(:handle, :string)
-    field(:service, :string)
-    field(:verificationMethods, :map)
-    field(:rotationKeys, {:array, :string})
-    field(:alsoKnownAs, {:array, :string})
-    field(:services, :map)
-    field(:password, :string)
+    field :did, :string
+    field :type, :string
+    field :prev, :string
+    field :signer, {:array, :string}
+    field :sig, :string
+    field :signingKey, :string
+    field :recoveryKey, :string
+    field :handle, :string
+    field :service, :string
+    field :verificationMethods, :map
+    field :rotationKeys, {:array, :string}
+    field :alsoKnownAs, {:array, :string}
+    field :services, :map
+    field :password, :string
   end
 
   def parse(params) when is_list(params), do: Map.new(params) |> parse()

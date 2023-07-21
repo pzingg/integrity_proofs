@@ -13,6 +13,7 @@ defmodule DidServerWeb.WebFinger do
 
   @accept_header_value_xml "application/xrd+xml"
   @accept_header_value_json "application/jrd+json"
+  @acct_regex ~r/^(acct:)?(?<username>[a-z0-9A-Z_\.-]+)@(?<domain>[^\s]+)$/
 
   def host_meta do
     base_url = DidServerWeb.Endpoint.url()
@@ -33,24 +34,18 @@ defmodule DidServerWeb.WebFinger do
   end
 
   def webfinger(resource, fmt) when is_binary(resource) and fmt in [:xml, :json] do
-    host = DidServerWeb.Endpoint.host()
+    domain = DidServer.Application.domain()
 
-    regex =
-      if webfinger_domain = Application.get_env(:fedi_server, :web_finger_domain) do
-        ~r/(acct:)?(?<username>[a-z0-9A-Z_\.-]+)@(#{host}|#{webfinger_domain})/
-      else
-        ~r/(acct:)?(?<username>[a-z0-9A-Z_\.-]+)@#{host}/
-      end
-
-    with %{"username" => nickname} <- Regex.named_captures(regex, resource),
-         %User{} = user <- Accounts.get_user_by_username(nickname) do
-      {:ok, represent_user(user, fmt)}
+    with %{"username" => nickname, "domain" => domain} <-
+           Regex.named_captures(@acct_regex, resource),
+         %User{} = user <- Accounts.get_user_by_username(nickname, domain) do
+      {:ok, represent_user(user, domain, fmt)}
     else
       _ ->
         resource = CryptoUtils.to_uri(resource)
 
         with %User{} = user <- Accounts.get_user_by_ap_id(resource) do
-          {:ok, represent_user(user, fmt)}
+          {:ok, represent_user(user, domain, fmt)}
         else
           _ ->
             {:error, "User not found"}
@@ -78,15 +73,15 @@ defmodule DidServerWeb.WebFinger do
     [User.ap_id(user)]
   end
 
-  def represent_user(user, :json) do
+  def represent_user(user, domain, :json) do
     %{
-      "subject" => "acct:#{user.nickname}@#{domain()}",
+      "subject" => "acct:#{user.nickname}@#{domain}",
       "aliases" => gather_aliases(user),
       "links" => gather_links(user)
     }
   end
 
-  def represent_user(user, :xml) do
+  def represent_user(user, domain, :xml) do
     aliases =
       user
       |> gather_aliases()
@@ -100,14 +95,10 @@ defmodule DidServerWeb.WebFinger do
       :XRD,
       %{xmlns: "http://docs.oasis-open.org/ns/xri/xrd-1.0"},
       [
-        {:Subject, "acct:#{user.nickname}@#{domain()}"}
+        {:Subject, "acct:#{user.nickname}@#{domain}"}
       ] ++ aliases ++ links
     }
     |> XMLBuilder.to_doc()
-  end
-
-  defp domain do
-    Application.get_env(:fedi_server, :web_finger_domain) || DidServerWeb.Endpoint.host()
   end
 
   defp webfinger_from_xml(body) do

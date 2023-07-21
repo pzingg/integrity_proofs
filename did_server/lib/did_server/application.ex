@@ -35,8 +35,11 @@ defmodule DidServer.Application do
   end
 
   def name() do
-    # TODO: specify in config
-    "DID Server"
+    Application.get_env(:did_server, :server_name, "DID Server")
+  end
+
+  def domain do
+    Application.get_env(:did_server, :server_domain, "example.com")
   end
 
   def version() do
@@ -45,7 +48,7 @@ defmodule DidServer.Application do
   end
 
   def protocols() do
-    # TODO: specify in config
-    ["activitypub"]
+    Application.get_env(:did_server, :supported_protocols, "activitypub")
+    |> String.split(",")
   end
 end
