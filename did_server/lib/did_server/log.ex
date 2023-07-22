@@ -209,7 +209,8 @@ defmodule DidServer.Log do
     did = Map.get(params, :did) || Map.get(params, "did")
 
     with {:ok, %{did: did, cid: cid} = last_op} <- ensure_last_op(did),
-         {:data, data} when is_map(data) <- {:data, Operation.to_data(last_op)},
+         {:data, data} when is_map(data) <-
+           {:data, CryptoUtils.Did.to_plc_operation_data(last_op)},
          {:ok, {op, _did}} <-
            CryptoUtils.Did.update_operation(
              %{did: did, cid: cid, operation: data},

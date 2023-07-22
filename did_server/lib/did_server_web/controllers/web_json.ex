@@ -4,6 +4,6 @@ defmodule DidServerWeb.WebJSON do
   end
 
   def info(%{version: version}) do
-    %{data: %{version: version, details: "did:web server"}}
+    %{data: %{version: version, detail: "did:web server"}}
   end
 end

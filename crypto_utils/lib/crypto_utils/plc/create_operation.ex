@@ -74,7 +74,7 @@ defmodule CryptoUtils.Plc.CreateOperation do
             {:ok,
              {%CreateParams{
                 did: op.did,
-                type: "plc_operation",
+                type: type,
                 prev: op.prev,
                 sig: op.sig,
                 verification_methods: verification_methods,
@@ -111,24 +111,38 @@ defmodule CryptoUtils.Plc.CreateOperation do
       ])
 
     changeset
+    |> validate_required([:signer])
     |> validate_op()
   end
 
   defp validate_op(changeset) do
-    case {get_change(changeset, :signingKey), get_change(changeset, :type)} do
-      {_, "plc_tombstone"} ->
+    case get_change(changeset, :type) do
+      "plc_tombstone" ->
         validate_required(changeset, [:prev])
 
-      {_, "plc_operation"} ->
-        validate_required(changeset, [:verificationMethods, :rotationKeys, :alsoKnownAs])
+      "plc_operation" ->
+        changeset
+        |> validate_verification_methods()
+        |> validate_rotation_keys()
+        |> validate_also_known_as()
+        |> validate_services()
 
-      {_, "create"} ->
-        validate_v1_params(changeset)
+      "create" ->
+        changeset
+        |> validate_required([:signingKey])
+        |> validate_verification_methods()
+        |> validate_rotation_keys()
+        |> validate_also_known_as()
+        |> validate_services()
 
-      {signing_key, nil} when is_binary(signing_key) ->
+      nil ->
         changeset
         |> put_change(:type, "create")
-        |> validate_v1_params()
+        |> validate_required([:signingKey])
+        |> validate_verification_methods()
+        |> validate_rotation_keys()
+        |> validate_also_known_as()
+        |> validate_services()
 
       _ ->
         add_error(changeset, :type, "is invalid",
@@ -136,16 +150,6 @@ defmodule CryptoUtils.Plc.CreateOperation do
           enum: ["create", "plc_operation", "plc_tombstone"]
         )
     end
-  end
-
-  def validate_v1_params(changeset) do
-    changeset
-    |> validate_required([:signingKey])
-    |> validate_rotation_keys()
-    |> validate_also_known_as()
-    |> validate_services()
-
-    # |> validate_verification_methods()
   end
 
   def validate_rotation_keys(changeset) do
@@ -180,9 +184,9 @@ defmodule CryptoUtils.Plc.CreateOperation do
         changeset
 
       _ ->
-        case get_change(changeset, :recoveryKey) do
+        case get_change(changeset, :signingKey) do
           key when is_binary(key) -> changeset
-          _ -> add_error(changeset, :recoveryKey, "can't be blank")
+          _ -> add_error(changeset, :signingKey, "can't be blank")
         end
     end
   end

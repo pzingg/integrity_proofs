@@ -5,15 +5,15 @@ defmodule DidServer.Log.Operation do
   @primary_key false
   @timestamps_opts [type: :naive_datetime_usec, updated_at: false]
   schema "operations" do
-    field :did, :string, primary_key: true
-    field :cid, :string, primary_key: true
-    field :operation, :string
-    field :nullified, :boolean
-    field :op_data, :map, default: %{}, virtual: true
-    field :prev, :string, virtual: true
-    field :nullified_cids, {:array, :string}, default: [], virtual: true
-    field :password, :string, virtual: true
-    field :keys_pem, :string, virtual: true
+    field(:did, :string, primary_key: true)
+    field(:cid, :string, primary_key: true)
+    field(:operation, :string)
+    field(:nullified, :boolean)
+    field(:op_data, :map, default: %{}, virtual: true)
+    field(:prev, :string, virtual: true)
+    field(:nullified_cids, {:array, :string}, default: [], virtual: true)
+    field(:password, :string, virtual: true)
+    field(:keys_pem, :string, virtual: true)
 
     timestamps()
   end
@@ -49,22 +49,12 @@ defmodule DidServer.Log.Operation do
     %__MODULE__{op | op_data: Jason.decode!(op_json)}
   end
 
-  def to_data(%__MODULE__{operation: op_json}) do
-    %{"type" => type} = data = Jason.decode!(op_json)
-
-    if type == "plc_tombstone" do
-      nil
-    else
-      prev = Map.fetch!(data, "prev")
-
-      ["verificationMethods", "rotationKeys", "alsoKnownAs", "services", "sig"]
-      |> Enum.reduce(%{"type" => type, "prev" => prev}, fn field, acc ->
-        case Map.get(data, field) do
-          nil -> acc
-          value -> Map.put(acc, field, value)
-        end
-      end)
-    end
+  def to_json_data(op) do
+    op
+    |> Map.from_struct()
+    |> Map.delete(:__meta__)
+    |> Map.update(:inserted_at, "", &NaiveDateTime.to_iso8601/1)
+    |> Map.update(:operation, %{}, &Jason.decode!/1)
   end
 
   def changeset(%__MODULE__{} = op, attrs) do

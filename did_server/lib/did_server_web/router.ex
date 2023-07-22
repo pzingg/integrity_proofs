@@ -24,28 +24,30 @@ defmodule DidServerWeb.Router do
   scope "/plc", DidServerWeb do
     pipe_through(:api)
 
-    get("/_health", PlcController, :health)
+    get "/_health", PlcController, :health
     # get "/export", PlcController, :index
-    # get "/:did/data", PlcController, :show_data
-    # get "/:did/log", PlcController, :show_log
-    # get "/:did/log/audit", PlcController, :show_operation_log
-    # get "/:did/log", PlcController, :show_most_recent
-    get("/:did", PlcController, :show)
-    post "/:did", PlcController, :new
 
-    get("/", PlcController, :info)
+    get "/:did/data", PlcController, :did_data
+    get "/:did/log", PlcController, :active_log
+    get "/:did/log/audit", PlcController, :audit_log
+    get "/:did/log/last", PlcController, :last_operation
+
+    get "/:did", PlcController, :show
+    post "/:did", PlcController, :create
+
+    get "/", PlcController, :info
   end
 
   scope "/.well-known", DidServerWeb do
     pipe_through(:api)
 
-    get("/did.json", WebController, :domain_did)
+    get "/did.json", WebController, :domain_did
   end
 
   scope "/.well-known", DidServerWeb do
     pipe_through(:plain)
 
-    get("/atproto-did", PlcController, :domain_did)
+    get "/atproto-did", PlcController, :domain_did
   end
 
   ## Authentication routes
@@ -61,6 +63,6 @@ defmodule DidServerWeb.Router do
   scope "/", DidServerWeb do
     pipe_through(:api)
 
-    get("/*path", WebController, :show)
+    get "/*path", WebController, :show
   end
 end

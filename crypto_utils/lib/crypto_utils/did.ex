@@ -535,7 +535,7 @@ defmodule CryptoUtils.Did do
 
           vms = [
             %{
-              "id" => key_id,
+              "id" => "#" <> key_id,
               "type" => type,
               "controller" => did,
               "publicKeyMultibase" => public_key_multibase
@@ -550,9 +550,10 @@ defmodule CryptoUtils.Did do
     services =
       Map.get(data, "services", %{})
       |> Enum.map(fn {service_id, %{"type" => type, "endpoint" => endpoint}} ->
-        %{"id" => service_id, "type" => type, "serviceEndpoint" => endpoint}
+        %{"id" => "#" <> service_id, "type" => type, "serviceEndpoint" => endpoint}
       end)
 
+    # REVIEW Why are these keys singular? "verificationMethod", "service"
     %{
       "@context" => Enum.reverse(context),
       "id" => did,
@@ -640,6 +641,68 @@ defmodule CryptoUtils.Did do
   def type_for_curve(:secp256k1, :encryption), do: "EcdsaSecp256k1EncryptionKey2019"
 
   # Operations
+
+  def to_data(%{operation: op_json}) do
+    %{"type" => type} = data = Jason.decode!(op_json)
+
+    if type == "plc_tombstone" do
+      nil
+    else
+      prev = Map.fetch!(data, "prev")
+
+      keys_for_type(type)
+      |> Enum.reduce(%{"type" => type, "prev" => prev}, fn field, acc ->
+        case Map.get(data, field) do
+          nil -> acc
+          value -> Map.put(acc, field, value)
+        end
+      end)
+    end
+  end
+
+  defp keys_for_type("create") do
+    ["signingKey", "recoveryKey", "handle", "service", "sig"]
+  end
+
+  defp keys_for_type("plc_operation") do
+    ["verificationMethods", "rotationKeys", "alsoKnownAs", "services", "sig"]
+  end
+
+  def to_plc_operation_data(%{operation: op_json} = op) do
+    case Jason.decode!(op_json) do
+      %{"type" => "plc_tombstone"} ->
+        nil
+
+      %{"type" => "plc_operation"} = data ->
+        data
+
+      %{"type" => "create", "prev" => nil} = data ->
+        sig = Map.get(data, "sig")
+
+        plc_operation_data = %{
+          "type" => "plc_operation",
+          "verificationMethods" => %{"atproto" => Map.fetch!(data, "signingKey")},
+          "rotationKeys" => [Map.fetch!(data, "recoveryKey")],
+          "alsoKnownAs" => [Map.fetch!(data, "handle")],
+          "services" => %{
+            "atproto_pds" => %{
+              "type" => "AtprotoPersonalDataServer",
+              "endpoint" => Map.fetch!(data, "service")
+            }
+          },
+          "prev" => nil
+        }
+
+        if is_nil(sig) do
+          plc_operation_data
+        else
+          Map.put(plc_operation_data, "sig", sig)
+        end
+
+      _ ->
+        raise ImproperOperationError, op: op, message: "invalid data #{op_json}"
+    end
+  end
 
   @doc """
   Creates a did:plc operation.
@@ -768,6 +831,31 @@ defmodule CryptoUtils.Did do
     |> maybe_add_sig(sig)
   end
 
+  def normalize_op(%CreateParams{type: "create", prev: nil, sig: sig} = op) do
+    handle = List.wrap(op.also_known_as) |> hd()
+    signing_key = Map.get(op.verification_methods, "atproto")
+    recovery_key = List.wrap(op.rotation_keys) |> hd()
+    service = get_in(op.services, ["atproto_pds", "endpoint"])
+
+    if is_nil(handle) || is_nil(signing_key) || is_nil(recovery_key) || is_nil(service) do
+      raise ImproperOperationError, op: op, message: "missing elements"
+    end
+
+    %{
+      "type" => "create",
+      "handle" => handle,
+      "signingKey" => signing_key,
+      "recoveryKey" => recovery_key,
+      "service" => service,
+      "prev" => nil
+    }
+    |> maybe_add_sig(sig)
+  end
+
+  def normalize_op(%CreateParams{type: "create"} = op) do
+    raise ImproperOperationError, op: op, message: "prev must be null for create operation"
+  end
+
   def normalize_op(%CreateParams{type: type, sig: sig} = op) when is_binary(type) do
     %{
       "type" => type,
@@ -822,18 +910,17 @@ defmodule CryptoUtils.Did do
   end
 
   def validate_operation_log(did, [%{"type" => first_type} = first | rest]) do
-    if first_type != "plc_operation" do
+    if first_type not in ["create", "plc_operation"] do
       raise ImproperOperationError, op: first, message: "incorrect structure"
     end
 
     # ensure the first op is a valid & signed create operation
-    doc = assure_valid_creation_op(did, first)
+    first_op = assure_valid_creation_op(did, first)
     prev = cid_for_op(first)
 
-    {%{"type" => type} = doc, _, _} =
-      Enum.reduce(rest, {doc, prev, false}, fn %{"type" => type, "prev" => op_prev} = op,
-                                               {%{"rotationKeys" => rotation_keys}, prev,
-                                                saw_tombstone} ->
+    {%{"type" => type} = final_op, _, _} =
+      Enum.reduce(rest, {first_op, prev, false}, fn %{"type" => type, "prev" => op_prev} = op,
+                                                    {key_op, prev, saw_tombstone} ->
         # if tombstone found before last op, throw
         if saw_tombstone do
           raise MisorderedOperationError, op: op, message: "tombstone not last in log of #{did}"
@@ -845,6 +932,13 @@ defmodule CryptoUtils.Did do
             message: "prev CID #{op_prev} does not match #{prev} in log of #{did}"
         end
 
+        rotation_keys =
+          case key_op do
+            %{"rotationKeys" => keys} -> keys
+            %{"recoveryKey" => key} -> [key]
+            _ -> []
+          end
+
         assure_valid_sig(rotation_keys, op)
         prev = cid_for_op(op)
         {op, prev, type == "plc_tombstone"}
@@ -854,7 +948,7 @@ defmodule CryptoUtils.Did do
     if type == "plc_tombstone" do
       nil
     else
-      doc
+      final_op
     end
   end
 
@@ -893,15 +987,21 @@ defmodule CryptoUtils.Did do
 
   # Private functions
 
+  defp assure_valid_op_order_and_sig(_ops, %{"type" => "create"} = proposed) do
+    raise ImproperOperationError,
+      op: proposed,
+      message: "create operation not allowed for an existing did"
+  end
+
   defp assure_valid_op_order_and_sig(ops, %{"prev" => prev} = proposed) do
     if is_nil(prev) do
-      raise MisorderedOperationError, op: proposed, message: "no prev CID in operation"
+      raise MisorderedOperationError, op: proposed, message: "prev can't be blank"
     end
 
     index_of_prev = Enum.find_index(ops, fn %{cid: cid} -> prev == cid end)
 
     if is_nil(index_of_prev) do
-      raise MisorderedOperationError, op: proposed, message: "prev CID #{prev} not found"
+      raise MisorderedOperationError, op: proposed, message: "prev #{prev} not found"
     end
 
     # if we are forking history, these are the ops still in the proposed
@@ -916,8 +1016,8 @@ defmodule CryptoUtils.Did do
             op: proposed,
             message: "no prev operation at #{index_of_prev}"
 
-        %{operation: op_json} ->
-          Jason.decode!(op_json)
+        op ->
+          to_plc_operation_data(op)
       end
 
     if last_op_type == "plc_tombstone" do
@@ -962,7 +1062,18 @@ defmodule CryptoUtils.Did do
     raise MisorderedOperationError, op: op, message: "genesis operation cannot be a tombstone"
   end
 
+  defp assure_valid_creation_op(
+         did,
+         %{"type" => "create", "recoveryKey" => recovery_key, "prev" => prev} = op
+       ) do
+    validate_creation_op(op, prev, did, [recovery_key])
+  end
+
   defp assure_valid_creation_op(did, %{"rotationKeys" => rotation_keys, "prev" => prev} = op) do
+    validate_creation_op(op, prev, did, rotation_keys)
+  end
+
+  defp validate_creation_op(op, prev, did, rotation_keys) do
     if !is_nil(prev) do
       raise ImproperOperationError, op: op, message: "expected null prev on create"
     end
@@ -980,9 +1091,20 @@ defmodule CryptoUtils.Did do
 
   defp assure_valid_op(%{"type" => "plc_tombstone"} = op), do: op
 
+  defp assure_valid_op(
+         %{"type" => "create", "signingKey" => signing_key, "recoveryKey" => recovery_key} = op
+       ) do
+    validate_keys(op, [signing_key], [recovery_key])
+  end
+
   defp assure_valid_op(%{"rotationKeys" => rotation_keys, "verificationMethods" => vms} = op) do
-    # ensure we support the op's keys
-    keys = Map.values(vms) ++ rotation_keys
+    signing_keys = Map.values(vms)
+    validate_keys(op, signing_keys, rotation_keys)
+  end
+
+  # ensure we support the op's keys
+  defp validate_keys(op, signing_keys, rotation_keys) do
+    keys = signing_keys ++ rotation_keys
 
     Enum.each(keys, fn key ->
       try do

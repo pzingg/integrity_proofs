@@ -25,6 +25,7 @@ defmodule DidServer.LogFixtures do
   @did_password "bluesky"
 
   @operation_attrs %{
+    type: "create",
     signingKey: @signing_key,
     recoveryKey: @recovery_key,
     signer: @signer,

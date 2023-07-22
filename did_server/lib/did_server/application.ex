@@ -47,8 +47,12 @@ defmodule DidServer.Application do
     List.to_string(vsn)
   end
 
-  def protocols() do
-    Application.get_env(:did_server, :supported_protocols, "activitypub")
+  def services() do
+    Application.get_env(
+      :did_server,
+      :supported_services,
+      "did_web,did_plc,atproto_pds,activitypub"
+    )
     |> String.split(",")
   end
 end

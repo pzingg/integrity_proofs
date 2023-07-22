@@ -18,6 +18,9 @@ defmodule DidServer.Log.Key do
   @doc """
   A changeset for creating a new did key.
 
+  The password can be omitted for transient dids, not associated
+  with user accounts.
+
   It is important to validate the length of the password.
   Otherwise databases may truncate it without warnings, which
   could lead to unpredictable or insecure behaviour. Long passwords may
@@ -36,10 +39,10 @@ defmodule DidServer.Log.Key do
   def changeset(%__MODULE__{} = key, attrs, opts \\ []) do
     key
     |> cast(attrs, [:did, :method, :password])
-    |> validate_required([:did, :password])
+    |> validate_required([:did])
     |> unique_constraint(:did, name: "keys_pkey")
     |> maybe_set_method()
-    |> validate_password(opts)
+    |> maybe_validate_password(opts)
   end
 
   @doc """
@@ -95,6 +98,14 @@ defmodule DidServer.Log.Key do
     if is_nil(get_change(changeset, :method)) && !is_nil(did) do
       %{method: method} = CryptoUtils.Did.parse_did!(did, method_only: true)
       put_change(changeset, :method, to_string(method))
+    else
+      changeset
+    end
+  end
+
+  def maybe_validate_password(changeset, opts) do
+    if changed?(changeset, :password) do
+      validate_password(changeset, opts)
     else
       changeset
     end

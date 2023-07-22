@@ -362,6 +362,14 @@ defmodule CryptoUtils.Keys do
     end
   end
 
+  @doc """
+  Formats an `:crypto_algo_key` keypair into a JSON-compatible
+  flattened list of strings.
+  """
+  def to_signer({pub, {algorithm, [priv, curve]}}) do
+    [pub, to_string(algorithm), priv, to_string(curve)]
+  end
+
   defp decode_entries(decoded, fmt) when is_list(decoded) do
     public_key =
       Enum.map(decoded, fn

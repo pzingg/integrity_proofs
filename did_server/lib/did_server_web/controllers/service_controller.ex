@@ -34,7 +34,7 @@ defmodule DidServerWeb.ServiceController do
     if nodeinfo_version == "2.0" do
       app_name = DidServer.Application.name()
       app_version = DidServer.Application.version()
-      protocols = DidServer.Application.protocols()
+      protocols = DidServer.Application.services()
       usage = DidServer.Accounts.usage()
 
       nodeinfo = %{
@@ -51,7 +51,7 @@ defmodule DidServerWeb.ServiceController do
       conn
       |> put_status(400)
       |> put_view(ErrorJSON)
-      |> render("400.json", details: "Only version 2.0 is supported")
+      |> render("400.json", detail: "Only version 2.0 is supported")
     end
   end
 

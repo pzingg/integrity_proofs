@@ -51,7 +51,7 @@ defmodule DidServer.LogTest do
       [recovery_key | _] = signer = recovery_keypair_fixture()
 
       params = %{
-        # type: "create",
+        type: "create",
         signingKey: signing_key,
         recoveryKey: recovery_key,
         signer: signer,
@@ -61,8 +61,12 @@ defmodule DidServer.LogTest do
       }
 
       assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(params)
-      assert created_op.did == "did:plc:dwzaeljhfaoefhde3xthkcio"
-      assert %{"type" => "plc_operation"} = DidServer.Log.validate_operation_log(created_op.did)
+      assert created_op.did == "did:plc:vve2x2or6xnchxc5dxky4gbf"
+
+      created_op_data = CryptoUtils.Did.to_data(created_op)
+      assert %{"handle" => "at://bob.bsky.social"} = created_op_data
+
+      assert %{"type" => "create"} = DidServer.Log.validate_operation_log(created_op.did)
     end
 
     test "updates handle" do
@@ -70,7 +74,7 @@ defmodule DidServer.LogTest do
       [recovery_key | _] = signer = recovery_keypair_fixture()
 
       create_params = %{
-        # type: "create",
+        type: "create",
         signingKey: signing_key,
         recoveryKey: recovery_key,
         signer: signer,
@@ -81,8 +85,8 @@ defmodule DidServer.LogTest do
 
       assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
 
-      created_op_data = Operation.to_data(created_op)
-      assert Map.get(created_op_data, "alsoKnownAs") == ["at://bob.bsky.social"]
+      created_op_data = CryptoUtils.Did.to_data(created_op)
+      assert %{"handle" => "at://bob.bsky.social"} = created_op_data
 
       update_params = %{
         did: created_op.did,
@@ -92,8 +96,11 @@ defmodule DidServer.LogTest do
 
       assert {:ok, %{operation: updated_op}} = DidServer.Log.update_operation(update_params)
 
-      updated_op_data = Operation.to_data(updated_op)
-      assert Map.get(updated_op_data, "alsoKnownAs") == ["at://alice.bsky.social"]
+      updated_op_data = CryptoUtils.Did.to_data(updated_op)
+
+      assert %{"type" => "plc_operation", "alsoKnownAs" => ["at://alice.bsky.social"]} =
+               updated_op_data
+
       assert %{"type" => "plc_operation"} = DidServer.Log.validate_operation_log(created_op.did)
     end
 
@@ -129,7 +136,7 @@ defmodule DidServer.LogTest do
       [recovery_key | _] = signer = recovery_keypair_fixture()
 
       create_params = %{
-        # type: "create",
+        type: "create",
         signingKey: signing_key,
         recoveryKey: recovery_key,
         signer: signer,
@@ -139,9 +146,8 @@ defmodule DidServer.LogTest do
       }
 
       assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
-
-      created_op_data = Operation.to_data(created_op)
-      assert Map.get(created_op_data, "alsoKnownAs") == ["at://bob.bsky.social"]
+      created_op_data = CryptoUtils.Did.to_data(created_op)
+      assert %{"type" => "create", "handle" => "at://bob.bsky.social"} = created_op_data
 
       tombstone_params = %{
         type: "plc_tombstone",
@@ -159,7 +165,7 @@ defmodule DidServer.LogTest do
       [recovery_key | _] = signer = recovery_keypair_fixture()
 
       create_params = %{
-        # type: "create",
+        type: "create",
         signingKey: signing_key,
         recoveryKey: recovery_key,
         signer: signer,
@@ -169,6 +175,8 @@ defmodule DidServer.LogTest do
       }
 
       assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+      created_op_data = CryptoUtils.Did.to_data(created_op)
+      assert %{"type" => "create", "handle" => "at://bob.bsky.social"} = created_op_data
 
       tombstone_params = %{
         type: "plc_tombstone",
