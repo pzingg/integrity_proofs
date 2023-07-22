@@ -108,9 +108,15 @@ defmodule CryptoUtils do
     "type #{type} prev #{prev}"
   end
 
+  # %Operation{}
   def display_op(%{did: did, cid: cid, operation: operation}) do
     %{"type" => type, "prev" => prev} = Jason.decode!(operation)
-    "type #{type} did #{display_did(did)} cid #{cid} prev #{prev}"
+    "type #{type} prev #{prev} did #{display_did(did)} cid #{cid} "
+  end
+
+  # %CreateParams{}
+  def display_op(%{did: did, type: type, prev: prev}) do
+    "type #{type} prev #{prev} did #{display_did(did)}"
   end
 
   @doc """

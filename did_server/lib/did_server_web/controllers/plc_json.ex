@@ -1,31 +1,27 @@
 defmodule DidServerWeb.PlcJSON do
-  def info(%{info: info}) do
-    %{data: info}
+  def info(%{info: info}) when is_map(info) do
+    info
   end
 
   def health(%{version: version} = params) do
     error = Map.get(params, :error)
 
     if is_nil(error) do
-      %{data: %{version: version, status: "ok"}}
+      %{version: version, status: "ok"}
     else
-      %{data: %{version: version}, errors: %{detail: error}}
+      %{version: version, status: "failed", errors: %{detail: error}}
     end
   end
 
-  def new(%{did: did}) do
-    %{data: %{did: did, created: true}}
+  def did_document(%{document: doc}) when is_map(doc) do
+    doc
   end
 
-  def did_document(%{document: doc}) do
-    %{data: doc}
+  def operation(%{operation: op}) when is_map(op) do
+    op
   end
 
-  def operation(%{operation: op}) do
-    %{data: op}
-  end
-
-  def log(%{operations: ops}) do
-    %{data: ops}
+  def log(%{operations: ops}) when is_list(ops) do
+    ops
   end
 end

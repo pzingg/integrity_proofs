@@ -32,6 +32,12 @@ defmodule DidServerWeb.PlcController do
   Updates or creates a DID document.
   """
   def create(conn, %{"did" => did} = params) do
+    params =
+      case DidServer.Log.get_last_op(did) do
+        %{cid: cid} -> Map.put(params, "prev", cid)
+        _ -> Map.put(params, "prev", nil)
+      end
+
     with {:ok, %{operation: %{did: op_did}}} <- DidServer.Log.create_operation(params),
          {:verified, nil} <-
            {:verified,
@@ -111,12 +117,15 @@ defmodule DidServerWeb.PlcController do
   Gets the most recent operation in the log for a DID.
   """
   def last_operation(conn, %{"did" => did}) do
-    op = DidServer.Log.get_last_op(did)
-
-    if is_nil(op) do
-      render_error(conn, 404, "DID not registered: #{did}")
+    with {:registered, %Operation{} = op} = {:registered, DidServer.Log.get_last_op(did)},
+         {:valid, data} when is_map(data) <- {:valid, Operation.to_json_data(op)} do
+      render(conn, :operation, operation: data)
     else
-      render(conn, :operation, operation: Operation.to_json_data(op))
+      {:registered, _} ->
+        render_error(conn, 404, "DID not registered: #{did}")
+
+      {:valid, _} ->
+        render_error(conn, 404, "DID has been revoked: #{did}")
     end
   end
 
@@ -124,12 +133,15 @@ defmodule DidServerWeb.PlcController do
   Gets the data for a DID document.
   """
   def did_data(conn, %{"did" => did}) do
-    op = DidServer.Log.get_last_op(did)
-
-    if is_nil(op) do
-      render_error(conn, 404, "DID not registered: #{did}")
+    with {:registered, %Operation{} = op} = {:registered, DidServer.Log.get_last_op(did)},
+         {:valid, data} when is_map(data) <- {:valid, CryptoUtils.Did.to_data(op)} do
+      render(conn, :operation, operation: data)
     else
-      render(conn, :operation, operation: CryptoUtils.Did.to_data(op))
+      {:registered, _} ->
+        render_error(conn, 404, "DID not registered: #{did}")
+
+      {:valid, _} ->
+        render_error(conn, 404, "DID has been revoked: #{did}")
     end
   end
 

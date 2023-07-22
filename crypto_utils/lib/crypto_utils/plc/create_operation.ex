@@ -39,6 +39,13 @@ defmodule CryptoUtils.Plc.CreateOperation do
               op.signer}}
 
           _ ->
+            type =
+              if type not in ["create", "plc_operation"] do
+                "plc_operation"
+              else
+                type
+              end
+
             rotation_keys =
               case op.rotationKeys do
                 [_ | _] = keys -> keys
@@ -112,7 +119,18 @@ defmodule CryptoUtils.Plc.CreateOperation do
 
     changeset
     |> validate_required([:signer])
+    |> validate_type()
     |> validate_op()
+  end
+
+  defp validate_type(changeset) do
+    prev = get_change(changeset, :prev)
+
+    if is_nil(prev) do
+      validate_inclusion(changeset, :type, ["create", "plc_operation"])
+    else
+      validate_inclusion(changeset, :type, ["plc_operation", "plc_tombstone"])
+    end
   end
 
   defp validate_op(changeset) do
@@ -135,20 +153,8 @@ defmodule CryptoUtils.Plc.CreateOperation do
         |> validate_also_known_as()
         |> validate_services()
 
-      nil ->
-        changeset
-        |> put_change(:type, "create")
-        |> validate_required([:signingKey])
-        |> validate_verification_methods()
-        |> validate_rotation_keys()
-        |> validate_also_known_as()
-        |> validate_services()
-
       _ ->
-        add_error(changeset, :type, "is invalid",
-          validation: :inclusion,
-          enum: ["create", "plc_operation", "plc_tombstone"]
-        )
+        changeset
     end
   end
 

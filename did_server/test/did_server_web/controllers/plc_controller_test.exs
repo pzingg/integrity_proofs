@@ -16,16 +16,22 @@ defmodule DidServerWeb.PlcControllerTest do
     "prev" => nil
   }
 
+  @update_params %{
+    "type " => "log_operation",
+    "handle" => "at://alice.bsky.social",
+    "signingKey" => elem(@signing_keypair, 0),
+    "recoveryKey" => elem(@recovery_keypair, 0),
+    "service" => "https://pds.example.com"
+  }
+
   test "GET /plc/:did", %{conn: conn} do
     assert %{did: did} = operation_fixture()
 
     conn = get(conn, ~p"/plc/#{did}")
 
     assert %{
-             "data" => %{
-               "id" => document_did,
-               "alsoKnownAs" => ["at://bob.bsky.social"]
-             }
+             "id" => document_did,
+             "alsoKnownAs" => ["at://bob.bsky.social"]
            } = json_response(conn, 200)
 
     assert document_did == did
@@ -37,10 +43,8 @@ defmodule DidServerWeb.PlcControllerTest do
     conn = get(conn, ~p"/plc/#{did}/data")
 
     assert %{
-             "data" => %{
-               "type" => "create",
-               "handle" => "at://bob.bsky.social"
-             }
+             "type" => "create",
+             "handle" => "at://bob.bsky.social"
            } = json_response(conn, 200)
   end
 
@@ -49,7 +53,8 @@ defmodule DidServerWeb.PlcControllerTest do
 
     conn = get(conn, ~p"/plc/#{did}/log")
 
-    assert %{"data" => ops} = json_response(conn, 200)
+    ops = json_response(conn, 200)
+    assert is_list(ops)
     assert %{"did" => op_did} = List.last(ops)
     assert op_did == did
   end
@@ -59,7 +64,8 @@ defmodule DidServerWeb.PlcControllerTest do
 
     conn = get(conn, ~p"/plc/#{did}/log/audit")
 
-    assert %{"data" => ops} = json_response(conn, 200)
+    ops = json_response(conn, 200)
+    assert is_list(ops)
     assert %{"did" => op_did} = List.last(ops)
     assert op_did == did
   end
@@ -69,26 +75,52 @@ defmodule DidServerWeb.PlcControllerTest do
 
     conn = get(conn, ~p"/plc/#{did}/log/last")
 
-    assert %{"data" => %{"did" => op_did}} = json_response(conn, 200)
+    assert %{"did" => op_did} = json_response(conn, 200)
     assert op_did == did
   end
 
   describe "POST /plc dids" do
     test "creates a new did", %{conn: conn} do
-      did = CryptoUtils.Did.did_for_create_op(@create_params)
-      params = Map.put(@create_params, "signer", @signer)
-      conn = post(conn, ~p"/plc/#{did}", params)
+      {conn, _did} = post_genesis_op(conn)
       assert "" = json_response(conn, 200)
     end
 
     test "fails if same did attempted twice", %{conn: conn} do
-      did = CryptoUtils.Did.did_for_create_op(@create_params)
-      params = Map.put(@create_params, "signer", @signer)
-      _ = post(conn, ~p"/plc/#{did}", params)
-
-      assert_raise(CryptoUtils.Did.ImproperOperationError, fn ->
-        post(conn, ~p"/plc/#{did}", params)
-      end)
+      {conn, did} = post_genesis_op(conn)
+      {conn, _} = post_genesis_op(conn)
+      assert %{"errors" => %{"detail" => "type is invalid"}} = json_response(conn, 400)
     end
+
+    test "updates a handle", %{conn: conn} do
+      {_, did} = post_genesis_op(conn)
+      params = Map.put(@update_params, "signer", @signer)
+
+      conn = post(conn, ~p"/plc/#{did}", params)
+      assert "" = json_response(conn, 200)
+
+      conn = get(conn, ~p"/plc/#{did}/data")
+      assert %{"alsoKnownAs" => ["at://alice.bsky.social"]} = json_response(conn, 200)
+    end
+
+    test "tombstones a DID", %{conn: conn} do
+      {_, did} = post_genesis_op(conn)
+
+      params = %{
+        "type" => "plc_tombstone",
+        "signer" => @signer
+      }
+
+      conn = post(conn, ~p"/plc/#{did}", params)
+      assert "" = json_response(conn, 200)
+
+      conn = get(conn, ~p"/plc/#{did}/data")
+      assert json_response(conn, 404)
+    end
+  end
+
+  def post_genesis_op(conn, did \\ nil) do
+    did = did || CryptoUtils.Did.did_for_create_op(@create_params)
+    params = Map.put(@create_params, "signer", @signer)
+    {post(conn, ~p"/plc/#{did}", params), did}
   end
 end
