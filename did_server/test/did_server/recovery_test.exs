@@ -299,7 +299,9 @@ defmodule DidSever.RecoveryTest do
     keys_pem =
       if is_nil(prev) do
         case CryptoUtils.Keys.encode_pem_public_key(signer) do
-          {:ok, pem} -> pem
+          {:ok, pem} ->
+            pem
+
           _ ->
             # TODO raise error?
             nil

@@ -13,8 +13,12 @@ defmodule DidServer.Vault do
   end
 
   def create_secret(name, secret_string) do
-    Secret.changeset(%Secret{}, %{name: name, secret: secret_string})
-    |> Repo.insert(on_conflict: {:replace, [:secret]}, conflict_target: :name)
+    try do
+      Secret.changeset(%Secret{}, %{name: name, secret: secret_string})
+      |> Repo.insert()
+    rescue
+      _ -> update_secret(name, secret_string)
+    end
   end
 
   def update_secret(name, secret_string) do

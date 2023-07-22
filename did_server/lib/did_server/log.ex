@@ -183,7 +183,8 @@ defmodule DidServer.Log do
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_operation(did, proposed, password \\ nil, keys_pem \\ nil) when is_binary(did) and is_map(proposed) do
+  def create_operation(did, proposed, password \\ nil, keys_pem \\ nil)
+      when is_binary(did) and is_map(proposed) do
     ops = list_operations(did)
 
     {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)

@@ -69,7 +69,16 @@ defmodule DidServer.Log.Operation do
 
   def changeset(%__MODULE__{} = op, attrs) do
     op
-    |> cast(attrs, [:did, :cid, :operation, :nullified, :prev, :nullified_cids, :password, :keys_pem])
+    |> cast(attrs, [
+      :did,
+      :cid,
+      :operation,
+      :nullified,
+      :prev,
+      :nullified_cids,
+      :password,
+      :keys_pem
+    ])
     |> validate_required([:did, :cid, :operation])
     |> set_nullified()
   end
