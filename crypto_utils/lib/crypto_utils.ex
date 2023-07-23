@@ -105,17 +105,20 @@ defmodule CryptoUtils do
   Formats a did:plc operation for debugging purposes.
   """
   def display_op(%{"type" => type, "prev" => prev}) do
+    prev = prev || "nil"
     "type #{type} prev #{prev}"
   end
 
   # %Operation{}
   def display_op(%{did: did, cid: cid, operation: operation}) do
     %{"type" => type, "prev" => prev} = Jason.decode!(operation)
+    prev = prev || "nil"
     "type #{type} prev #{prev} did #{display_did(did)} cid #{cid} "
   end
 
   # %CreateParams{}
   def display_op(%{did: did, type: type, prev: prev}) do
+    prev = prev || "nil"
     "type #{type} prev #{prev} did #{display_did(did)}"
   end
 

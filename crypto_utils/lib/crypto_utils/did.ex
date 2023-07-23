@@ -11,7 +11,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def exception(curve) do
-      %__MODULE__{message: "Point not on elliptic curve #{curve}"}
+      %__MODULE__{message: "point not on elliptic curve #{curve}"}
     end
   end
 
@@ -31,7 +31,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def message(%{op: op, message: message}) do
-      "#{message}, #{CryptoUtils.display_op(op)}"
+      "#{message}, operation: #{CryptoUtils.display_op(op)}"
     end
   end
 
@@ -49,7 +49,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def message(%{op: op, allowed_keys: keys}) do
-      "invalid signature, #{CryptoUtils.display_op(op)} keys #{inspect(Enum.map(keys, &CryptoUtils.display_did/1))}"
+      "invalid signature, operation: #{CryptoUtils.display_op(op)}, keys #{inspect(Enum.map(keys, &CryptoUtils.display_did/1))}"
     end
   end
 
@@ -67,7 +67,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def message(%{op: op, message: message}) do
-      "misordered plc operation: #{message}, #{CryptoUtils.display_op(op)}"
+      "#{message}, operation: #{message}, #{CryptoUtils.display_op(op)}"
     end
   end
 
@@ -76,7 +76,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def exception(op) do
-      %__MODULE__{message: "operation is missing signature, #{CryptoUtils.display_op(op)}"}
+      %__MODULE__{message: "missing signature, operation: #{CryptoUtils.display_op(op)}"}
     end
   end
 
@@ -85,7 +85,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def exception(method) do
-      %__MODULE__{message: "Unexpected DID method #{method}"}
+      %__MODULE__{message: "unexpected DID method #{method}"}
     end
   end
 
@@ -94,7 +94,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def exception(key) do
-      %__MODULE__{message: "Unsupported key #{key}"}
+      %__MODULE__{message: "unsupported key #{key}"}
     end
   end
 
@@ -103,7 +103,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def exception(prefix) do
-      %__MODULE__{message: "Unsupported public key codec #{prefix}"}
+      %__MODULE__{message: "unsupported public key codec #{prefix}"}
     end
   end
 
@@ -112,7 +112,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def exception(format) do
-      %__MODULE__{message: "Unsupported public key type #{format}"}
+      %__MODULE__{message: "unsupported public key type #{format}"}
     end
   end
 
@@ -668,30 +668,21 @@ defmodule CryptoUtils.Did do
     ["verificationMethods", "rotationKeys", "alsoKnownAs", "services", "sig"]
   end
 
-  def to_plc_operation_data(%{operation: op_json} = op) do
+  def to_plc_operation_data(%{operation: op_json} = op, decode_tombstone? \\ false) do
     case Jason.decode!(op_json) do
-      %{"type" => "plc_tombstone"} ->
-        nil
+      %{"type" => "plc_tombstone"} = data ->
+        if decode_tombstone? do
+          data
+        else
+          nil
+        end
 
       %{"type" => "plc_operation"} = data ->
         data
 
       %{"type" => "create", "prev" => nil} = data ->
+        plc_operation_data = normalize_op(data, true)
         sig = Map.get(data, "sig")
-
-        plc_operation_data = %{
-          "type" => "plc_operation",
-          "verificationMethods" => %{"atproto" => Map.fetch!(data, "signingKey")},
-          "rotationKeys" => [Map.fetch!(data, "recoveryKey")],
-          "alsoKnownAs" => [Map.fetch!(data, "handle")],
-          "services" => %{
-            "atproto_pds" => %{
-              "type" => "AtprotoPersonalDataServer",
-              "endpoint" => Map.fetch!(data, "service")
-            }
-          },
-          "prev" => nil
-        }
 
         if is_nil(sig) do
           plc_operation_data
@@ -705,11 +696,21 @@ defmodule CryptoUtils.Did do
   end
 
   @doc """
-  Creates a did:plc operation.
+  Builds an operation to create a new DID.
 
-  On success, returns a tuple `{:ok, {op, did}}`, where
-  `op` is the data for a DID operation (type "plc_operation" or
-  "plc_tombstone") and `did` is the DID key value.
+  `params` is a map with either all string keys or all atom keys
+  used to build the operation. `params` values must include:
+
+    * `:prev` - must be nil.
+  ` * `:signer` - a keypair encoded as a flattened list.
+
+  On success, returns a tuple `{:ok, {did, op, password}}`, where
+
+    * `did` is the DID key value.
+    * `op` is the data for a DID operation (type "plc_operation" or
+      "plc_tombstone").
+    * `password` is the cleartext password parsed from the params
+      (which may be nil).
 
   ## Examples
 
@@ -721,41 +722,53 @@ defmodule CryptoUtils.Did do
 
   """
   def create_operation(params) do
-    case CreateOperation.parse(params) do
-      {:ok, {%CreateParams{prev: prev, did: did, password: password} = op, signer}} ->
-        op = op |> normalize_op() |> add_signature(signer)
-
-        if is_nil(prev) do
-          {:ok, {op, did_for_create_op(op), password}}
-        else
-          {:ok, {op, did, password}}
-        end
-
-      error ->
-        error
+    with {:ok, {%CreateParams{password: password} = op, signer}} <- CreateOperation.parse(params),
+         op <- op |> normalize_op() |> add_signature(signer),
+         {:ok, did} <- did_for_create_op(op) do
+      {:ok, {did, op, password}}
     end
   end
 
-  def update_operation(
-        %{did: prev_did, cid: prev, operation: %{"type" => _type} = last_op},
-        params
-      )
-      when is_binary(prev_did) and is_binary(prev) do
-    with {:ok, %UpdateOperation{did: did, signer: signer} = update} <-
-           UpdateOperation.parse(params) do
-      # Omit sig so it doesn't accidentally make its way into the next operation
-      {_old_sig, unsigned_op} =
-        last_op
-        |> normalize_op()
-        |> Map.put("prev", prev)
-        |> Map.pop("sig")
+  @doc """
+  Builds an operation that updates a DID.
 
-      update_op =
-        unsigned_op
-        |> apply_updates(update)
-        |> add_signature(signer)
+    * `op` is the operation to be updated as returned from the
+      did audit log.
+    * `params` is a map with either all string keys or all atom keys
+      used to build the new operation. `params` must include a
+      `:signer` value (a keypair encoded as a flattened list).
 
-      {:ok, {update_op, did}}
+    On success, returns a tuple `{:ok, {did, op}}`, where
+
+    * `did` is the DID key value.
+    * `op` is the data for the new DID operation (type "plc_operation" or
+      "plc_tombstone").
+  """
+  def update_operation(%{did: op_did, cid: prev, operation: %{"type" => _type} = op}, params) do
+    case UpdateOperation.parse(params) do
+      {:ok, %UpdateOperation{did: did, signer: signer} = update} ->
+        # Omit sig so it doesn't accidentally make its way into the next operation
+        {_old_sig, unsigned_op} =
+          op
+          |> normalize_op(true)
+          |> Map.put("prev", prev)
+          |> Map.pop("sig")
+
+        if did != op_did do
+          raise ImproperOperationError,
+            op: unsigned_op,
+            message: "cannot apply update to a different did"
+        end
+
+        updated_op =
+          unsigned_op
+          |> apply_updates(update)
+          |> add_signature(signer)
+
+        {:ok, {did, updated_op}}
+
+      error ->
+        error
     end
   end
 
@@ -766,6 +779,8 @@ defmodule CryptoUtils.Did do
   def apply_updates(normalized, update) do
     updates =
       if !is_nil(update.signingKey) do
+        # TODO validate signing key
+
         verification_methods =
           Map.get(normalized, "verificationMethods", %{})
           |> Map.merge(%{"atproto" => update.signingKey})
@@ -806,6 +821,8 @@ defmodule CryptoUtils.Did do
 
     updates =
       if !is_nil(update.rotationKeys) do
+        # TODO validate rotation keys
+
         Map.put(updates, "rotationKeys", update.rotationKeys)
       else
         updates
@@ -818,12 +835,40 @@ defmodule CryptoUtils.Did do
     end
   end
 
+  def did_for_create_params(params) do
+    case CreateOperation.parse(params, signer_optional: true) do
+      {:ok, {%CreateParams{} = op, _signer}} ->
+        op
+        |> normalize_op()
+        |> did_for_create_op()
+
+      error ->
+        error
+    end
+  end
+
+  def did_for_create_op(%{"prev" => nil} = op) do
+    cbor = Map.delete(op, "sig") |> CBOR.encode()
+    hash_of_genesis = :crypto.hash(:sha256, cbor)
+
+    truncated_id =
+      hash_of_genesis |> Base.encode32(case: :lower, padding: false) |> String.slice(0, 24)
+
+    {:ok, "did:plc:#{truncated_id}"}
+  end
+
+  def did_for_create_op(_) do
+    {:error, "not a create operation"}
+  end
+
   # tombstones must have "prev"
-  def normalize_op(%CreateParams{type: "plc_tombstone", prev: nil} = op) do
+  def normalize_op(params_or_op, force_v2 \\ false)
+
+  def normalize_op(%CreateParams{type: "plc_tombstone", prev: nil} = op, _) do
     raise MisorderedOperationError, op: op, message: "genesis operation cannot be a tombstone"
   end
 
-  def normalize_op(%CreateParams{type: "plc_tombstone", prev: prev, sig: sig}) do
+  def normalize_op(%CreateParams{type: "plc_tombstone", prev: prev, sig: sig}, _) do
     %{
       "type" => "plc_tombstone",
       "prev" => prev
@@ -831,7 +876,7 @@ defmodule CryptoUtils.Did do
     |> maybe_add_sig(sig)
   end
 
-  def normalize_op(%CreateParams{type: "create", prev: nil, sig: sig} = op) do
+  def normalize_op(%CreateParams{type: "create", prev: nil, sig: sig} = op, false) do
     handle = List.wrap(op.also_known_as) |> hd()
     signing_key = Map.get(op.verification_methods, "atproto")
     recovery_key = List.wrap(op.rotation_keys) |> hd()
@@ -852,11 +897,11 @@ defmodule CryptoUtils.Did do
     |> maybe_add_sig(sig)
   end
 
-  def normalize_op(%CreateParams{type: "create"} = op) do
-    raise ImproperOperationError, op: op, message: "prev must be null for create operation"
+  def normalize_op(%CreateParams{type: "create"} = op, _) do
+    raise ImproperOperationError, op: op, message: "prev must be null"
   end
 
-  def normalize_op(%CreateParams{type: type, sig: sig} = op) when is_binary(type) do
+  def normalize_op(%CreateParams{type: type, sig: sig} = op, _) when is_binary(type) do
     %{
       "type" => type,
       "verificationMethods" => op.verification_methods,
@@ -868,7 +913,23 @@ defmodule CryptoUtils.Did do
     |> maybe_add_sig(sig)
   end
 
-  def normalize_op(%{"type" => _type} = op), do: op
+  def normalize_op(%{"type" => "create"} = data, true) do
+    %{
+      "type" => "plc_operation",
+      "verificationMethods" => %{"atproto" => Map.fetch!(data, "signingKey")},
+      "rotationKeys" => [Map.fetch!(data, "recoveryKey")],
+      "alsoKnownAs" => [Map.fetch!(data, "handle")],
+      "services" => %{
+        "atproto_pds" => %{
+          "type" => "AtprotoPersonalDataServer",
+          "endpoint" => Map.fetch!(data, "service")
+        }
+      },
+      "prev" => nil
+    }
+  end
+
+  def normalize_op(%{"type" => _type} = op, _), do: op
 
   def maybe_add_sig(op, nil), do: op
   def maybe_add_sig(op, sig), do: Map.put(op, "sig", sig)
@@ -886,20 +947,6 @@ defmodule CryptoUtils.Did do
     else
       assure_valid_op_order_and_sig(ops, proposed)
     end
-  end
-
-  def did_for_create_op(%{"prev" => nil} = op) do
-    cbor = Map.delete(op, "sig") |> CBOR.encode()
-    hash_of_genesis = :crypto.hash(:sha256, cbor)
-
-    truncated_id =
-      hash_of_genesis |> Base.encode32(case: :lower, padding: false) |> String.slice(0, 24)
-
-    "did:plc:#{truncated_id}"
-  end
-
-  def did_for_create_op(op) do
-    raise MisorderedOperationError, op: op, message: "not a genesis operation"
   end
 
   def cid_for_op(op) do
@@ -989,18 +1036,20 @@ defmodule CryptoUtils.Did do
   defp assure_valid_op_order_and_sig(_ops, %{"type" => "create"} = proposed) do
     raise ImproperOperationError,
       op: proposed,
-      message: "create operation not allowed for an existing did"
+      message: "create type not allowed for an existing did"
   end
 
   defp assure_valid_op_order_and_sig(ops, %{"prev" => prev} = proposed) do
     if is_nil(prev) do
-      raise MisorderedOperationError, op: proposed, message: "prev can't be blank"
+      raise MisorderedOperationError,
+        op: proposed,
+        message: "create operation not allowed for an existing did"
     end
 
     index_of_prev = Enum.find_index(ops, fn %{cid: cid} -> prev == cid end)
 
     if is_nil(index_of_prev) do
-      raise MisorderedOperationError, op: proposed, message: "prev #{prev} not found"
+      raise MisorderedOperationError, op: proposed, message: "prev CID #{prev} not found"
     end
 
     # if we are forking history, these are the ops still in the proposed
@@ -1008,22 +1057,25 @@ defmodule CryptoUtils.Did do
     {ops_in_history, nullified} = Enum.split(ops, index_of_prev + 1)
     last_op = List.last(ops_in_history)
 
-    %{"type" => last_op_type, "rotationKeys" => rotation_keys} =
-      case last_op do
-        nil ->
-          raise MisorderedOperationError,
-            op: proposed,
-            message: "no prev operation at #{index_of_prev}"
-
-        op ->
-          to_plc_operation_data(op)
-      end
-
-    if last_op_type == "plc_tombstone" do
+    if is_nil(last_op) do
       raise MisorderedOperationError,
         op: proposed,
-        message: "prev operation cannot be a tombstone"
+        message: "no prev operation at #{index_of_prev}"
     end
+
+    rotation_keys =
+      case to_plc_operation_data(last_op, true) do
+        %{"type" => "plc_tombstone"} ->
+          raise MisorderedOperationError,
+            op: proposed,
+            message: "prev operation cannot be a tombstone"
+
+        %{"rotationKeys" => keys} ->
+          keys
+
+        _ ->
+          []
+      end
 
     case nullified do
       [] ->
@@ -1065,24 +1117,25 @@ defmodule CryptoUtils.Did do
          did,
          %{"type" => "create", "recoveryKey" => recovery_key, "prev" => prev} = op
        ) do
-    validate_creation_op(op, prev, did, [recovery_key])
+    validate_creation_op(did, op, prev, [recovery_key])
   end
 
   defp assure_valid_creation_op(did, %{"rotationKeys" => rotation_keys, "prev" => prev} = op) do
-    validate_creation_op(op, prev, did, rotation_keys)
+    validate_creation_op(did, op, prev, rotation_keys)
   end
 
-  defp validate_creation_op(op, prev, did, rotation_keys) do
+  defp validate_creation_op(did, op, prev, rotation_keys) do
     if !is_nil(prev) do
       raise ImproperOperationError, op: op, message: "expected null prev on create"
     end
 
     assure_valid_op(op)
     assure_valid_sig(rotation_keys, op)
-    expected_did = did_for_create_op(op)
 
-    if did != expected_did do
-      raise GenesisHashError, expected_did
+    case did_for_create_op(op) do
+      {:ok, ^did} -> :ok
+      {:ok, expected_did} -> raise GenesisHashError, expected_did
+      {:error, reason} -> raise ImproperOperationError, op: op, message: reason
     end
 
     op

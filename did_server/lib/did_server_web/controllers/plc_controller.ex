@@ -29,9 +29,9 @@ defmodule DidServerWeb.PlcController do
   end
 
   @doc """
-  Updates or creates a DID document.
+  Creates or updates a DID document.
   """
-  def create(conn, %{"did" => did} = params) do
+  def create(conn, %{"did" => did, "prev" => nil} = params) do
     try do
       with {:ok, %{operation: %{did: op_did}}} <- DidServer.Log.create_operation(params),
            {:verified, nil} <-
@@ -53,7 +53,37 @@ defmodule DidServerWeb.PlcController do
           render_error(conn, 400, reason)
       end
     rescue
-      e in CryptoUtils.Did.ImproperOperationError -> render_error(conn, 400, e.message)
+      e -> render_error(conn, 400, Exception.message(e))
+    end
+  end
+
+  def create(conn, %{"did" => did, "prev" => prev} = params) do
+    try do
+      with {:prev, op} when is_map(op) <- {:prev, DidServer.Log.get_operation_by_cid(did, prev)},
+           {:ok, %{operation: %{did: op_did}}} <- DidServer.Log.update_operation(op, params),
+           {:verified, nil} <-
+             {:verified,
+              if did == op_did do
+                nil
+              else
+                op_did
+              end} do
+        json(conn, "")
+      else
+        {:prev, _} ->
+          render_error(conn, 400, "previous operation not found")
+
+        {:verified, op_did} ->
+          render_error(conn, 400, "calculated did #{op_did} differs")
+
+        {:error, %Ecto.Changeset{errors: [{field, {message, _keys}} | _]}} ->
+          render_error(conn, 400, "#{field} #{message}")
+
+        {:error, reason} ->
+          render_error(conn, 400, reason)
+      end
+    rescue
+      e -> render_error(conn, 400, Exception.message(e))
     end
   end
 
@@ -113,7 +143,7 @@ defmodule DidServerWeb.PlcController do
   """
   def did_data(conn, %{"did" => did}) do
     with {:registered, %Operation{} = op} = {:registered, DidServer.Log.get_last_op(did)},
-         {:valid, data} when is_map(data) <- {:valid, CryptoUtils.Did.to_data(op)} do
+         {:valid, data} when is_map(data) <- {:valid, CryptoUtils.Did.to_plc_operation_data(op)} do
       render(conn, :operation, operation: data)
     else
       {:registered, _} ->

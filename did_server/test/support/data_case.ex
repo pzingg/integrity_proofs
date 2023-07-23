@@ -29,7 +29,6 @@ defmodule DidServer.DataCase do
 
   setup tags do
     DidServer.DataCase.setup_sandbox(tags)
-    :ok
   end
 
   @doc """

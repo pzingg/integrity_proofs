@@ -47,7 +47,7 @@ defmodule CryptoUtilsTest do
 
   describe "did:plc" do
     test "creates a did" do
-      did = Did.did_for_create_op(@sample_op)
+      assert {:ok, did} = Did.did_for_create_op(@sample_op)
       assert String.starts_with?(did, "did:plc:")
       assert String.length(did) == 32
       assert did == "did:plc:pdjoiulhevmc3k3luwomyraz"

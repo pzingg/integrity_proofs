@@ -27,10 +27,12 @@ defmodule CryptoUtils.Plc.CreateOperation do
     field(:password, :string)
   end
 
-  def parse(params) when is_list(params), do: Map.new(params) |> parse()
+  def parse(params, opts \\ [])
 
-  def parse(params) when is_map(params) do
-    case changeset(%__MODULE__{}, params) |> apply_action(:create) do
+  def parse(params, opts) when is_list(params), do: Map.new(params) |> parse(opts)
+
+  def parse(params, opts) when is_map(params) do
+    case changeset(%__MODULE__{}, params, opts) |> apply_action(:create) do
       {:ok, %{type: type} = op} ->
         case type do
           "plc_tombstone" ->
@@ -97,7 +99,7 @@ defmodule CryptoUtils.Plc.CreateOperation do
     end
   end
 
-  def changeset(op, attrs \\ %{}) do
+  def changeset(op, attrs \\ %{}, opts \\ []) do
     changeset =
       op
       |> cast(attrs, [
@@ -117,8 +119,14 @@ defmodule CryptoUtils.Plc.CreateOperation do
         :password
       ])
 
+    changeset =
+      if Keyword.get(opts, :signer_optional, false) do
+        changeset
+      else
+        validate_required(changeset, :signer)
+      end
+
     changeset
-    |> validate_required([:signer])
     |> validate_type()
     |> validate_op()
   end

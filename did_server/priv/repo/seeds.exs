@@ -42,7 +42,5 @@ if Mix.env() == :dev do
 
   _link = DidServer.Log.add_also_known_as(did, bob_example_com)
   _link = DidServer.Log.add_also_known_as(did, bob_bsky_social)
-
-  also_known_as = DidServer.Accounts.list_also_known_as_users(bob_example_com)
-  IO.inspect(also_known_as)
+  _also_known_as = DidServer.Accounts.list_also_known_as_users(bob_example_com)
 end

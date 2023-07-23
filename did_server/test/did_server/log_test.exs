@@ -83,18 +83,20 @@ defmodule DidServer.LogTest do
         password: "bluesky"
       }
 
-      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+      assert {:ok, %{operation: %{did: did} = created_op}} =
+               DidServer.Log.create_operation(create_params)
 
       created_op_data = CryptoUtils.Did.to_data(created_op)
       assert %{"handle" => "at://bob.bsky.social"} = created_op_data
 
       update_params = %{
-        did: created_op.did,
+        did: did,
         signer: signer,
         alsoKnownAs: ["alice.bsky.social"]
       }
 
-      assert {:ok, %{operation: updated_op}} = DidServer.Log.update_operation(update_params)
+      assert {:ok, %{operation: updated_op}} =
+               DidServer.Log.update_operation(created_op, update_params)
 
       updated_op_data = CryptoUtils.Did.to_data(updated_op)
 
@@ -118,16 +120,17 @@ defmodule DidServer.LogTest do
         password: "bluesky"
       }
 
-      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+      assert {:ok, %{operation: %{did: did} = created_op}} =
+               DidServer.Log.create_operation(create_params)
 
       update_params = %{
-        did: created_op.did,
+        did: did,
         signer: signing_keypair,
         alsoKnownAs: ["alice.bsky.social"]
       }
 
       assert_raise(CryptoUtils.Did.InvalidSignatureError, fn ->
-        DidServer.Log.update_operation(update_params)
+        DidServer.Log.update_operation(created_op, update_params)
       end)
     end
 
@@ -145,17 +148,21 @@ defmodule DidServer.LogTest do
         password: "bluesky"
       }
 
-      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+      assert {:ok, %{operation: %{did: did} = created_op}} =
+               DidServer.Log.create_operation(create_params)
+
       created_op_data = CryptoUtils.Did.to_data(created_op)
       assert %{"type" => "create", "handle" => "at://bob.bsky.social"} = created_op_data
 
       tombstone_params = %{
+        did: did,
         type: "plc_tombstone",
-        did: created_op.did,
         signer: signer
       }
 
-      assert {:ok, %{operation: tombstone}} = DidServer.Log.update_operation(tombstone_params)
+      assert {:ok, %{operation: tombstone}} =
+               DidServer.Log.update_operation(created_op, tombstone_params)
+
       assert Operation.tombstone?(tombstone)
       assert DidServer.Log.validate_operation_log(created_op.did) == nil
     end
@@ -174,26 +181,29 @@ defmodule DidServer.LogTest do
         password: "bluesky"
       }
 
-      assert {:ok, %{operation: created_op}} = DidServer.Log.create_operation(create_params)
+      assert {:ok, %{operation: %{did: did} = created_op}} =
+               DidServer.Log.create_operation(create_params)
+
       created_op_data = CryptoUtils.Did.to_data(created_op)
       assert %{"type" => "create", "handle" => "at://bob.bsky.social"} = created_op_data
 
       tombstone_params = %{
+        did: did,
         type: "plc_tombstone",
-        did: created_op.did,
         signer: signer
       }
 
-      _ = DidServer.Log.update_operation(tombstone_params)
+      assert {:ok, %{operation: tombstone_op}} =
+               DidServer.Log.update_operation(created_op, tombstone_params)
 
       update_params = %{
-        did: created_op.did,
+        did: did,
         signer: signer,
         handle: "alice.bsky.social"
       }
 
-      assert_raise(DidServer.UpdateOperationError, fn ->
-        DidServer.Log.update_operation(update_params)
+      assert_raise(CryptoUtils.Did.MisorderedOperationError, fn ->
+        DidServer.Log.update_operation(tombstone_op, update_params)
       end)
     end
   end

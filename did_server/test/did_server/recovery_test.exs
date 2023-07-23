@@ -276,12 +276,13 @@ defmodule DidSever.RecoveryTest do
          opts \\ []
        ) do
     type = Keyword.get(opts, :type, "plc_operation")
+    did = Keyword.get(opts, :did)
     prev = Keyword.get(opts, :prev)
     signer = CryptoUtils.Keys.to_signer(signing_keypair)
 
     params = %{
       type: type,
-      did: Keyword.get(opts, :did),
+      did: did,
       prev: prev,
       signingKey: elem(signing_keypair, 0),
       rotationKeys: Enum.map(keys, &elem(&1, 0)),
@@ -297,25 +298,27 @@ defmodule DidSever.RecoveryTest do
         nil -> params
       end
 
-    keys_pem =
-      if is_nil(prev) do
-        case CryptoUtils.Keys.encode_pem_public_key(signing_keypair) do
-          {:ok, pem} ->
-            pem
-
-          _ ->
-            # TODO raise error?
-            nil
-        end
+    {did, signed_op, password, keys_pem} =
+      if is_nil(did) || is_nil(prev) do
+        assert {:ok, pem} = CryptoUtils.Keys.encode_pem_public_key(signing_keypair)
+        assert {:ok, {did, signed_op, password}} = CryptoUtils.Did.create_operation(params)
+        {did, signed_op, password, pem}
       else
-        nil
+        assert %{did: ^did, operation: op_json} = Log.get_operation_by_cid(did, prev)
+
+        assert {:ok, {did, updated_op}} =
+                 CryptoUtils.Did.update_operation(
+                   %{did: did, cid: prev, operation: Jason.decode!(op_json)},
+                   params
+                 )
+
+        {did, updated_op, nil, nil}
       end
 
-    {:ok, {op, did, password}} = CryptoUtils.Did.create_operation(params)
-    changeset(op, did, prev, inserted_at, password, keys_pem)
+    changeset(did, signed_op, prev, inserted_at, password, keys_pem)
   end
 
-  defp changeset(op, did, prev, inserted_at, password, keys_pem) do
+  defp changeset(did, op, prev, inserted_at, password, keys_pem) do
     Operation.changeset_raw(%Operation{}, %{
       did: did,
       cid: CryptoUtils.Did.cid_for_op(op),

@@ -113,6 +113,8 @@ defmodule DidServer.Log do
     {:ok, user}
   end
 
+  ## Operation log
+
   @doc """
   Returns the list of did:plc operations for a given DID.
 
@@ -141,6 +143,47 @@ defmodule DidServer.Log do
     |> Repo.all()
   end
 
+  def get_operation_by_cid(did, cid) do
+    from(op in Operation,
+      where: op.did == ^did,
+      where: op.cid == ^cid
+    )
+    |> Repo.one()
+  end
+
+  def get_last_op(did) do
+    from(op in Operation,
+      where: op.did == ^did,
+      where: op.nullified == false,
+      order_by: [desc: :inserted_at],
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
+  def most_recent_cid(did, excluded_cids \\ []) do
+    from(op in Operation,
+      select: [:cid],
+      where: op.did == ^did,
+      where: op.nullified == false,
+      where: op.cid not in ^excluded_cids,
+      order_by: [desc: :inserted_at]
+    )
+    |> Repo.one()
+    |> case do
+      nil -> nil
+      %{cid: cid} -> cid
+    end
+  end
+
+  def reset_log(did, cids) do
+    from(op in Operation,
+      where: op.did == ^did,
+      where: op.cid not in ^cids
+    )
+    |> Repo.delete_all()
+  end
+
   @doc """
   Creates a did:plc operation.
 
@@ -159,38 +202,12 @@ defmodule DidServer.Log do
   """
   def create_operation(params) do
     case CryptoUtils.Did.create_operation(params) do
-      {:ok, {%{"sig" => _sig} = op, did, password}} ->
-        create_operation(did, op, password)
+      {:ok, {did, signed_op, password}} ->
+        validate_and_insert_operation(did, signed_op, password)
 
       error ->
         error
     end
-  end
-
-  @doc """
-  Creates a DID operation from valid, normalized data, applying a DID.
-
-  On success, returns a tuple `{:ok, multi}`, where
-  `multi` is an Ecto.Multi` result (map) with `:did`, `:operation` and
-  `:most_recent` components.
-
-  ## Examples
-
-      iex> create_operation(did, %{field: value}, "new password")
-      {:ok, %{operation: %Operation{}}}
-
-      iex> create_operation(did, %{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def create_operation(did, proposed, password \\ nil, keys_pem \\ nil)
-      when is_binary(did) and is_map(proposed) do
-    ops = list_operations(did)
-
-    {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)
-
-    multi_insert(did, proposed, nullified_cids, password, keys_pem)
-    |> Repo.transaction()
   end
 
   @doc """
@@ -205,55 +222,27 @@ defmodule DidServer.Log do
       {:error, %Ecto.Changeset{}}
 
   """
-  def update_operation(params) do
-    did = Map.get(params, :did) || Map.get(params, "did")
+  def update_operation(%{did: did, cid: cid, operation: op_json} = op, params) do
+    case CryptoUtils.Did.update_operation(
+           %{did: did, cid: cid, operation: Jason.decode!(op_json)},
+           params
+         ) do
+      {:ok, {_did, op}} ->
+        validate_and_insert_operation(did, op)
 
-    with {:ok, %{did: did, cid: cid} = last_op} <- ensure_last_op(did),
-         {:data, data} when is_map(data) <-
-           {:data, CryptoUtils.Did.to_plc_operation_data(last_op)},
-         {:ok, {op, _did}} <-
-           CryptoUtils.Did.update_operation(
-             %{did: did, cid: cid, operation: data},
-             params
-           ) do
-      create_operation(did, op)
-    else
-      {:data, _} -> raise UpdateOperationError, "no data in last operation"
-      {:error, reason} -> raise UpdateOperationError, reason
+      {:error, reason} ->
+        raise UpdateOperationError, reason
     end
   end
 
-  def most_recent_cid(did, excluded_cids \\ []) do
-    from(op in Operation,
-      select: [:cid],
-      where: op.did == ^did,
-      where: op.nullified == false,
-      where: op.cid not in ^excluded_cids,
-      order_by: [desc: :inserted_at]
-    )
-    |> Repo.one()
-    |> case do
-      nil -> nil
-      %{cid: cid} -> cid
-    end
-  end
+  defp validate_and_insert_operation(did, proposed, password \\ nil, keys_pem \\ nil)
+       when is_binary(did) and is_map(proposed) do
+    ops = list_operations(did)
 
-  def get_last_op(did) do
-    from(op in Operation,
-      where: op.did == ^did,
-      where: op.nullified == false,
-      order_by: [desc: :inserted_at],
-      limit: 1
-    )
-    |> Repo.one()
-  end
+    {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)
 
-  def reset_log(did, cids) do
-    from(op in Operation,
-      where: op.did == ^did,
-      where: op.cid not in ^cids
-    )
-    |> Repo.delete_all()
+    multi_insert(did, proposed, nullified_cids, password, keys_pem)
+    |> Repo.transaction()
   end
 
   def ensure_last_op(did) when is_binary(did) do
@@ -290,7 +279,11 @@ defmodule DidServer.Log do
   Just a check to see if database is operational.
   """
   def health_check() do
-    from(op in Operation, limit: 1) |> Repo.all() |> is_list()
+    try do
+      from(op in Operation, limit: 1) |> Repo.all() |> is_list()
+    rescue
+      _ -> false
+    end
   end
 
   def multi_insert(did, %{"prev" => prev} = proposed, nullified_cids, password, keys_pem) do
@@ -438,11 +431,11 @@ defmodule DidServer.Log do
         cond do
           is_nil(prev) ->
             raise PrevMismatchError,
-                  "Proposed has no prev, but there is a most recent operation #{next_to_last_cid}"
+                  "update has no prev, but there is a most recent operation #{next_to_last_cid}"
 
           prev != next_to_last_cid ->
             raise PrevMismatchError,
-                  "Proposed prev does not match the most recent operation #{next_to_last_cid}"
+                  "update's prev does not match the most recent operation #{next_to_last_cid}"
 
           true ->
             {:ok, next_to_last_cid}
@@ -452,7 +445,8 @@ defmodule DidServer.Log do
         if is_nil(prev) do
           {:ok, nil}
         else
-          raise PrevMismatchError, "Proposed has prev, but there is no most recent operation"
+          raise PrevMismatchError,
+                "update has prev, but there are only #{Enum.count(most_recent)} operations"
         end
     end
   end
