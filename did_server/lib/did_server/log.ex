@@ -223,14 +223,13 @@ defmodule DidServer.Log do
     end
   end
 
-  def most_recent_cid(did, not_included \\ []) do
-    not_included_strs = Enum.map(not_included, &to_string/1)
+  def most_recent_cid(did, excluded_cids \\ []) do
 
     from(op in Operation,
       select: [:cid],
       where: op.did == ^did,
       where: op.nullified == false,
-      where: op.cid not in ^not_included_strs,
+      where: op.cid not in ^excluded_cids,
       order_by: [desc: :inserted_at]
     )
     |> Repo.one()

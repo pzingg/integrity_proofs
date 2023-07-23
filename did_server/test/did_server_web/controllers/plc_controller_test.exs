@@ -86,15 +86,19 @@ defmodule DidServerWeb.PlcControllerTest do
     end
 
     test "fails if same did attempted twice", %{conn: conn} do
-      {conn, did} = post_genesis_op(conn)
       {conn, _} = post_genesis_op(conn)
-      assert %{"errors" => %{"detail" => "type is invalid"}} = json_response(conn, 400)
+      {conn, _} = post_genesis_op(conn)
+
+      assert %{"errors" => %{"detail" => "create operation not allowed for an existing did"}} =
+               json_response(conn, 400)
     end
 
     test "updates a handle", %{conn: conn} do
-      {_, did} = post_genesis_op(conn)
-      params = Map.put(@update_params, "signer", @signer)
+      {conn, did} = post_genesis_op(conn)
+      conn = get(conn, ~p"/plc/#{did}/log/last")
+      %{"cid" => prev} = json_response(conn, 200)
 
+      params = Map.merge(@update_params, %{"signer" => @signer, "prev" => prev})
       conn = post(conn, ~p"/plc/#{did}", params)
       assert "" = json_response(conn, 200)
 
@@ -103,11 +107,14 @@ defmodule DidServerWeb.PlcControllerTest do
     end
 
     test "tombstones a DID", %{conn: conn} do
-      {_, did} = post_genesis_op(conn)
+      {conn, did} = post_genesis_op(conn)
+      conn = get(conn, ~p"/plc/#{did}/log/last")
+      %{"cid" => prev} = json_response(conn, 200)
 
       params = %{
         "type" => "plc_tombstone",
-        "signer" => @signer
+        "signer" => @signer,
+        "prev" => prev
       }
 
       conn = post(conn, ~p"/plc/#{did}", params)
@@ -118,8 +125,9 @@ defmodule DidServerWeb.PlcControllerTest do
     end
   end
 
-  def post_genesis_op(conn, did \\ nil) do
-    did = did || CryptoUtils.Did.did_for_create_op(@create_params)
+  def post_genesis_op(conn) do
+    did = CryptoUtils.Did.did_for_create_op(@create_params)
+
     params = Map.put(@create_params, "signer", @signer)
     {post(conn, ~p"/plc/#{did}", params), did}
   end

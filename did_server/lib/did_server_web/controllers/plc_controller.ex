@@ -32,57 +32,38 @@ defmodule DidServerWeb.PlcController do
   Updates or creates a DID document.
   """
   def create(conn, %{"did" => did} = params) do
-    params =
-      case DidServer.Log.get_last_op(did) do
-        %{cid: cid} -> Map.put(params, "prev", cid)
-        _ -> Map.put(params, "prev", nil)
+    try do
+      with {:ok, %{operation: %{did: op_did}}} <- DidServer.Log.create_operation(params),
+           {:verified, nil} <-
+             {:verified,
+              if did == op_did do
+                nil
+              else
+                op_did
+              end} do
+        json(conn, "")
+      else
+        {:verified, op_did} ->
+          render_error(conn, 400, "calculated did #{op_did} differs")
+
+        {:error, %Ecto.Changeset{errors: [{field, {message, _keys}} | _]}} ->
+          render_error(conn, 400, "#{field} #{message}")
+
+        {:error, reason} ->
+          render_error(conn, 400, reason)
       end
-
-    with {:ok, %{operation: %{did: op_did}}} <- DidServer.Log.create_operation(params),
-         {:verified, nil} <-
-           {:verified,
-            if did == op_did do
-              nil
-            else
-              op_did
-            end} do
-      json(conn, "")
-    else
-      {:verified, op_did} ->
-        render_error(conn, 400, "calculated did #{op_did} differs")
-
-      {:error, %Ecto.Changeset{errors: [{field, {message, _keys}} | _]}} ->
-        render_error(conn, 400, "#{field} #{message}")
-
-      {:error, reason} ->
-        render_error(conn, 400, reason)
+    rescue
+      e in CryptoUtils.Did.ImproperOperationError -> render_error(conn, 400, e.message)
     end
   end
 
   def domain_did(conn, _params) do
     did = DidServer.Log.get_domain_key()
-
-    case format_did_document(did) do
-      {:ok, doc} ->
-        conn
-        |> put_resp_content_type("application/did+ld+json")
-        |> render(:did_document, document: doc)
-
-      {:error, reason} ->
-        render_error(conn, 404, reason)
-    end
+    render_did_document_or_error(conn, did)
   end
 
   def show(conn, %{"did" => did}) do
-    case format_did_document(did) do
-      {:ok, doc} ->
-        conn
-        |> put_resp_content_type("application/did+ld+json")
-        |> render(:did_document, document: doc)
-
-      {:error, reason} ->
-        render_error(conn, 404, reason)
-    end
+    render_did_document_or_error(conn, did)
   end
 
   @doc """
@@ -117,15 +98,13 @@ defmodule DidServerWeb.PlcController do
   Gets the most recent operation in the log for a DID.
   """
   def last_operation(conn, %{"did" => did}) do
-    with {:registered, %Operation{} = op} = {:registered, DidServer.Log.get_last_op(did)},
-         {:valid, data} when is_map(data) <- {:valid, Operation.to_json_data(op)} do
-      render(conn, :operation, operation: data)
-    else
-      {:registered, _} ->
-        render_error(conn, 404, "DID not registered: #{did}")
+    case DidServer.Log.get_last_op(did) do
+      %Operation{} = op ->
+        data = Operation.to_json_data(op)
+        render(conn, :operation, operation: data)
 
-      {:valid, _} ->
-        render_error(conn, 404, "DID has been revoked: #{did}")
+      _ ->
+        render_error(conn, 404, "DID not registered: #{did}")
     end
   end
 
@@ -145,22 +124,31 @@ defmodule DidServerWeb.PlcController do
     end
   end
 
+  def render_did_document_or_error(conn, did) do
+    case DidServer.Log.get_last_op(did) do
+      %Operation{} = last_op ->
+        doc = format_did_document(did, last_op)
+
+        conn
+        |> put_resp_content_type("application/did+ld+json")
+        |> render(:did_document, document: doc)
+
+      _ ->
+        render_error(conn, 404, "DID not registered: #{did}")
+    end
+  end
+
+  def format_did_document(did, last_op) do
+    last_op
+    |> CryptoUtils.Did.to_plc_operation_data()
+    |> Map.put("did", did)
+    |> CryptoUtils.Did.format_did_plc_document()
+  end
+
   def render_error(conn, status_code, reason) do
     conn
     |> put_status(status_code)
     |> put_view(ErrorJSON)
     |> render("#{status_code}.json", detail: reason)
-  end
-
-  def format_did_document(did) do
-    with %Operation{} = last <- DidServer.Log.get_last_op(did) do
-      {:ok,
-       last
-       |> CryptoUtils.Did.to_plc_operation_data()
-       |> Map.put("did", did)
-       |> CryptoUtils.Did.format_did_plc_document()}
-    else
-      _ -> {:error, "DID not registered: #{did}"}
-    end
   end
 end

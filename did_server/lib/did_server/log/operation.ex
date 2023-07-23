@@ -50,11 +50,13 @@ defmodule DidServer.Log.Operation do
   end
 
   def to_json_data(op) do
-    op
-    |> Map.from_struct()
-    |> Map.delete(:__meta__)
-    |> Map.update(:inserted_at, "", &NaiveDateTime.to_iso8601/1)
-    |> Map.update(:operation, %{}, &Jason.decode!/1)
+    %{
+      "did" => op.did,
+      "cid" => op.cid,
+      "nullified" => op.nullified,
+      "operation" => Jason.decode!(op.operation),
+      "createdAt" => NaiveDateTime.to_iso8601(op.inserted_at)
+    }
   end
 
   def changeset(%__MODULE__{} = op, attrs) do
