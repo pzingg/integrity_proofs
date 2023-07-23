@@ -934,6 +934,9 @@ defmodule CryptoUtils.Did do
   def maybe_add_sig(op, nil), do: op
   def maybe_add_sig(op, sig), do: Map.put(op, "sig", sig)
 
+  def maybe_add_sig(op, nil), do: op
+  def maybe_add_sig(op, sig), do: Map.put(op, "sig", sig)
+
   def assure_valid_next_op(did, ops, proposed)
       when is_binary(did) and is_list(ops) and is_map(proposed) do
     proposed =
