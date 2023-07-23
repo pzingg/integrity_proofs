@@ -105,12 +105,21 @@ defmodule CryptoUtils do
   Formats a did:plc operation for debugging purposes.
   """
   def display_op(%{"type" => type, "prev" => prev}) do
+    prev = prev || "nil"
     "type #{type} prev #{prev}"
   end
 
+  # %Operation{}
   def display_op(%{did: did, cid: cid, operation: operation}) do
     %{"type" => type, "prev" => prev} = Jason.decode!(operation)
-    "type #{type} did #{display_did(did)} cid #{cid} prev #{prev}"
+    prev = prev || "nil"
+    "type #{type} prev #{prev} did #{display_did(did)} cid #{cid} "
+  end
+
+  # %CreateParams{}
+  def display_op(%{did: did, type: type, prev: prev}) do
+    prev = prev || "nil"
+    "type #{type} prev #{prev} did #{display_did(did)}"
   end
 
   @doc """
@@ -149,4 +158,92 @@ defmodule CryptoUtils do
          |> String.replace_leading("https://", ""))
     end
   end
+
+  @doc """
+  Removes :authority, :userinfo, and :port after parsing a URI.
+  Leaves :scheme, :host, :path, :query, and :fragment unchanged.
+  """
+  def to_uri(url) when is_binary(url) do
+    %URI{port: port} = uri = URI.parse(url)
+
+    port =
+      case port do
+        80 -> nil
+        443 -> nil
+        p when is_integer(p) -> p
+        _ -> nil
+      end
+
+    %URI{uri | authority: nil, userinfo: nil, port: port}
+  end
+
+  @doc """
+  Removes :authority, :userinfo, :port, :query, and :fragment from a URI.
+  Leaves :scheme and :host unchanged.
+  Sets :path if `path` is not nil, otherwise leaves it unchanged.
+  """
+  def base_uri(uri, path \\ nil)
+
+  def base_uri(uri, path) when is_binary(uri) do
+    to_uri(uri) |> base_uri(path)
+  end
+
+  def base_uri(%URI{} = uri, path) when is_binary(path) do
+    %URI{uri | path: path, authority: nil, fragment: nil, query: nil, userinfo: nil}
+  end
+
+  def base_uri(%URI{} = uri, nil) do
+    %URI{uri | authority: nil, fragment: nil, query: nil, userinfo: nil}
+  end
+
+  @doc """
+  Returns `true` if a binary or URI has an "http" or "https"
+  scheme with non-empty host and path components.
+  """
+  def http_uri?(url) when is_binary(url) do
+    URI.parse(url) |> http_uri?()
+  end
+
+  def http_uri?(%URI{scheme: scheme, host: host, path: path} = _uri) do
+    Enum.member?(["http", "https"], scheme) && !is_nil(host) && host != "" &&
+      !is_nil(path) && String.length(path) > 1
+  end
+
+  def http_uri?(_), do: false
+
+  @doc """
+  Returns `true` if a binary or URI is a recognized DID method
+  that has a non-empty method-specific id.
+  """
+  def did_uri?(url) when is_binary(url) do
+    URI.parse(url) |> did_uri?()
+  end
+
+  def did_uri?(%URI{scheme: "did", host: nil, path: path})
+      when is_binary(path) do
+    case String.split(path, ":") do
+      [did_method | [did_value | _]] ->
+        did_method in CryptoUtils.Did.valid_did_methods() && did_value != ""
+
+      _ ->
+        false
+    end
+  end
+
+  def did_uri?(_), do: false
+
+  @doc """
+  Returns `true` if a binary or URI has the scheme "at://" and
+  there are username and domain parts in the `:host` component.
+  """
+  def atproto_uri?(url) when is_binary(url) do
+    URI.parse(url) |> atproto_uri?()
+  end
+
+  def atproto_uri?(%URI{scheme: "at", host: host, path: nil})
+      when is_binary(host) do
+    String.contains?(host, ".")
+  end
+
+  def atproto_uri?(_), do: false
 end

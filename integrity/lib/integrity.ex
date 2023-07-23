@@ -367,7 +367,7 @@ defmodule Integrity do
     vm_identifier = URI.parse(verification_method)
     vm_fragment = vm_identifier.fragment
 
-    if !did_uri?(vm_identifier) && !http_uri?(vm_identifier) do
+    if !CryptoUtils.did_uri?(vm_identifier) && !CryptoUtils.http_uri?(vm_identifier) do
       raise InvalidVerificationMethodURLError, verification_method
     end
 
@@ -443,7 +443,7 @@ defmodule Integrity do
     acceptable_created_time_deviation =
       Keyword.get(options, :acceptable_created_time_deviation, 0)
 
-    dt_verified = Keyword.get(options, :dt_verified, DateTime.utc_now())
+    dt_verified = Keyword.get(options, :dt_verified, NaiveDateTime.utc_now())
 
     {proof, document_to_verify} = Map.pop!(proof_document, "proof")
 
@@ -518,7 +518,7 @@ defmodule Integrity do
         CryptoUtils.Keys.make_private_key({pub, priv}, :ed25519, fmt)
 
       !is_nil(private_key_pem) ->
-        case decode_pem_ssh_file(private_key_pem, :openssh_key_v1, fmt) do
+        case CryptoUtils.Keys.decode_pem_ssh_file(private_key_pem, :openssh_key_v1, fmt) do
           {:ok, _, private_key} -> private_key
           _ -> raise ArgumentError, IO.inspect(options)
         end
@@ -552,7 +552,7 @@ defmodule Integrity do
         CryptoUtils.Keys.make_public_key(pub, :ed25519, fmt)
 
       is_binary(public_key_pem) ->
-        case decode_pem_ssh_file(public_key_pem, :public_key, fmt) do
+        case CryptoUtils.Keys.decode_pem_ssh_file(public_key_pem, :public_key, fmt) do
           {:ok, public_key, _} -> public_key
           _ -> raise ArgumentError, IO.inspect(options)
         end
@@ -561,140 +561,6 @@ defmodule Integrity do
         raise ArgumentError, IO.inspect(options)
     end
   end
-
-  @doc """
-  Parses keys in files produced by the `ssh-keygen` command.
-
-  For example, create a public-private key pair with:
-
-  ```sh
-  ssh-keygen -t ed25519 -C "bob@example.com" -f example
-  ```
-
-  Then use this function to decode the public key:
-
-  ```elixir
-  File.read!("example.pub") |> decode_pem_ssh_file(:public_key)
-  ```
-
-  Or to decode the public key:
-
-  ```elixir
-  File.read!("example") |> decode_pem_ssh_file(:openssh_key_v1)
-  ```
-
-  See `CryptoUtils.Keys.make_public_key/3` and `make_private_key/3` for
-  details on the formats for the returned keys.
-  """
-  def decode_pem_ssh_file(keys_pem, type \\ :openssh_key_v1, fmt \\ :crypto_algo_key)
-      when is_binary(keys_pem) do
-    case :ssh_file.decode(keys_pem, type) do
-      decoded when is_list(decoded) ->
-        public_key =
-          Enum.find(decoded, fn
-            {{{:ECPoint, _pub}, {:namedCurve, _}}, attrs} when is_list(attrs) -> true
-            _ -> false
-          end)
-          |> case do
-            {{{:ECPoint, pub}, {:namedCurve, curve_oid}}, _attrs} ->
-              curve = CryptoUtils.Curves.curve_from_oid(curve_oid)
-
-              if is_nil(curve) do
-                nil
-              else
-                CryptoUtils.Keys.make_public_key(pub, curve, fmt)
-              end
-
-            _ ->
-              nil
-          end
-
-        private_key =
-          Enum.find(decoded, fn
-            {{:ECPrivateKey, 1, _priv, {:namedCurve, _}, _pub, :asn1_NOVALUE}, attrs}
-            when is_list(attrs) ->
-              true
-
-            _ ->
-              false
-          end)
-          |> case do
-            {{:ECPrivateKey, 1, priv, {:namedCurve, curve_oid}, pub, :asn1_NOVALUE}, _attrs} ->
-              curve = CryptoUtils.Curves.curve_from_oid(curve_oid)
-
-              if is_nil(curve) do
-                nil
-              else
-                CryptoUtils.Keys.make_private_key({pub, priv}, curve, fmt)
-              end
-
-            _ ->
-              nil
-          end
-
-        {:ok, public_key, private_key}
-
-      {:error, reason} ->
-        IO.puts("Could not decode #{type}: #{reason}")
-        {:error, reason}
-
-      other ->
-        IO.puts("Unexpected result decoding #{type}: #{inspect(other)}")
-    end
-  end
-
-  @doc """
-  Parses public keys in files produced by the `openssl` command.
-  """
-  def decode_pem_public_key(keys_pem, fmt \\ :crypto_algo_key) when is_binary(keys_pem) do
-    with [{:SubjectPublicKeyInfo, _encoded, :not_encrypted} = public_key_entry | _] =
-           :public_key.pem_decode(keys_pem),
-         {{:ECPoint, pub}, {:namedCurve, curve_oid}} <-
-           :public_key.pem_entry_decode(public_key_entry) do
-      curve = CryptoUtils.Curves.curve_from_oid(curve_oid)
-
-      if is_nil(curve) do
-        {:error, "Unknown curve OID #{inspect(curve_oid)}"}
-      else
-        {:ok, CryptoUtils.Keys.make_public_key(pub, curve, fmt)}
-      end
-    end
-  end
-
-  @doc """
-  Returns `true` if a binary or URI is a recognized DID method
-  that has a non-empty method-specific id.
-  """
-  def did_uri?(url) when is_binary(url) do
-    URI.parse(url) |> did_uri?()
-  end
-
-  def did_uri?(%URI{scheme: "did", host: nil, path: path})
-      when is_binary(path) do
-    case String.split(path, ":") do
-      [did_method | [did_value | _]] ->
-        did_method in CryptoUtils.Did.valid_did_methods() && did_value != ""
-
-      _ ->
-        false
-    end
-  end
-
-  def did_uri?(_), do: false
-
-  @doc """
-  Returns `true` if a binary or URI has an "http" or "https"
-  scheme with non-empty host and path components.
-  """
-  def http_uri?(url) when is_binary(url) do
-    URI.parse(url) |> http_uri?()
-  end
-
-  def http_uri?(%URI{scheme: scheme, host: host, path: path}) do
-    scheme in ["http", "https"] && !is_nil(host) && !is_nil(path)
-  end
-
-  def http_uri?(_), do: false
 
   defp dereference_controller_document!(_controller_document_url, options) do
     built_in = Keyword.get(options, :cached_controller_document)

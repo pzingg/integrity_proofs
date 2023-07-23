@@ -6,7 +6,7 @@ defmodule DidServerWeb.WebController do
   # TODO get domain from config
   @domain "example.com"
 
-  def show_root(conn, _params) do
+  def domain_did(conn, _params) do
     doc =
       %{username: "admin", domain: @domain}
       |> did_document_for_user()

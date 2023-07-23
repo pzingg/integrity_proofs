@@ -6,19 +6,22 @@ defmodule DidServer.Log do
   import Ecto.Query, warn: false
 
   alias DidServer.{PrevMismatchError, Repo, UpdateOperationError}
-  alias DidServer.Log.{Did, Operation}
+  alias DidServer.Accounts
+  alias DidServer.Accounts.{User, UserKey}
+  alias DidServer.Log.{Key, Operation}
+  alias DidServer.Vault
 
   @doc """
-  Returns the list of dids.
+  Returns the list of keys.
 
   ## Examples
 
-      iex> list_dids()
-      [%Did{}, ...]
+      iex> list_keys()
+      [%Key{}, ...]
 
   """
-  def list_dids do
-    Repo.all(Did)
+  def list_keys do
+    Repo.all(Key)
   end
 
   @doc """
@@ -28,30 +31,41 @@ defmodule DidServer.Log do
 
   ## Examples
 
-      iex> get_did!("did:plc:012345")
-      %Did{}
+      iex> get_key!("did:plc:012345")
+      %Key{}
 
-      iex> get_did!("did:plc:nosuchkey")
+      iex> get_key!("did:plc:nosuchkey")
       ** (Ecto.NoResultsError)
 
   """
-  def get_did!(did), do: Repo.get!(Did, did)
+  def get_key!(did) when is_binary(did), do: Repo.get!(Key, did, preload: :users)
+
+  def get_domain_key() do
+    domain = DidServer.Application.domain()
+
+    with %User{} = user <- Accounts.get_user_by_username("admin", domain),
+         [did | _] <- Accounts.list_keys_by_user(user) do
+      {:ok, did}
+    else
+      _ -> {:error, "not found"}
+    end
+  end
 
   @doc """
-  Creates a did.
+  Creates a did key.
 
   ## Examples
 
-      iex> create_did(%{field: value})
-      {:ok, %Did{}}
+      iex> create_key(%{field: value})
+      {:ok, %Key{}}
 
-      iex> create_did(%{field: bad_value})
+      iex> create_key(%{field: bad_value})
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_did(attrs \\ %{}) do
-    %Did{}
-    |> Did.changeset(attrs)
+  def create_key(attrs \\ %{}) do
+    %Key{}
+    |> Key.changeset(attrs)
     |> Repo.insert()
   end
 
@@ -60,13 +74,46 @@ defmodule DidServer.Log do
 
   ## Examples
 
-      iex> change_did(did)
-      %Ecto.Changeset{data: %Did{}}
+      iex> change_key(did)
+      %Ecto.Changeset{data: %Key{}}
 
   """
-  def change_did(%Did{} = did, attrs \\ %{}) do
-    Did.changeset(did, attrs)
+  def change_key(%Key{} = did, attrs \\ %{}) do
+    Key.changeset(did, attrs)
   end
+
+  @doc """
+  Links a user to a DID.
+  """
+  def add_also_known_as(did, nil) do
+    _ =
+      from(user_key in UserKey,
+        where: user_key.key_id == ^did
+      )
+      |> Repo.delete_all()
+
+    nil
+  end
+
+  def add_also_known_as(did, user) do
+    UserKey.build_link(did, user)
+    |> Repo.insert!()
+
+    {:ok, user}
+  end
+
+  def remove_also_known_as(did, user) do
+    _ =
+      from(user_key in UserKey,
+        where: user_key.user_id == ^user.id,
+        where: user_key.key_id == ^did
+      )
+      |> Repo.delete_all()
+
+    {:ok, user}
+  end
+
+  ## Operation log
 
   @doc """
   Returns the list of did:plc operations for a given DID.
@@ -96,6 +143,47 @@ defmodule DidServer.Log do
     |> Repo.all()
   end
 
+  def get_operation_by_cid(did, cid) do
+    from(op in Operation,
+      where: op.did == ^did,
+      where: op.cid == ^cid
+    )
+    |> Repo.one()
+  end
+
+  def get_last_op(did) do
+    from(op in Operation,
+      where: op.did == ^did,
+      where: op.nullified == false,
+      order_by: [desc: :inserted_at],
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
+  def most_recent_cid(did, excluded_cids \\ []) do
+    from(op in Operation,
+      select: [:cid],
+      where: op.did == ^did,
+      where: op.nullified == false,
+      where: op.cid not in ^excluded_cids,
+      order_by: [desc: :inserted_at]
+    )
+    |> Repo.one()
+    |> case do
+      nil -> nil
+      %{cid: cid} -> cid
+    end
+  end
+
+  def reset_log(did, cids) do
+    from(op in Operation,
+      where: op.did == ^did,
+      where: op.cid not in ^cids
+    )
+    |> Repo.delete_all()
+  end
+
   @doc """
   Creates a did:plc operation.
 
@@ -114,37 +202,12 @@ defmodule DidServer.Log do
   """
   def create_operation(params) do
     case CryptoUtils.Did.create_operation(params) do
-      {:ok, {%{"sig" => _sig} = op, did}} ->
-        create_operation(did, op)
+      {:ok, {did, signed_op, password}} ->
+        validate_and_insert_operation(did, signed_op, password)
 
       error ->
         error
     end
-  end
-
-  @doc """
-  Creates a DID operation from valid, normalized data, applying a DID.
-
-  On success, returns a tuple `{:ok, multi}`, where
-  `multi` is an Ecto.Multi` result (map) with `:did`, `:operation` and
-  `:most_recent` components.
-
-  ## Examples
-
-      iex> create_operation(did, %{field: value})
-      {:ok, %{operation: %Operation{}}}
-
-      iex> create_operation(did, %{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def create_operation(did, proposed) when is_binary(did) and is_map(proposed) do
-    ops = list_operations(did)
-
-    {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)
-
-    multi_insert(did, proposed, nullified_cids)
-    |> Repo.transaction()
   end
 
   @doc """
@@ -159,56 +222,27 @@ defmodule DidServer.Log do
       {:error, %Ecto.Changeset{}}
 
   """
-  def update_operation(params) do
-    did = Map.get(params, :did) || Map.get(params, "did")
+  def update_operation(%{did: did, cid: cid, operation: op_json} = op, params) do
+    case CryptoUtils.Did.update_operation(
+           %{did: did, cid: cid, operation: Jason.decode!(op_json)},
+           params
+         ) do
+      {:ok, {_did, op}} ->
+        validate_and_insert_operation(did, op)
 
-    with {:ok, %{did: did, cid: cid} = last_op} <- ensure_last_op(did),
-         {:data, data} when is_map(data) <- {:data, Operation.to_data(last_op)},
-         {:ok, {op, _did}} <-
-           CryptoUtils.Did.update_operation(
-             %{did: did, cid: cid, operation: data},
-             params
-           ) do
-      create_operation(did, op)
-    else
-      {:data, _} -> raise UpdateOperationError, "no data in last operation"
-      {:error, reason} -> raise UpdateOperationError, reason
+      {:error, reason} ->
+        raise UpdateOperationError, reason
     end
   end
 
-  def most_recent_cid(did, not_included \\ []) do
-    not_included_strs = Enum.map(not_included, &to_string/1)
+  defp validate_and_insert_operation(did, proposed, password \\ nil, keys_pem \\ nil)
+       when is_binary(did) and is_map(proposed) do
+    ops = list_operations(did)
 
-    from(op in Operation,
-      select: [:cid],
-      where: op.did == ^did,
-      where: op.nullified == false,
-      where: op.cid not in ^not_included_strs,
-      order_by: [desc: :inserted_at]
-    )
-    |> Repo.one()
-    |> case do
-      nil -> nil
-      %{cid: cid} -> cid
-    end
-  end
+    {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)
 
-  def get_last_op(did) do
-    from(op in Operation,
-      where: op.did == ^did,
-      where: op.nullified == false,
-      order_by: [desc: :inserted_at],
-      limit: 1
-    )
-    |> Repo.one()
-  end
-
-  def reset_log(did, cids) do
-    from(op in Operation,
-      where: op.did == ^did,
-      where: op.cid not in ^cids
-    )
-    |> Repo.delete_all()
+    multi_insert(did, proposed, nullified_cids, password, keys_pem)
+    |> Repo.transaction()
   end
 
   def ensure_last_op(did) when is_binary(did) do
@@ -245,18 +279,22 @@ defmodule DidServer.Log do
   Just a check to see if database is operational.
   """
   def health_check() do
-    from(op in Operation, limit: 1) |> Repo.all() |> is_list()
+    try do
+      from(op in Operation, limit: 1) |> Repo.all() |> is_list()
+    rescue
+      _ -> false
+    end
   end
 
-  # Private functions
-
-  def multi_insert(did, %{"prev" => prev} = proposed, nullified_cids) do
+  def multi_insert(did, %{"prev" => prev} = proposed, nullified_cids, password, keys_pem) do
     op_attrs = %{
       cid: CryptoUtils.Did.cid_for_op(proposed),
       did: did,
       operation: Jason.encode!(proposed),
       prev: prev,
-      nullified_cids: nullified_cids
+      nullified_cids: nullified_cids,
+      password: password,
+      keys_pem: keys_pem
     }
 
     Operation.changeset(%Operation{}, op_attrs)
@@ -266,18 +304,24 @@ defmodule DidServer.Log do
   def multi_insert(op_changeset, verify? \\ true) do
     did = Ecto.Changeset.get_change(op_changeset, :did)
     prev = Ecto.Changeset.get_change(op_changeset, :prev)
-    did_changeset = Did.changeset(%Did{}, %{did: did})
+    password = Ecto.Changeset.get_change(op_changeset, :password)
+    keys_pem = Ecto.Changeset.get_change(op_changeset, :keys_pem)
+    key_changeset = Key.changeset(%Key{}, %{did: did, password: password})
 
     multi =
       if is_nil(prev) do
         Ecto.Multi.new()
-        |> Ecto.Multi.insert(:did, did_changeset, returning: true)
+        |> Ecto.Multi.insert(:key, key_changeset, returning: true)
       else
         Ecto.Multi.new()
-        |> Ecto.Multi.one(:did, Did)
+        |> Ecto.Multi.one(:key, Key)
       end
 
-    multi = Ecto.Multi.insert(multi, :operation, op_changeset, returning: true)
+    multi =
+      multi
+      |> Ecto.Multi.run(:secret, fn _, _ -> update_secret(did, keys_pem) end)
+      |> Ecto.Multi.insert(:operation, op_changeset, returning: true)
+
     nullified_cids = Ecto.Changeset.get_change(op_changeset, :nullified_cids, [])
 
     multi =
@@ -299,6 +343,70 @@ defmodule DidServer.Log do
       multi
     end
   end
+
+  def update_secret(_did, nil), do: {:ok, nil}
+
+  def update_secret(did, "delete") do
+    Vault.delete_secret(did)
+  end
+
+  def update_secret(did, keys_pem) do
+    Vault.create_secret(did, keys_pem)
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for changing the DID password.
+
+  ## Examples
+
+      iex> change_did_password(user)
+      %Ecto.Changeset{data: %User{}}
+
+  """
+  def change_did_password(did, attrs \\ %{}) do
+    Key.password_changeset(did, attrs, hash_password: false)
+  end
+
+  @doc """
+  Updates the DID key password.
+
+  ## Examples
+
+      iex> update_key_password(key, "valid password", %{password: ...})
+      {:ok, %User{}}
+
+      iex> update_key_password(key, "invalid password", %{password: ...})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def update_key_password(key, password, attrs) do
+    # |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, :all))
+
+    key
+    |> Key.password_changeset(attrs)
+    |> Key.validate_current_password(password)
+    |> Repo.update()
+  end
+
+  @doc """
+  Resets the DID key password.
+
+  ## Examples
+
+      iex> reset_did_password(key, %{password: "new long password", password_confirmation: "new long password"})
+      {:ok, %User{}}
+
+      iex> reset_did_password(key, %{password: "valid", password_confirmation: "not the same"})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def reset_did_password(key, attrs) do
+    # |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, :all))
+    Key.password_changeset(key, attrs)
+    |> Repo.update()
+  end
+
+  # Private functions
 
   defp nullify(did, nullified_cids) do
     from(op in Operation,
@@ -323,11 +431,11 @@ defmodule DidServer.Log do
         cond do
           is_nil(prev) ->
             raise PrevMismatchError,
-                  "Proposed has no prev, but there is a most recent operation #{next_to_last_cid}"
+                  "update has no prev, but there is a most recent operation #{next_to_last_cid}"
 
           prev != next_to_last_cid ->
             raise PrevMismatchError,
-                  "Proposed prev does not match the most recent operation #{next_to_last_cid}"
+                  "update's prev does not match the most recent operation #{next_to_last_cid}"
 
           true ->
             {:ok, next_to_last_cid}
@@ -337,7 +445,8 @@ defmodule DidServer.Log do
         if is_nil(prev) do
           {:ok, nil}
         else
-          raise PrevMismatchError, "Proposed has prev, but there is no most recent operation"
+          raise PrevMismatchError,
+                "update has prev, but there are only #{Enum.count(most_recent)} operations"
         end
     end
   end

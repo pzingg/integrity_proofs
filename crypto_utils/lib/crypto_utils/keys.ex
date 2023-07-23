@@ -4,6 +4,8 @@ defmodule CryptoUtils.Keys do
   """
   require Record
 
+  alias CryptoUtils.Curves
+
   @doc """
   Erlang record for public key.
 
@@ -91,7 +93,7 @@ defmodule CryptoUtils.Keys do
   @doc """
   Extracts the public key from a "Multikey" verification method.
 
-  See `CryptoUtils.Keys.make_public_key/3` for details on the formats for the
+  See `make_public_key/3` for details on the formats for the
   returned key.
   """
   def extract_multikey(verification_method, fmt \\ :crypto_algo_key)
@@ -102,7 +104,7 @@ defmodule CryptoUtils.Keys do
       )
       when is_binary(multibase_value) do
     with {:ok, {pub, curve}} <- decode_multikey(multibase_value) do
-      {:ok, CryptoUtils.Keys.make_public_key(pub, curve, fmt)}
+      {:ok, make_public_key(pub, curve, fmt)}
     end
   end
 
@@ -265,6 +267,164 @@ defmodule CryptoUtils.Keys do
 
   def make_private_key(_, curve, _) do
     raise CryptoUtils.UnsupportedNamedCurveError, curve
+  end
+
+  def encode_pem_public_key({did_key, {:ecdsa, [priv, curve]}}) do
+    %{algo_key: {:ecdsa, [pub, _curve]}} = CryptoUtils.Did.parse_did_key!(did_key)
+
+    oid =
+      case curve do
+        :p256 -> @id_p256
+        :secp256k1 -> @id_secp256k1
+      end
+
+    curve_params = {:namedCurve, oid}
+    # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
+    private_key_asn1 = {:ECPrivateKey, 1, priv, curve_params, pub, :asn1_NOVALUE}
+    entry = :public_key.pem_entry_encode(:ECPrivateKey, private_key_asn1)
+    pem = :public_key.pem_encode([entry])
+    {:ok, pem}
+  end
+
+  def encode_pem_public_key({:ECPrivateKey, 1, priv, curve_params, pub}) do
+    # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
+    private_key_asn1 = {:ECPrivateKey, 1, priv, curve_params, pub, :asn1_NOVALUE}
+    entry = :public_key.pem_entry_encode(:ECPrivateKey, private_key_asn1)
+    pem = :public_key.pem_encode([entry])
+    {:ok, pem}
+  end
+
+  def encode_pem_public_key({{:ECPoint, _pub}, _curve_params} = public_key) do
+    # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
+    entry = :public_key.pem_entry_encode(:SubjectPublicKeyInfo, public_key)
+    pem = :public_key.pem_encode([entry])
+    {:ok, pem}
+  end
+
+  def encode_pem_private_key(key) do
+    {:error, "unkown key format #{inspect(key)}"}
+  end
+
+  @doc """
+  Parses keys in files produced by the `ssh-keygen` command.
+
+  For example, create a public-private key pair with:
+
+  ```sh
+  ssh-keygen -t ed25519 -C "bob@example.com" -f example
+  ```
+
+  Then use this function to decode the public key:
+
+  ```elixir
+  File.read!("example.pub") |> decode_pem_ssh_file(:public_key)
+  ```
+
+  Or to decode the public key:
+
+  ```elixir
+  File.read!("example") |> decode_pem_ssh_file(:openssh_key_v1)
+  ```
+
+  See `make_public_key/3` and `make_private_key/3` for
+  details on the formats for the returned keys.
+  """
+  def decode_pem_ssh_file(keys_pem, type \\ :openssh_key_v1, fmt \\ :crypto_algo_key)
+      when is_binary(keys_pem) do
+    case :ssh_file.decode(keys_pem, type) do
+      decoded when is_list(decoded) ->
+        decode_entries(decoded, fmt)
+
+      {:error, reason} ->
+        IO.puts("Could not decode #{type}: #{reason}")
+        {:error, reason}
+
+      other ->
+        IO.puts("Unexpected result decoding #{type}: #{inspect(other)}")
+    end
+  end
+
+  @doc """
+  Parses public keys in files produced by the `openssl` command.
+  """
+  def decode_pem_public_key(keys_pem, fmt \\ :crypto_algo_key) when is_binary(keys_pem) do
+    case :public_key.pem_decode(keys_pem) do
+      entries when is_list(entries) ->
+        Enum.map(entries, fn entry -> :public_key.pem_entry_decode(entry) end)
+        |> decode_entries(fmt)
+
+      {:error, reason} ->
+        IO.puts("Could not decode: #{reason}")
+        {:error, reason}
+
+      other ->
+        IO.puts("Unexpected result decoding: #{inspect(other)}")
+    end
+  end
+
+  @doc """
+  Formats an `:crypto_algo_key` keypair into a JSON-compatible
+  flattened list of strings.
+  """
+  def to_signer({pub, {algorithm, [priv, curve]}}) do
+    [pub, to_string(algorithm), priv, to_string(curve)]
+  end
+
+  defp decode_entries(decoded, fmt) when is_list(decoded) do
+    public_key =
+      Enum.map(decoded, fn
+        {{:ECPoint, _pub}, {:namedCurve, _}} = key ->
+          key
+
+        {{{:ECPoint, _pub}, {:namedCurve, _}} = key, attrs} when is_list(attrs) ->
+          key
+
+        _ ->
+          nil
+      end)
+      |> Enum.filter(&is_tuple/1)
+      |> case do
+        [{{:ECPoint, pub}, {:namedCurve, curve_oid}} | _] ->
+          curve = Curves.curve_from_oid(curve_oid)
+
+          if is_nil(curve) do
+            nil
+          else
+            make_public_key(pub, curve, fmt)
+          end
+
+        _ ->
+          nil
+      end
+
+    private_key =
+      Enum.map(decoded, fn
+        {:ECPrivateKey, 1, _priv, {:namedCurve, _}, _pub, :asn1_NOVALUE} = key ->
+          key
+
+        {{:ECPrivateKey, 1, _priv, {:namedCurve, _}, _pub, :asn1_NOVALUE} = key, attrs}
+        when is_list(attrs) ->
+          key
+
+        _ ->
+          nil
+      end)
+      |> Enum.filter(&is_tuple/1)
+      |> case do
+        [{:ECPrivateKey, 1, priv, {:namedCurve, curve_oid}, pub, :asn1_NOVALUE} | _] ->
+          curve = Curves.curve_from_oid(curve_oid)
+
+          if is_nil(curve) do
+            nil
+          else
+            make_private_key({pub, priv}, curve, fmt)
+          end
+
+        _ ->
+          nil
+      end
+
+    {:ok, public_key, private_key}
   end
 
   defp multicodec_mapping_decode(prefixed_bytes) do

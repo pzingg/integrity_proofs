@@ -13,9 +13,9 @@ defmodule CryptoUtils.Plc.UpdateOperation do
     field(:type, :string)
     field(:signer, {:array, :string})
     field(:signingKey, :string)
-    field(:handle, :string)
-    field(:pds, :string)
+    field(:alsoKnownAs, {:array, :string})
     field(:rotationKeys, {:array, :string})
+    field(:pds, :string)
   end
 
   def parse(params) when is_list(params), do: Map.new(params) |> parse()
@@ -32,9 +32,9 @@ defmodule CryptoUtils.Plc.UpdateOperation do
         :type,
         :signer,
         :signingKey,
-        :handle,
-        :pds,
-        :rotationKeys
+        :alsoKnownAs,
+        :rotationKeys,
+        :pds
       ])
 
     changeset

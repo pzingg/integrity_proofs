@@ -7,7 +7,7 @@ defmodule DidSever.RecoveryTest do
   alias DidServer.{Log, Repo}
   alias DidServer.Log.Operation
 
-  @signing_key CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
+  # @signing_key CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
   @rotation_key_1 CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
   @rotation_key_2 CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
   @rotation_key_3 CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
@@ -64,7 +64,7 @@ defmodule DidSever.RecoveryTest do
   # [2] -> update handle (same rotation to [key_3], signed by key_3)
   defp setup_rotation(now) do
     {:ok, %{did: did, cid: create_cid} = create} = setup_genesis(now)
-    create_op = Operation.to_data(create)
+    create_op = CryptoUtils.Did.to_data(create)
     assert Map.get(create_op, "rotationKeys") |> Enum.count() == 3
 
     # key 3 tries to usurp control
@@ -85,7 +85,7 @@ defmodule DidSever.RecoveryTest do
       sign_op_for_keys([@rotation_key_3], @rotation_key_3, one_hour_ago,
         did: did,
         prev: rotate_cid,
-        changes: %{handle: "newhandle.test"}
+        changes: %{alsoKnownAs: ["newhandle.test"]}
       )
 
     assert {:ok, %{operation: %Operation{cid: _another_cid}}} =
@@ -108,7 +108,7 @@ defmodule DidSever.RecoveryTest do
     rotate_changeset =
       sign_op_for_keys([@rotation_key_2], @rotation_key_2, now, did: did, prev: create_cid)
 
-    rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
+    rotate_op = apply_changes(rotate_changeset) |> CryptoUtils.Did.to_data()
 
     # Nullified are [1, 2]
     # Disputed signer is key_3
@@ -142,7 +142,7 @@ defmodule DidSever.RecoveryTest do
     rotate_changeset =
       sign_op_for_keys([@rotation_key_3], @rotation_key_3, now, did: did, prev: create_cid)
 
-    rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
+    rotate_op = apply_changes(rotate_changeset) |> CryptoUtils.Did.to_data()
 
     # Nullified are [1, 2]
     # Disputed signer is key_3
@@ -163,7 +163,7 @@ defmodule DidSever.RecoveryTest do
     rotate_changeset =
       sign_op_for_keys([@rotation_key_1], @rotation_key_1, now, did: did, prev: create_cid)
 
-    rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
+    rotate_op = apply_changes(rotate_changeset) |> CryptoUtils.Did.to_data()
 
     # Nullified are [1]
     # Disputed signer is key_2
@@ -194,7 +194,7 @@ defmodule DidSever.RecoveryTest do
     rotate_changeset =
       sign_op_for_keys([@rotation_key_3], @rotation_key_3, now, did: did, prev: create_cid)
 
-    rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
+    rotate_op = apply_changes(rotate_changeset) |> CryptoUtils.Did.to_data()
 
     assert_raise(InvalidSignatureError, fn ->
       CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
@@ -203,7 +203,7 @@ defmodule DidSever.RecoveryTest do
     rotate_changeset =
       sign_op_for_keys([@rotation_key_2], @rotation_key_2, now, did: did, prev: create_cid)
 
-    rotate_op = apply_changes(rotate_changeset) |> Operation.to_data()
+    rotate_op = apply_changes(rotate_changeset) |> CryptoUtils.Did.to_data()
 
     assert_raise(InvalidSignatureError, fn ->
       CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_op)
@@ -233,7 +233,7 @@ defmodule DidSever.RecoveryTest do
     rotate_back_changeset =
       sign_op_for_keys([@rotation_key_2], @rotation_key_2, now, did: did, prev: create_cid)
 
-    rotate_back_op = apply_changes(rotate_back_changeset) |> Operation.to_data()
+    rotate_back_op = apply_changes(rotate_back_changeset) |> CryptoUtils.Did.to_data()
 
     assert_raise(LateRecoveryError, fn ->
       CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_back_op)
@@ -262,26 +262,34 @@ defmodule DidSever.RecoveryTest do
     rotate_back_changeset =
       sign_op_for_keys([@rotation_key_1], @rotation_key_1, now, did: did, prev: create_cid)
 
-    rotate_back_op = apply_changes(rotate_back_changeset) |> Operation.to_data()
+    rotate_back_op = apply_changes(rotate_back_changeset) |> CryptoUtils.Did.to_data()
     {_proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, rotate_back_op)
 
     assert [cid_1] = nullified_cids
     assert cid_1 == tombstone.cid
   end
 
-  defp sign_op_for_keys(keys, {signer_did, {algorithm, [priv, curve]}}, inserted_at, opts \\ []) do
-    type = Keyword.get(opts, :type, "create")
+  defp sign_op_for_keys(
+         keys,
+         signing_keypair,
+         inserted_at,
+         opts \\ []
+       ) do
+    type = Keyword.get(opts, :type, "plc_operation")
+    did = Keyword.get(opts, :did)
     prev = Keyword.get(opts, :prev)
+    signer = CryptoUtils.Keys.to_signer(signing_keypair)
 
     params = %{
       type: type,
-      did: Keyword.get(opts, :did),
+      did: did,
       prev: prev,
-      signingKey: elem(@signing_key, 0),
+      signingKey: elem(signing_keypair, 0),
       rotationKeys: Enum.map(keys, &elem(&1, 0)),
       handle: @handle,
       service: @service,
-      signer: [signer_did, to_string(algorithm), priv, to_string(curve)]
+      signer: signer,
+      password: "bluesky"
     }
 
     params =
@@ -290,18 +298,36 @@ defmodule DidSever.RecoveryTest do
         nil -> params
       end
 
-    {:ok, {op, did}} = CryptoUtils.Did.create_operation(params)
-    changeset(op, did, prev, inserted_at)
+    {did, signed_op, password, keys_pem} =
+      if is_nil(did) || is_nil(prev) do
+        assert {:ok, pem} = CryptoUtils.Keys.encode_pem_public_key(signing_keypair)
+        assert {:ok, {did, signed_op, password}} = CryptoUtils.Did.create_operation(params)
+        {did, signed_op, password, pem}
+      else
+        assert %{did: ^did, operation: op_json} = Log.get_operation_by_cid(did, prev)
+
+        assert {:ok, {did, updated_op}} =
+                 CryptoUtils.Did.update_operation(
+                   %{did: did, cid: prev, operation: Jason.decode!(op_json)},
+                   params
+                 )
+
+        {did, updated_op, nil, nil}
+      end
+
+    changeset(did, signed_op, prev, inserted_at, password, keys_pem)
   end
 
-  defp changeset(op, did, prev, inserted_at) do
+  defp changeset(did, op, prev, inserted_at, password, keys_pem) do
     Operation.changeset_raw(%Operation{}, %{
       did: did,
       cid: CryptoUtils.Did.cid_for_op(op),
       operation: Jason.encode!(op),
       nullified: false,
       inserted_at: inserted_at,
-      prev: prev
+      prev: prev,
+      password: password,
+      keys_pem: keys_pem
     })
   end
 end

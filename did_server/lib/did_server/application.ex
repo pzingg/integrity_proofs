@@ -34,8 +34,25 @@ defmodule DidServer.Application do
     :ok
   end
 
+  def name() do
+    Application.get_env(:did_server, :server_name, "DID Server")
+  end
+
+  def domain do
+    Application.get_env(:did_server, :server_domain, "example.com")
+  end
+
   def version() do
     {:ok, vsn} = :application.get_key(:did_server, :vsn)
     List.to_string(vsn)
+  end
+
+  def services() do
+    Application.get_env(
+      :did_server,
+      :supported_services,
+      "did_web,did_plc,atproto_pds,activitypub"
+    )
+    |> String.split(",")
   end
 end

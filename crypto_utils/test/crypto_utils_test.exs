@@ -5,7 +5,7 @@ defmodule CryptoUtilsTest do
   doctest CryptoUtils
 
   alias CryptoUtils.Math, as: CMath
-  alias CryptoUtils.Cid
+  alias CryptoUtils.{Cid, Did}
 
   @sample_op %{
     "type" => "plc_operation",
@@ -29,7 +29,7 @@ defmodule CryptoUtilsTest do
     "prev" => nil
   }
 
-  @sample_op_cid_str "bafyreibm5m4qqzxqdw4woq4"
+  @sample_op_cid_str "bafyreidy2lsfczzflaw2w25"
 
   # From ipld-vectors.ts in atproto/common library
   @sample_cbor <<167, 100, 98, 111, 111, 108, 245, 100, 110, 117, 108, 108, 246, 101, 97, 114,
@@ -47,7 +47,7 @@ defmodule CryptoUtilsTest do
 
   describe "did:plc" do
     test "creates a did" do
-      did = CryptoUtils.Did.did_for_create_op(@sample_op)
+      assert {:ok, did} = Did.did_for_create_op(@sample_op)
       assert String.starts_with?(did, "did:plc:")
       assert String.length(did) == 32
       assert did == "did:plc:pdjoiulhevmc3k3luwomyraz"
@@ -67,11 +67,7 @@ defmodule CryptoUtilsTest do
     end
 
     test "creates a CID from a PLC operation" do
-      cid_str =
-        @sample_op
-        |> Cid.from_data()
-        |> Cid.encode!(truncate: 24)
-
+      cid_str = Did.cid_for_op(@sample_op)
       assert String.starts_with?(cid_str, "b")
       assert String.length(cid_str) == 24
       assert cid_str == @sample_op_cid_str

@@ -4,18 +4,6 @@ defmodule DidServer.LogFixtures do
   entities via the `DidServer.Log` context.
   """
 
-  @doc """
-  Generate a did.
-  """
-  def did_fixture(attrs \\ %{did: "did:plc:y54rrfl37i5wqztksze4bddl"}) do
-    {:ok, did} =
-      attrs
-      |> Enum.into(%{})
-      |> DidServer.Log.create_did()
-
-    did
-  end
-
   @signing_key "did:key:z7r8oofvCWdL3Y8TD3NuBsKiYKz6REqmkNteXjmhdXrGMA6w4TgiEEgA3YhgJy2gLPKygzvVUgoqEcLDd2Vtn5dpPCWoX"
   @signing_keypair [
     @signing_key,
@@ -34,23 +22,55 @@ defmodule DidServer.LogFixtures do
     "secp256k1"
   ]
 
+  @did_password "bluesky"
+
   @operation_attrs %{
+    type: "create",
     signingKey: @signing_key,
     recoveryKey: @recovery_key,
     signer: @signer,
     handle: "bob.bsky.social",
-    service: "https://pds.example.com"
+    service: "https://pds.example.com",
+    password: @did_password
   }
 
-  def recovery_keypair_fixture(), do: @signer
-  def signing_keypair_fixture(), do: @signing_keypair
+  def recovery_keypair_fixture, do: @signer
+  def signing_keypair_fixture, do: @signing_keypair
+  def unique_user_username, do: "user#{System.unique_integer()}"
+  def valid_did_password, do: @did_password
+
+  def valid_create_op_attributes(attrs \\ %{}) do
+    username = unique_user_username()
+    domain = @example_domain
+
+    Enum.into(attrs, %{
+      signingKey: @signing_key,
+      recoveryKey: @recovery_key,
+      signer: @signer,
+      handle: "#{username}.#{domain}",
+      service: "https://pds.example.com",
+      password: valid_did_password()
+    })
+  end
 
   def operation_fixture(attrs \\ @operation_attrs) do
     {:ok, %{operation: op}} =
       attrs
-      |> Enum.into(%{})
+      |> valid_create_op_attributes()
       |> DidServer.Log.create_operation()
 
     op
+  end
+
+  @doc """
+  Generate a did.
+  """
+  def key_fixture(attrs \\ @operation_attrs) do
+    {:ok, %{key: key}} =
+      attrs
+      |> valid_create_op_attributes()
+      |> DidServer.Log.create_operation()
+
+    key
   end
 end
