@@ -13,7 +13,6 @@ defmodule DidServerWeb.WebFinger do
 
   @accept_header_value_xml "application/xrd+xml"
   @accept_header_value_json "application/jrd+json"
-  @acct_regex ~r/^(acct:)?(?<username>[a-z0-9A-Z_\.-]+)@(?<domain>[^\s]+)$/
 
   def host_meta do
     base_url = DidServerWeb.Endpoint.url()
@@ -34,22 +33,12 @@ defmodule DidServerWeb.WebFinger do
   end
 
   def webfinger(resource, fmt) when is_binary(resource) and fmt in [:xml, :json] do
-    domain = DidServer.Application.domain()
+    case Accounts.get_user_by_identifier(resource) do
+      %User{} = user ->
+        {:ok, represent_user(user, fmt)}
 
-    with %{"username" => nickname, "domain" => domain} <-
-           Regex.named_captures(@acct_regex, resource),
-         %User{} = user <- Accounts.get_user_by_username(nickname, domain) do
-      {:ok, represent_user(user, domain, fmt)}
-    else
       _ ->
-        resource = CryptoUtils.to_uri(resource)
-
-        with %User{} = user <- Accounts.get_user_by_ap_id(resource) do
-          {:ok, represent_user(user, domain, fmt)}
-        else
-          _ ->
-            {:error, "User not found"}
-        end
+        {:error, "User not found"}
     end
   end
 
@@ -58,30 +47,31 @@ defmodule DidServerWeb.WebFinger do
       %{
         "rel" => "self",
         "type" => "application/activity+json",
-        "href" => User.ap_id(user)
+        "href" => User.ap_id(user, "user/")
       }
       # %{
       #  "rel" => "http://webfinger.net/rel/profile-page",
       #  "type" => "text/html",
-      #  "href" => User.ap_id(user)
+      #  "href" => User.ap_id(user, "user/")
       # }
     ]
   end
 
   defp gather_aliases(%User{} = user) do
-    # | user.also_known_as]
-    [User.ap_id(user)]
+    Accounts.list_also_known_as_users(user)
+    |> Enum.filter(fn alias -> alias.id != user.id end)
+    |> Enum.map(fn alias -> User.ap_id(alias, "user/") end)
   end
 
-  def represent_user(user, domain, :json) do
+  def represent_user(%User{} = user, :json) do
     %{
-      "subject" => "acct:#{user.nickname}@#{domain}",
+      "subject" => User.ap_acct(user, "acct:"),
       "aliases" => gather_aliases(user),
       "links" => gather_links(user)
     }
   end
 
-  def represent_user(user, domain, :xml) do
+  def represent_user(%User{} = user, :xml) do
     aliases =
       user
       |> gather_aliases()
@@ -95,7 +85,7 @@ defmodule DidServerWeb.WebFinger do
       :XRD,
       %{xmlns: "http://docs.oasis-open.org/ns/xri/xrd-1.0"},
       [
-        {:Subject, "acct:#{user.nickname}@#{domain}"}
+        {:Subject, User.ap_acct(user, "acct:")}
       ] ++ aliases ++ links
     }
     |> XMLBuilder.to_doc()

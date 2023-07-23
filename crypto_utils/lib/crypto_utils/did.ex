@@ -903,9 +903,10 @@ defmodule CryptoUtils.Did do
   end
 
   def cid_for_op(op) do
-    op
-    |> Map.delete("sig")
-    |> Cid.from_data()
+    {cbor, _unsigned_op} = cbor_encode(op)
+
+    cbor
+    |> Cid.from_cbor()
     |> Cid.encode!(truncate: 24)
   end
 
@@ -954,16 +955,14 @@ defmodule CryptoUtils.Did do
 
   # Signatures
 
-  def cbor_encode(%{"type" => type} = op) do
-    unsigned_op =
-      if type == "plc_tombstone" do
-        Map.take(op, ["type", "prev"])
-      else
-        Map.delete(op, "sig")
-      end
+  def cbor_encode(%{"type" => "plc_tombstone"} = op) do
+    unsigned_op = Map.take(op, ["type", "prev"])
+    {CBOR.encode(unsigned_op), unsigned_op}
+  end
 
-    cbor = CBOR.encode(unsigned_op)
-    {cbor, unsigned_op}
+  def cbor_encode(op) do
+    unsigned_op = Map.delete(op, "sig")
+    {CBOR.encode(unsigned_op), unsigned_op}
   end
 
   def add_signature(op, [_did, algorithm, priv, curve] = _signer) do

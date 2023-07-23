@@ -224,7 +224,6 @@ defmodule DidServer.Log do
   end
 
   def most_recent_cid(did, excluded_cids \\ []) do
-
     from(op in Operation,
       select: [:cid],
       where: op.did == ^did,
