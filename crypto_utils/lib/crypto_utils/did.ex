@@ -957,7 +957,7 @@ defmodule CryptoUtils.Did do
     |> Cid.encode!(truncate: 24)
   end
 
-  def validate_operation_log(did, [%{"type" => first_type} = first | rest]) do
+  def validate_operation_log!(did, [%{"type" => first_type} = first | rest]) do
     if first_type not in ["create", "plc_operation"] do
       raise ImproperOperationError, op: first, message: "incorrect structure"
     end

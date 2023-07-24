@@ -93,8 +93,8 @@ defmodule DidSever.RecoveryTest do
              |> Log.multi_insert(false)
              |> Repo.transaction()
 
-    ops = Log.list_operations(did)
-    # IO.puts("ops #{inspect(Enum.map(ops, fn %{cid: cid} -> cid end))}")
+    ops = Log.list_operations(did, true)
+    assert Enum.count(ops) == 3
 
     {:ok, %{ops: ops}}
   end
@@ -128,8 +128,7 @@ defmodule DidSever.RecoveryTest do
              |> Log.multi_insert(false)
              |> Repo.transaction()
 
-    _ = Log.reset_log(did, [create_cid, key_2_asserts_control_cid])
-    ops = Log.list_operations(did, true)
+    assert {:ok, ops} = Log.reset_log(did, cids_to_keep: [create_cid, key_2_asserts_control_cid])
     assert Enum.count(ops) == 2
     ops
   end
@@ -182,8 +181,7 @@ defmodule DidSever.RecoveryTest do
              |> Log.multi_insert(false)
              |> Repo.transaction()
 
-    _ = Log.reset_log(did, [create_cid, rotate_cid])
-    ops = Log.list_operations(did, true)
+    assert {:ok, ops} = Log.reset_log(did, cids_to_keep: [create_cid, rotate_cid])
     assert Enum.count(ops) == 2
     ops
   end

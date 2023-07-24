@@ -43,7 +43,7 @@ defmodule DidServer.LogTest do
 
     test "list_operations/0 returns all operations" do
       %Operation{did: did} = op = operation_fixture()
-      assert Log.list_operations(did) == [%{op | password: nil}]
+      assert Log.list_operations(did, true) == [%{op | password: nil}]
     end
 
     test "creates a valid create op" do
@@ -66,7 +66,7 @@ defmodule DidServer.LogTest do
       created_op_data = CryptoUtils.Did.to_data(created_op)
       assert %{"handle" => "at://bob.bsky.social"} = created_op_data
 
-      assert %{"type" => "create"} = DidServer.Log.validate_operation_log(created_op.did)
+      assert %{"type" => "create"} = DidServer.Log.validate_operation_log!(created_op.did)
     end
 
     test "updates handle" do
@@ -103,7 +103,7 @@ defmodule DidServer.LogTest do
       assert %{"type" => "plc_operation", "alsoKnownAs" => ["at://alice.bsky.social"]} =
                updated_op_data
 
-      assert %{"type" => "plc_operation"} = DidServer.Log.validate_operation_log(created_op.did)
+      assert %{"type" => "plc_operation"} = DidServer.Log.validate_operation_log!(created_op.did)
     end
 
     test "does not allow operations from the signingKey" do
@@ -164,7 +164,7 @@ defmodule DidServer.LogTest do
                DidServer.Log.update_operation(created_op, tombstone_params)
 
       assert Operation.tombstone?(tombstone)
-      assert DidServer.Log.validate_operation_log(created_op.did) == nil
+      assert DidServer.Log.validate_operation_log!(created_op.did) == nil
     end
 
     test "does not allow a tombstone in the middle of the log" do

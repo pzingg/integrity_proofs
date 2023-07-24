@@ -238,7 +238,7 @@ defmodule DidServerWeb.PlcControllerTest do
 
       conn = post(conn, ~p"/plc/#{did}", params)
       assert "" == json_response(conn, 200)
-      assert DidServer.Log.list_operations(did) |> Enum.count() == 2
+      assert DidServer.Log.list_operations(did, false) |> Enum.count() == 2
 
       attacker_keypair = CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
       conn = get(conn, ~p"/plc/#{did}/log/last")
@@ -253,7 +253,7 @@ defmodule DidServerWeb.PlcControllerTest do
 
       conn = post(conn, ~p"/plc/#{did}", params)
       assert "" == json_response(conn, 200)
-      assert DidServer.Log.list_operations(did) |> Enum.count() == 3
+      assert DidServer.Log.list_operations(did, false) |> Enum.count() == 3
 
       new_keypair = CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
       new_rotation_keys = [elem(@rotation_key_1, 0), elem(new_keypair, 0)]
