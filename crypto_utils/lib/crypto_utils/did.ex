@@ -49,7 +49,7 @@ defmodule CryptoUtils.Did do
 
     @impl true
     def message(%{op: op, allowed_keys: keys}) do
-      "invalid signature, operation: #{CryptoUtils.display_op(op)}, keys #{inspect(Enum.map(keys, &CryptoUtils.display_did/1))}"
+      "invalid signature, operation: #{CryptoUtils.display_op(op)}, keys #{CryptoUtils.display_did(keys)}"
     end
   end
 
@@ -1084,13 +1084,16 @@ defmodule CryptoUtils.Did do
         {proposed, []}
 
       _ ->
-        assure_valid_op_sig_when_nullified(rotation_keys, nullified, proposed)
+        _ = assure_valid_op_sig_when_nullified(rotation_keys, nullified, proposed)
+
+        nullified_cids = Enum.map(nullified, fn %{cid: cid} -> cid end)
+        {proposed, nullified_cids}
     end
   end
 
   defp assure_valid_op_sig_when_nullified(
          rotation_keys,
-         [%{operation: op_json, inserted_at: inserted_at} | _] = nullified,
+         [%{operation: op_json, inserted_at: inserted_at} | _] = _nullified,
          proposed
        ) do
     first_nullified = Jason.decode!(op_json)
@@ -1105,7 +1108,7 @@ defmodule CryptoUtils.Did do
       raise LateRecoveryError, time_lapsed
     end
 
-    {proposed, Enum.map(nullified, fn %{cid: cid} -> cid end)}
+    proposed
   end
 
   # tombstones must have "prev"

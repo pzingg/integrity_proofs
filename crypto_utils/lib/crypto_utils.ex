@@ -128,9 +128,13 @@ defmodule CryptoUtils do
   """
   def display_did(nil), do: "null"
 
-  def display_did(did) do
+  def display_did(did) when is_binary(did) do
     [_, _, specific_id] = String.split(did, ":", parts: 3)
     String.slice(specific_id, 0, 8)
+  end
+
+  def display_did(did) when is_list(did) do
+    Enum.map(did, &display_did/1) |> Enum.join(", ")
   end
 
   @doc """

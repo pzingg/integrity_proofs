@@ -222,7 +222,7 @@ defmodule DidServer.Log do
       {:error, %Ecto.Changeset{}}
 
   """
-  def update_operation(%{did: did, cid: cid, operation: op_json} = op, params) do
+  def update_operation(%{did: did, cid: cid, operation: op_json}, params) do
     case CryptoUtils.Did.update_operation(
            %{did: did, cid: cid, operation: Jason.decode!(op_json)},
            params
@@ -291,6 +291,7 @@ defmodule DidServer.Log do
       cid: CryptoUtils.Did.cid_for_op(proposed),
       did: did,
       operation: Jason.encode!(proposed),
+      nullified: false,
       prev: prev,
       nullified_cids: nullified_cids,
       password: password,
@@ -323,9 +324,10 @@ defmodule DidServer.Log do
       |> Ecto.Multi.insert(:operation, op_changeset, returning: true)
 
     nullified_cids = Ecto.Changeset.get_change(op_changeset, :nullified_cids, [])
+    nullify? = !Enum.empty?(nullified_cids)
 
     multi =
-      if !Enum.empty?(nullified_cids) do
+      if nullify? do
         Ecto.Multi.update_all(
           multi,
           :nullified,
