@@ -163,7 +163,7 @@ defmodule DidServerWeb.PlcController do
         |> put_resp_content_type("application/did+ld+json")
         |> render(:did_document, document: doc)
 
-      _ ->
+      other ->
         render_error(conn, 404, "DID not registered: #{did}")
     end
   end

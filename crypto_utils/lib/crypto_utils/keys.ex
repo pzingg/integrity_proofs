@@ -67,21 +67,13 @@ defmodule CryptoUtils.Keys do
   formats.
   """
   def generate_keypair(curve, public_key_format) do
-    type =
-      case curve do
-        :ed25519 -> :eddsa
-        :p256 -> :ecdh
-        :secp256k1 -> :ecdh
-        _ -> raise CryptoUtils.UnsupportedNamedCurveError, curve
-      end
-
     private_key_format =
       case public_key_format do
         :did_key -> :crypto_algo_key
         _ -> public_key_format
       end
 
-    {pub, priv} = :crypto.generate_key(type, curve)
+    {pub, priv} = :crypto.generate_key(Curves.erlang_algo(curve), Curves.erlang_ec_curve(curve))
     public_key = make_public_key(pub, curve, public_key_format)
     private_key = make_private_key({pub, priv}, curve, private_key_format)
     {public_key, private_key, public_key_format, private_key_format}
@@ -241,7 +233,7 @@ defmodule CryptoUtils.Keys do
     # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
-    {:ecdsa, [priv, :p256]}
+    {:ecdsa, [priv, :secp256r1]}
   end
 
   def make_private_key({pub, priv}, :secp256k1, :crypto_algo_key)

@@ -145,6 +145,12 @@ defmodule DidServer.Log do
 
   ## Operation log
 
+  def list_registered_dids() do
+    from(op in Operation, distinct: :did)
+    |> Repo.all()
+    |> Enum.map(fn %{did: did} -> did end)
+  end
+
   @doc """
   Returns the list of did:plc operations for a given did.
 

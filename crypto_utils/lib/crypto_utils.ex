@@ -227,6 +227,7 @@ defmodule CryptoUtils do
       when is_binary(path) do
     case String.split(path, ":") do
       [did_method | [did_value | _]] ->
+        did_method = String.to_atom(did_method)
         did_method in CryptoUtils.Did.valid_did_methods() && did_value != ""
 
       _ ->

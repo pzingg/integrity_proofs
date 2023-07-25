@@ -116,7 +116,7 @@ defmodule CryptoUtils.Did do
     end
   end
 
-  @valid_did_methods ["web", "key", "plc", "example"]
+  @valid_did_methods [:web, :key, :plc, :example]
   @known_signature_key_formats ["Multikey", "JsonWebKey2020", "Ed25519VerificationKey2020"]
   @known_encryption_key_formats ["Multikey", "JsonWebKey2020", "X25519KeyAgreementKey2020"]
 
@@ -176,15 +176,17 @@ defmodule CryptoUtils.Did do
     end
 
     [_, method, method_specific_id] = parts
-    expected_did_method = Keyword.get(options, :expected_did_method)
+    method = String.to_atom(method)
 
-    if !is_nil(expected_did_method) && expected_did_method != method do
+    expected_did_methods = Keyword.get(options, :expected_did_methods, []) |> List.wrap()
+
+    if expected_did_methods != [] && method not in expected_did_methods do
       raise UnexpectedDidMethodError, method
     end
 
     parsed = %{
       did_string: identifier,
-      method: String.to_atom(method),
+      method: method,
       method_specific_id: method_specific_id
     }
 
@@ -192,11 +194,14 @@ defmodule CryptoUtils.Did do
       parsed
     else
       case method do
-        "key" ->
+        :key ->
           validate_did!(:key, parsed, String.split(method_specific_id, ":"), options)
 
-        "web" ->
+        :web ->
           validate_did!(:web, parsed, String.split(method_specific_id, ":"), options)
+
+        :plc ->
+          validate_did!(:plc, parsed, [method_specific_id], options)
 
         _ ->
           raise InvalidDidError, identifier
@@ -280,6 +285,19 @@ defmodule CryptoUtils.Did do
     end
   end
 
+  defp validate_did!(
+         :plc,
+         %{did_string: identifier, method_specific_id: base32_cid} = parsed,
+         _,
+         _options
+       ) do
+    if byte_size(base32_cid) != 24 || Regex.match?(~r/[^a-z2-7]/, base32_cid) do
+      raise InvalidDidError, identifier
+    end
+
+    parsed
+  end
+
   defp validate_did!(_, %{did_string: identifier}, _, _) do
     raise InvalidDidError, identifier
   end
@@ -329,7 +347,7 @@ defmodule CryptoUtils.Did do
       if Keyword.get(options, :enable_encryption_key_derivation, false) do
         %{
           context: _context,
-          verification_method: %{"id" => enc_vm_id} = encryption_verification_method
+          verification_method: %{"id" => _enc_vm_id} = encryption_verification_method
         } = build_encryption_method!(parsed_did, options)
 
         [signature_verification_method, encryption_verification_method]
@@ -622,7 +640,7 @@ defmodule CryptoUtils.Did do
   end
 
   def parse_did_key!(did) do
-    %{multibase_value: multibase_value} = parse_did!(did, expected_did_method: "key")
+    %{multibase_value: multibase_value} = parse_did!(did, expected_did_methods: :key)
 
     prefixed_bytes = Multibase.decode!(multibase_value)
     <<prefix::binary-size(2), key_bytes::binary>> = prefixed_bytes
@@ -643,7 +661,7 @@ defmodule CryptoUtils.Did do
               curve: :p256,
               jwt_alg: @p256_jwt_alg,
               key_bytes: prefixed_bytes,
-              algo_key: {:ecdsa, [uncompressed, :p256]}
+              algo_key: {:ecdsa, [uncompressed, :secp256r1]}
             }
 
           _ ->

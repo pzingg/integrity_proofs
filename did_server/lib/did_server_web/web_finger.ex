@@ -151,11 +151,11 @@ defmodule DidServerWeb.WebFinger do
     meta_url = "https://#{domain}/.well-known/host-meta"
 
     with {:ok, body, _headers} <-
-           fetch(meta_url, method: :get, headers: [{"accept", "application/json"}]) do
+           CryptoUtils.Resolver.fetch(meta_url, headers: [{"accept", "application/json"}]) do
       get_template_from_xml(body)
     else
-      error ->
-        Logger.warn("Can't find LRDD template in #{inspect(meta_url)}: #{inspect(error)}")
+      {:error, message, _status_code} ->
+        Logger.warn("Can't find LRDD template in #{inspect(meta_url)}: #{message}")
         {:error, :lrdd_not_found}
     end
   end
@@ -196,8 +196,7 @@ defmodule DidServerWeb.WebFinger do
     address = get_address_from_domain(domain, encoded_account)
 
     with {:ok, body, headers} <-
-           fetch(address,
-             method: :get,
+      CryptoUtils.Resolver.fetch(address,
              headers: [
                {"accept", @accept_header_value_xml},
                {"accept", @accept_header_value_json}
@@ -220,7 +219,7 @@ defmodule DidServerWeb.WebFinger do
           {:error, {:content_type, nil}}
       end
     else
-      {:error, reason} ->
+      {:error, reason, _status_code} ->
         Logger.error("Couldn't finger #{account}: #{reason}")
         {:error, reason}
     end
@@ -264,26 +263,4 @@ defmodule DidServerWeb.WebFinger do
     end
   end
 
-  def fetch(url, opts) do
-    httpc_http_opts = Keyword.get(opts, :http_opts, [])
-    httpc_opts = Keyword.get(opts, :opts, [])
-    headers = Keyword.get(opts, :headers, [])
-    content_type = Keyword.get(opts, :content_type, "plain/text")
-    body = Keyword.get(opts, :body, "OK")
-
-    opts
-    |> Keyword.get(:method, :get)
-    |> case do
-      :post ->
-        :httpc.request(:post, {url, headers, content_type, body}, httpc_http_opts, httpc_opts)
-
-      :get ->
-        :httpc.request(:get, {url, headers}, httpc_http_opts, httpc_opts)
-    end
-    |> case do
-      {:ok, {{_, 200, _}, _headers, body}} -> {:ok, to_string(body)}
-      {:ok, {{_, _, _}, _headers, body}} -> {:error, to_string(body)}
-      {:error, error} -> {:error, error}
-    end
-  end
 end

@@ -34,20 +34,7 @@ defmodule Integrity.DidResolverTest do
       TestServer.url(path)
       |> String.to_charlist()
 
-    httpc_http_opts = Keyword.get(opts, :http_opts, [])
-    httpc_opts = Keyword.get(opts, :opts, [])
-
-    opts
-    |> Keyword.get(:method, :get)
-    |> case do
-      :post -> :httpc.request(:post, {url, [], 'plain/text', 'OK'}, httpc_http_opts, httpc_opts)
-      :get -> :httpc.request(:get, {url, []}, httpc_http_opts, httpc_opts)
-    end
-    |> case do
-      {:ok, {{_, 200, _}, _headers, body}} -> {:ok, to_string(body)}
-      {:ok, {{_, _, _}, _headers, body}} -> {:error, to_string(body)}
-      {:error, error} -> {:error, error}
-    end
+    CryptoUtils.Resolver.fetch(url, opts)
   end
 
   test "resolves a did:web identifier" do
