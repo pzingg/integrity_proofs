@@ -11,9 +11,11 @@
 # and so on) as they will fail if something goes wrong.
 
 if Mix.env() == :dev do
-  {signing_key, _} = CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
-  {recovery_key, _} = recovery_keypair = CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
-  signer = CryptoUtils.Keys.to_signer(recovery_keypair)
+  signing_key =
+    CryptoUtils.Keys.Keypair.generate(:secp256k1, :did_key) |> CryptoUtils.Keys.Keypair.did()
+
+  recovery_keypair = CryptoUtils.Keys.Keypair.generate(:secp256k1, :did_key)
+  signer = CryptoUtils.Keys.Keypair.to_json(recovery_keypair)
 
   {:ok, bob_example_com} =
     DidServer.Accounts.register_user(%{

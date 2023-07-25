@@ -3,16 +3,18 @@ defmodule DidServerWeb.PlcControllerTest do
 
   import DidServer.LogFixtures
 
-  @signing_keypair CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
-  @signing_key elem(@signing_keypair, 0)
-  @rotation_key_1 CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
-  @rotation_key_2 CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
+  alias CryptoUtils.Keys.Keypair
+
+  @signing_keypair Keypair.generate(:secp256k1, :did_key)
+  @signing_key Keypair.did(@signing_keypair)
+  @rotation_key_1 Keypair.generate(:secp256k1, :did_key)
+  @rotation_key_2 Keypair.generate(:secp256k1, :did_key)
 
   @create_v1_params %{
     "type" => "create",
     "handle" => "at://bob.bsky.social",
     "signingKey" => @signing_key,
-    "recoveryKey" => elem(@rotation_key_1, 0),
+    "recoveryKey" => Keypair.did(@rotation_key_1),
     "service" => "https://pds.example.com",
     "prev" => nil
   }
@@ -21,7 +23,7 @@ defmodule DidServerWeb.PlcControllerTest do
     "type" => "plc_operation",
     "handle" => "at://bob.bsky.social",
     "signingKey" => @signing_key,
-    "rotationKeys" => [elem(@rotation_key_1, 0), elem(@rotation_key_2, 0)],
+    "rotationKeys" => [Keypair.did(@rotation_key_1), Keypair.did(@rotation_key_2)],
     "service" => "https://pds.example.com",
     "prev" => nil
   }
@@ -104,7 +106,7 @@ defmodule DidServerWeb.PlcControllerTest do
 
     test "still allows create v1s", %{conn: conn} do
       {:ok, did} = CryptoUtils.Did.did_for_create_params(@create_v1_params)
-      params = Map.put(@create_v1_params, "signer", CryptoUtils.Keys.to_signer(@rotation_key_1))
+      params = Map.put(@create_v1_params, "signer", Keypair.to_json(@rotation_key_1))
       conn = post(conn, ~p"/plc/#{did}", params)
       assert "" = json_response(conn, 200)
       assert verify_doc(conn, did, rotation_keys: [Map.get(params, "recoveryKey")])
@@ -126,7 +128,7 @@ defmodule DidServerWeb.PlcControllerTest do
       params = %{
         "type" => "plc_tombstone",
         "prev" => prev,
-        "signer" => CryptoUtils.Keys.to_signer(@rotation_key_1)
+        "signer" => Keypair.to_json(@rotation_key_1)
       }
 
       conn = post(conn, ~p"/plc/#{did}", params)
@@ -147,7 +149,7 @@ defmodule DidServerWeb.PlcControllerTest do
         "type" => "plc_operation",
         "signingKey" => ed25519_key,
         "prev" => prev,
-        "signer" => CryptoUtils.Keys.to_signer(@rotation_key_1)
+        "signer" => Keypair.to_json(@rotation_key_1)
       }
 
       conn = post(conn, ~p"/plc/#{did}", params)
@@ -157,7 +159,7 @@ defmodule DidServerWeb.PlcControllerTest do
     test "can perform some updates", %{conn: conn} do
       {conn, did} = post_genesis_op(conn)
 
-      {signing_key, _} = CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
+      signing_key = Keypair.generate(:secp256k1, :did_key) |> Keypair.did()
       conn = get(conn, ~p"/plc/#{did}/log/last")
       %{"cid" => prev} = json_response(conn, 200)
 
@@ -165,14 +167,14 @@ defmodule DidServerWeb.PlcControllerTest do
         "type" => "plc_operation",
         "signingKey" => signing_key,
         "prev" => prev,
-        "signer" => CryptoUtils.Keys.to_signer(@rotation_key_1)
+        "signer" => Keypair.to_json(@rotation_key_1)
       }
 
       conn = post(conn, ~p"/plc/#{did}", params)
       assert "" == json_response(conn, 200)
 
-      new_keypair = CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
-      new_rotation_keys = [elem(new_keypair, 0), elem(@rotation_key_2, 0)]
+      new_keypair = Keypair.generate(:secp256k1, :did_key)
+      new_rotation_keys = [Keypair.did(new_keypair), Keypair.did(@rotation_key_2)]
 
       conn = get(conn, ~p"/plc/#{did}/log/last")
       %{"cid" => prev} = json_response(conn, 200)
@@ -181,7 +183,7 @@ defmodule DidServerWeb.PlcControllerTest do
         "type" => "plc_operation",
         "rotationKeys" => new_rotation_keys,
         "prev" => prev,
-        "signer" => CryptoUtils.Keys.to_signer(@rotation_key_1)
+        "signer" => Keypair.to_json(@rotation_key_1)
       }
 
       conn = post(conn, ~p"/plc/#{did}", params)
@@ -194,7 +196,7 @@ defmodule DidServerWeb.PlcControllerTest do
         "type " => "plc_operation",
         "alsoKnownAs" => ["at://alice.bsky.social"],
         "prev" => prev,
-        "signer" => CryptoUtils.Keys.to_signer(new_keypair)
+        "signer" => Keypair.to_json(new_keypair)
       }
 
       conn = post(conn, ~p"/plc/#{did}", params)
@@ -207,15 +209,15 @@ defmodule DidServerWeb.PlcControllerTest do
     test "rejects on bad updates", %{conn: conn} do
       {conn, did} = post_genesis_op(conn)
 
-      signing_keypair = CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
+      signing_keypair = Keypair.generate(:secp256k1, :did_key)
       conn = get(conn, ~p"/plc/#{did}/log/last")
       %{"cid" => prev} = json_response(conn, 200)
 
       params = %{
         "type" => "plc_operation",
         "prev" => prev,
-        "signingKey" => elem(signing_keypair, 0),
-        "signer" => CryptoUtils.Keys.to_signer(signing_keypair)
+        "signingKey" => Keypair.did(signing_keypair),
+        "signer" => Keypair.to_json(signing_keypair)
       }
 
       conn = post(conn, ~p"/plc/#{did}", params)
@@ -233,37 +235,37 @@ defmodule DidServerWeb.PlcControllerTest do
         "type " => "plc_operation",
         "alsoKnownAs" => ["at://alice.bsky.social"],
         "prev" => prev,
-        "signer" => CryptoUtils.Keys.to_signer(@rotation_key_1)
+        "signer" => Keypair.to_json(@rotation_key_1)
       }
 
       conn = post(conn, ~p"/plc/#{did}", params)
       assert "" == json_response(conn, 200)
       assert DidServer.Log.list_operations(did, false) |> Enum.count() == 2
 
-      attacker_keypair = CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
+      attacker_keypair = Keypair.generate(:secp256k1, :did_key)
       conn = get(conn, ~p"/plc/#{did}/log/last")
       %{"cid" => prev} = json_response(conn, 200)
 
       params = %{
         "type" => "plc_operation",
-        "rotationKeys" => [elem(attacker_keypair, 0)],
+        "rotationKeys" => [Keypair.did(attacker_keypair)],
         "prev" => prev,
-        "signer" => CryptoUtils.Keys.to_signer(@rotation_key_2)
+        "signer" => Keypair.to_json(@rotation_key_2)
       }
 
       conn = post(conn, ~p"/plc/#{did}", params)
       assert "" == json_response(conn, 200)
       assert DidServer.Log.list_operations(did, false) |> Enum.count() == 3
 
-      new_keypair = CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
-      new_rotation_keys = [elem(@rotation_key_1, 0), elem(new_keypair, 0)]
+      new_keypair = Keypair.generate(:secp256k1, :did_key)
+      new_rotation_keys = [Keypair.did(@rotation_key_1), Keypair.did(new_keypair)]
 
       # Use same prev as before
       params = %{
         "type" => "plc_operation",
         "rotationKeys" => new_rotation_keys,
         "prev" => prev,
-        "signer" => CryptoUtils.Keys.to_signer(@rotation_key_1)
+        "signer" => Keypair.to_json(@rotation_key_1)
       }
 
       conn = post(conn, ~p"/plc/#{did}", params)
@@ -276,7 +278,7 @@ defmodule DidServerWeb.PlcControllerTest do
   def post_genesis_op(conn) do
     {:ok, did} = CryptoUtils.Did.did_for_create_params(@create_params)
 
-    params = Map.put(@create_params, "signer", CryptoUtils.Keys.to_signer(@rotation_key_1))
+    params = Map.put(@create_params, "signer", Keypair.to_json(@rotation_key_1))
     {post(conn, ~p"/plc/#{did}", params), did}
   end
 
@@ -285,7 +287,10 @@ defmodule DidServerWeb.PlcControllerTest do
     doc = json_response(conn, 200)
 
     expected_rotation_keys =
-      Keyword.get(opts, :rotation_keys, [elem(@rotation_key_1, 0), elem(@rotation_key_2, 0)])
+      Keyword.get(opts, :rotation_keys, [
+        Keypair.did(@rotation_key_1),
+        Keypair.did(@rotation_key_2)
+      ])
 
     rotation_keys = Map.get(doc, "rotationKeys")
     assert rotation_keys == expected_rotation_keys

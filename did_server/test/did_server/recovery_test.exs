@@ -1,16 +1,17 @@
-defmodule DidSever.RecoveryTest do
+defmodule DidServer.RecoveryTest do
   use DidServer.DataCase
 
   import Ecto.Changeset
 
+  alias CryptoUtils.Keys.Keypair
   alias CryptoUtils.Did.{InvalidSignatureError, LateRecoveryError}
   alias DidServer.{Log, Repo}
   alias DidServer.Log.Operation
 
-  # @signing_key CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
-  @rotation_key_1 CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
-  @rotation_key_2 CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
-  @rotation_key_3 CryptoUtils.Keys.generate_keypair(:did_key, :secp256k1)
+  # @signing_key Keypair.generate(:secp256k1, :did_key)
+  @rotation_key_1 Keypair.generate(:secp256k1, :did_key)
+  @rotation_key_2 Keypair.generate(:secp256k1, :did_key)
+  @rotation_key_3 Keypair.generate(:secp256k1, :did_key)
   @handle "alice.example.com"
   @service "https://example.com"
 
@@ -276,14 +277,14 @@ defmodule DidSever.RecoveryTest do
     type = Keyword.get(opts, :type, "plc_operation")
     did = Keyword.get(opts, :did)
     prev = Keyword.get(opts, :prev)
-    signer = CryptoUtils.Keys.to_signer(signing_keypair)
+    signer = Keypair.to_json(signing_keypair)
 
     params = %{
       type: type,
       did: did,
       prev: prev,
-      signingKey: elem(signing_keypair, 0),
-      rotationKeys: Enum.map(keys, &elem(&1, 0)),
+      signingKey: Keypair.did(signing_keypair),
+      rotationKeys: Enum.map(keys, &Keypair.did(&1)),
       handle: @handle,
       service: @service,
       signer: signer,
@@ -298,7 +299,7 @@ defmodule DidSever.RecoveryTest do
 
     {did, signed_op, password, keys_pem} =
       if is_nil(did) || is_nil(prev) do
-        assert {:ok, pem} = CryptoUtils.Keys.encode_pem_public_key(signing_keypair)
+        assert {:ok, pem} = Keypair.encode_pem_private_key(signing_keypair)
         assert {:ok, {did, signed_op, password}} = CryptoUtils.Did.create_operation(params)
         {did, signed_op, password, pem}
       else

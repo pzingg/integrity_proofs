@@ -34,6 +34,15 @@ defmodule CryptoUtils.Curves do
   """
   def curve_from_oid(curve_oid), do: Map.get(@known_curves, curve_oid)
 
+  @doc """
+  Returns the Erlang `:namedCurve` record containing the curve's OID.
+  """
+  def curve_params(curve)
+
+  def curve_params(:ed25519), do: {:namedCurve, @id_ed25519}
+  def curve_params(:p256), do: {:namedCurve, @id_p256}
+  def curve_params(:secp256k1), do: {:namedCurve, @id_secp256k1}
+
   def compress_public_key_point(<<mode::size(8), x_coord::binary-size(32), y_coord::binary>>) do
     test =
       case {mode, byte_size(y_coord)} do
