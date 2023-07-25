@@ -325,37 +325,84 @@ defmodule CryptoUtils.Did do
       verification_method: %{"id" => sig_vm_id} = signature_verification_method
     } = build_signature_method!(parsed_did, options)
 
-    document = %{
-      "@context" => @base_context ++ [sig_vm_context],
-      "id" => identifier,
-      "authentication" => [sig_vm_id],
-      "assertionMethod" => [sig_vm_id],
-      "capabilityInvocation" => [sig_vm_id],
-      "capabilityDelegation" => [sig_vm_id]
-    }
-
-    document =
+    vms =
       if Keyword.get(options, :enable_encryption_key_derivation, false) do
         %{
           context: _context,
           verification_method: %{"id" => enc_vm_id} = encryption_verification_method
         } = build_encryption_method!(parsed_did, options)
 
-        document
-        |> Map.put("verificationMethod", [
-          signature_verification_method,
-          encryption_verification_method
-        ])
-        |> Map.put("keyAgreement", [enc_vm_id])
+        [signature_verification_method, encryption_verification_method]
       else
-        Map.put(document, "verificationMethod", [signature_verification_method])
+        [signature_verification_method]
       end
 
-    Encryption
+    {vms, context} =
+      case Keyword.get(options, :additional_vms) do
+        more when is_map(more) and map_size(more) != 0 ->
+          Enum.reduce(
+            more,
+            {vms, @base_context ++ [sig_vm_context]},
+            fn
+              {method_id,
+               %{
+                 type: type,
+                 value: value
+               } = vm_spec},
+              {acc_vms, acc_context} ->
+                value_key = Map.get(vm_spec, :value_type, "publicKeyMultibase")
+                vm_context = Map.get(vm_spec, :context)
 
-    case Keyword.get(options, :also_known_as) do
-      nil -> document
-      also_known_as -> Map.put(document, "alsoKnownAs", also_known_as)
+                vm = %{
+                  "id" => "#" <> method_id,
+                  "controller" => identifier,
+                  "type" => type,
+                  value_key => value
+                }
+
+                if is_nil(vm_context) do
+                  {acc_vms ++ [vm], acc_context}
+                else
+                  {acc_vms ++ [vm], acc_context ++ List.wrap(vm_context)}
+                end
+            end
+          )
+
+        nil ->
+          {vms, @base_context ++ [sig_vm_context]}
+      end
+
+    document = %{
+      "@context" => context,
+      "id" => identifier
+    }
+
+    document =
+      case Keyword.get(options, :also_known_as) do
+        nil -> document
+        also_known_as -> Map.put(document, "alsoKnownAs", also_known_as)
+      end
+
+    document =
+      Map.merge(document, %{
+        "verificationMethod" => vms,
+        "authentication" => [sig_vm_id],
+        "assertionMethod" => [sig_vm_id],
+        "capabilityInvocation" => [sig_vm_id],
+        "capabilityDelegation" => [sig_vm_id]
+      })
+
+    case Keyword.get(options, :services) do
+      services when is_map(services) and map_size(services) != 0 ->
+        services =
+          Enum.map(services, fn {service_id, %{type: type, endpoint: endpoint}} ->
+            %{"id" => "#" <> service_id, "type" => type, "serviceEndpoint" => endpoint}
+          end)
+
+        Map.put(document, "service", services)
+
+      _ ->
+        document
     end
   end
 

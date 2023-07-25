@@ -36,6 +36,8 @@ defmodule Integrity do
           | {:public_key_format, String.t()}
           | {:signature_method_fragment, String.t()}
           | {:encryption_method_fragment, String.t()}
+          | {:additional_vms, map()}
+          | {:services, map()}
           | {:proof, map()}
           | {:cached_controller_document, map()}
           | {:enable_encryption_key_derivation, boolean()}
