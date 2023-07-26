@@ -32,21 +32,21 @@ defmodule DidServer.Accounts.User do
   @doc """
   `prefix` could be "", or "at://"
   """
-  def domain_handle(%__MODULE__{username: username, domain: domain}, prefix \\ "") do
+  def domain_handle(%{username: username, domain: domain}, prefix \\ "") do
     "#{prefix}#{username}.#{domain}"
   end
 
   @doc """
-  `prefix` could be "user/", or "@"
+  `prefix` could be "users/", or "@"
   """
-  def ap_id(%__MODULE__{username: username, domain: domain}, prefix \\ "user/", scheme \\ "https") do
+  def ap_id(%{username: username, domain: domain}, prefix \\ "users/", scheme \\ "https") do
     "#{scheme}://#{domain}/#{prefix}#{username}"
   end
 
   @doc """
   `prefix` could be "", "@", "acct:", or "acct:@"
   """
-  def ap_acct(%__MODULE__{username: username, domain: domain}, prefix \\ "") do
+  def ap_acct(%{username: username, domain: domain}, prefix \\ "") do
     "#{prefix}#{username}@#{domain}"
   end
 

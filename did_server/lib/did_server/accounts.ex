@@ -146,7 +146,7 @@ defmodule DidServer.Accounts do
 
   def parse_ap_id(%URI{scheme: nil, path: path}) when is_binary(path) do
     case String.split(path, "/") do
-      [domain, "user", username] -> ensure_valid_username_and_domain(username, domain)
+      [domain, "users", username] -> ensure_valid_username_and_domain(username, domain)
       [domain, "@" <> username] -> ensure_valid_username_and_domain(username, domain)
       _ -> nil
     end
@@ -156,7 +156,7 @@ defmodule DidServer.Accounts do
       when is_binary(domain) and is_binary(path) do
     if scheme in ["http", "https"] do
       case String.split(path, "/") do
-        ["", "user", username] -> ensure_valid_username_and_domain(username, domain)
+        ["", "users", username] -> ensure_valid_username_and_domain(username, domain)
         ["", "@" <> username] -> ensure_valid_username_and_domain(username, domain)
         _ -> nil
       end

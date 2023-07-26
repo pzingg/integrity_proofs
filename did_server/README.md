@@ -60,7 +60,7 @@ For a DID like `did:web:localhost%3A4000`:
 For a DID with path elements like `did:web:localhost%3A4000:user:alice` 
 (not supported by Bluesky):
 
-  * http://localhost:4000/user/alice/did.json
+  * http://localhost:4000/users/alice/did.json
 
 ## did:plc
 

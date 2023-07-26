@@ -44,7 +44,7 @@ defmodule DidServerWeb.ResolverTest do
     test "resolves a did:web", %{conn: conn} do
       opts = resolver_opts() |> Keyword.put(:test_conn, conn)
       assert {:ok, doc} = CryptoUtils.Resolver.resolve_did("did:web:example.com", opts)
-      assert "@admin@example.com" in doc["alsoKnownAs"]
+      assert "https://example.com/users/admin" in doc["alsoKnownAs"]
     end
 
     test "resolves a did:plc", %{conn: conn} do

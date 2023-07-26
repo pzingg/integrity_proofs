@@ -2,6 +2,7 @@ defmodule DidServerWeb.WebController do
   use DidServerWeb, :controller
 
   alias CryptoUtils.Keys.Keypair
+  alias DidServer.Accounts.User
   alias DidServerWeb.ErrorJSON
 
   # TODO get domain from config
@@ -40,7 +41,7 @@ defmodule DidServerWeb.WebController do
     render(conn, :info, version: DidServer.Application.version())
   end
 
-  defp did_document_for_user(%{username: username, domain: domain} = user) do
+  defp did_document_for_user(user) do
     identifier = lookup_did_key(user)
 
     %{public_key_multibase: multibase_value} =
@@ -49,14 +50,14 @@ defmodule DidServerWeb.WebController do
     CryptoUtils.Did.format_did_document!(identifier,
       multibase_value: multibase_value,
       signature_method_fragment: "keys-1",
-      also_known_as: ["@#{username}@#{domain}", "#{username}.#{domain}"]
+      also_known_as: [User.ap_id(user), User.domain_handle(user)]
     )
   end
 
   defp parse_user(path) do
     name =
       case path do
-        ["user", username, "did.json"] -> username
+        ["users", username, "did.json"] -> username
         [username, "did.json"] -> username
         _ -> nil
       end

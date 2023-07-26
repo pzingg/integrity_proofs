@@ -1,4 +1,4 @@
-defmodule DidServerWeb.AccountController do
+defmodule DidServerWeb.AccountsController do
   use DidServerWeb, :controller
 
   alias DidServer.Accounts
