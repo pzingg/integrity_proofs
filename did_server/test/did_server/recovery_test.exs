@@ -318,7 +318,7 @@ defmodule DidServer.RecoveryTest do
   end
 
   defp changeset(did, op, prev, inserted_at, password, keys_pem) do
-    Operation.changeset_raw(%Operation{}, %{
+    Operation.raw_changeset(%Operation{}, %{
       did: did,
       cid: CryptoUtils.Did.cid_for_op(op),
       operation: Jason.encode!(op),

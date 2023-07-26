@@ -75,7 +75,12 @@ defmodule DidServer.Log.Operation do
     |> set_nullified()
   end
 
-  def changeset_raw(%__MODULE__{} = op, attrs) do
+  def insertion_order_changeset(%__MODULE__{} = op, attrs) do
+    op
+    |> cast(attrs, [:inserted_at])
+  end
+
+  def raw_changeset(%__MODULE__{} = op, attrs) do
     op
     |> cast(attrs, [
       :did,

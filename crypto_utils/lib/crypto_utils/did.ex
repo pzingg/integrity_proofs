@@ -913,17 +913,21 @@ defmodule CryptoUtils.Did do
   end
 
   def did_for_create_op(%{"prev" => nil} = op) do
+    {:ok, did_for_op(op)}
+  end
+
+  def did_for_create_op(_) do
+    {:error, "not a create operation"}
+  end
+
+  def did_for_op(%{"type" => _type} = op) do
     cbor = Map.delete(op, "sig") |> CBOR.encode()
     hash_of_genesis = :crypto.hash(:sha256, cbor)
 
     truncated_id =
       hash_of_genesis |> Base.encode32(case: :lower, padding: false) |> String.slice(0, 24)
 
-    {:ok, "did:plc:#{truncated_id}"}
-  end
-
-  def did_for_create_op(_) do
-    {:error, "not a create operation"}
+    "did:plc:#{truncated_id}"
   end
 
   # tombstones must have "prev"
@@ -1065,6 +1069,10 @@ defmodule CryptoUtils.Did do
     end
   end
 
+  def validate_operation_log!(_did, []) do
+    raise ImproperOperationError, op: nil, message: "incorrect structure"
+  end
+
   # Signatures
 
   def cbor_encode(%{"type" => "plc_tombstone"} = op) do
@@ -1193,17 +1201,17 @@ defmodule CryptoUtils.Did do
   end
 
   defp validate_creation_op(did, op, prev, rotation_keys) do
-    if !is_nil(prev) do
-      raise ImproperOperationError, op: op, message: "expected null prev on create"
-    end
-
     assure_valid_op(op)
     assure_valid_sig(rotation_keys, op)
 
-    case did_for_create_op(op) do
-      {:ok, ^did} -> :ok
-      {:ok, expected_did} -> raise GenesisHashError, expected_did
-      {:error, reason} -> raise ImproperOperationError, op: op, message: reason
+    expected_did = did_for_op(op)
+
+    if expected_did != did do
+      raise GenesisHashError, expected_did
+    end
+
+    if !is_nil(prev) do
+      raise ImproperOperationError, op: op, message: "expected null prev on create"
     end
 
     op

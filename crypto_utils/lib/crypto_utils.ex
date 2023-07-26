@@ -104,6 +104,10 @@ defmodule CryptoUtils do
   @doc """
   Formats a did:plc operation for debugging purposes.
   """
+  def display_op(nil) do
+    "no op"
+  end
+
   def display_op(%{"type" => type, "prev" => prev}) do
     prev = prev || "nil"
     "type #{type} prev #{prev}"

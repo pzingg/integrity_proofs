@@ -604,8 +604,6 @@ defmodule DidServer.Log do
     end
   end
 
-  defp validate_operation_log!(_did, []), do: nil
-
   defp validate_operation_log!(did, ops) do
     ops =
       Enum.map(ops, fn op ->
