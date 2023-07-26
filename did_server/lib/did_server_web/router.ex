@@ -21,48 +21,64 @@ defmodule DidServerWeb.Router do
     plug(:accepts, ["json"])
   end
 
+  pipeline :dual do
+    plug(:accepts, ["html", "json"])
+  end
+
   scope "/plc", DidServerWeb do
     pipe_through(:api)
 
-    get "/_health", PlcController, :health
+    get("/_health", PlcController, :health)
     # get "/export", PlcController, :index
 
-    get "/:did/data", PlcController, :did_data
-    get "/:did/log", PlcController, :active_log
-    get "/:did/log/audit", PlcController, :audit_log
-    get "/:did/log/last", PlcController, :last_operation
+    get("/:did/data", PlcController, :did_data)
+    get("/:did/log", PlcController, :active_log)
+    get("/:did/log/audit", PlcController, :audit_log)
+    get("/:did/log/last", PlcController, :last_operation)
 
-    get "/:did", PlcController, :show
-    post "/:did", PlcController, :create
+    get("/:did", PlcController, :show)
+    post("/:did", PlcController, :create)
 
-    get "/", PlcController, :info
+    get("/", PlcController, :info)
   end
 
   scope "/.well-known", DidServerWeb do
     pipe_through(:api)
 
-    get "/did.json", WebController, :domain_did
+    get("/did.json", WebController, :domain_did)
   end
 
   scope "/.well-known", DidServerWeb do
     pipe_through(:plain)
 
-    get "/atproto-did", PlcController, :domain_did
+    get("/atproto-did", PlcController, :domain_did)
   end
 
   ## Authentication routes
   # TODO
 
+  scope "/users", DidServerWeb do
+    pipe_through(:dual)
+
+    get("/:handle", AccountsController, :actor)
+  end
+
+  scope "/users", DidServerWeb do
+    pipe_through(:plain)
+
+    get("/:handle/profile", AccountsController, :profile)
+  end
+
   scope "/home", DidServerWeb do
     pipe_through(:browser)
 
-    get "/", PageController, :home
+    get("/", PageController, :home)
   end
 
   # Root wildcard - must be at the end of the search
   scope "/", DidServerWeb do
     pipe_through(:api)
 
-    get "/*path", WebController, :show
+    get("/*path", WebController, :show)
   end
 end

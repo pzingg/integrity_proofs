@@ -5,6 +5,8 @@ defmodule Integrity.ActivityPub do
   See [Fediverse Enhancement Proposal FEP-c390: Identity Proofs](https://codeberg.org/silverpill/feps/src/branch/main/c390/fep-c390.md)
   """
 
+  alias Integrity.{InvalidIntegrityProofError, MissingIntegrityProofError}
+
   @did_proof_context [
     "https://www.w3.org/ns/activitystreams",
     "https://www.w3.org/ns/did/v1",
@@ -15,24 +17,6 @@ defmodule Integrity.ActivityPub do
       "subject" => "fep:subject"
     }
   ]
-
-  defmodule MissingIntegrityProofError do
-    defexception []
-
-    @impl true
-    def message(_) do
-      "no VerifiableIdentityStatement in attachment"
-    end
-  end
-
-  defmodule InvalidIntegrityProofError do
-    defexception [:message]
-
-    @impl true
-    def exception(reason) do
-      %__MODULE__{message: reason}
-    end
-  end
 
   @doc """
   Builds an assertion proof from a `VerifiableIdentityStatement`

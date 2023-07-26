@@ -188,8 +188,8 @@ defmodule CryptoUtils.Keys do
     {:ed_pub, :ed25519, pub}
   end
 
-  def make_public_key(_, curve, _) do
-    raise CryptoUtils.UnsupportedNamedCurveError, curve
+  def make_public_key(_, curve, format) do
+    raise CryptoUtils.UnsupportedNamedCurveError, type: :public, curve: curve, format: format
   end
 
   @doc """
@@ -249,8 +249,8 @@ defmodule CryptoUtils.Keys do
     {:ed_pri, :ed25519, pub, priv}
   end
 
-  def make_private_key(_, curve, _) do
-    raise CryptoUtils.UnsupportedNamedCurveError, curve
+  def make_private_key(_, curve, format) do
+    raise CryptoUtils.UnsupportedNamedCurveError, type: :private, curve: curve, format: format
   end
 
   def encode_pem_public_key({{:ECPoint, _pub}, _curve_params} = public_key) do
@@ -306,11 +306,17 @@ defmodule CryptoUtils.Keys do
   See `make_public_key/3` and `make_private_key/3` for
   details on the formats for the returned keys.
   """
-  def decode_pem_ssh_file(keys_pem, type \\ :openssh_key_v1, fmt \\ :crypto_algo_key)
+  def decode_pem_ssh_file(keys_pem, type \\ :openssh_key_v1, public_key_format \\ :did_key)
       when is_binary(keys_pem) do
     case :ssh_file.decode(keys_pem, type) do
       decoded when is_list(decoded) ->
-        decode_entries(decoded, fmt)
+        private_key_format =
+          case public_key_format do
+            :did_key -> :crypto_algo_key
+            _ -> public_key_format
+          end
+
+        decode_entries(decoded, public_key_format, private_key_format)
 
       {:error, reason} ->
         IO.puts("Could not decode #{type}: #{reason}")
@@ -324,11 +330,18 @@ defmodule CryptoUtils.Keys do
   @doc """
   Parses public keys in files produced by the `openssl` command.
   """
-  def decode_pem_public_key(keys_pem, fmt \\ :crypto_algo_key) when is_binary(keys_pem) do
+  def decode_pem_public_key(keys_pem, public_key_format \\ :did_key)
+      when is_binary(keys_pem) do
     case :public_key.pem_decode(keys_pem) do
       entries when is_list(entries) ->
+        private_key_format =
+          case public_key_format do
+            :did_key -> :crypto_algo_key
+            _ -> public_key_format
+          end
+
         Enum.map(entries, fn entry -> :public_key.pem_entry_decode(entry) end)
-        |> decode_entries(fmt)
+        |> decode_entries(public_key_format, private_key_format)
 
       {:error, reason} ->
         IO.puts("Could not decode: #{reason}")
@@ -339,7 +352,7 @@ defmodule CryptoUtils.Keys do
     end
   end
 
-  defp decode_entries(decoded, fmt) when is_list(decoded) do
+  defp decode_entries(decoded, public_key_format, private_key_format) when is_list(decoded) do
     public_key =
       Enum.map(decoded, fn
         {{:ECPoint, _pub}, {:namedCurve, _}} = key ->
@@ -359,14 +372,14 @@ defmodule CryptoUtils.Keys do
           if is_nil(curve) do
             nil
           else
-            make_public_key(pub, curve, fmt)
+            make_public_key(pub, curve, public_key_format)
           end
 
         _ ->
           nil
       end
 
-    private_key =
+    {public_key, private_key} =
       Enum.map(decoded, fn
         {:ECPrivateKey, 1, _priv, {:namedCurve, _}, _pub, :asn1_NOVALUE} = key ->
           key
@@ -384,13 +397,14 @@ defmodule CryptoUtils.Keys do
           curve = Curves.curve_from_oid(curve_oid)
 
           if is_nil(curve) do
-            nil
+            {public_key, nil}
           else
-            make_private_key({pub, priv}, curve, fmt)
+            public_key = public_key || make_public_key(pub, curve, public_key_format)
+            {public_key, make_private_key({pub, priv}, curve, private_key_format)}
           end
 
         _ ->
-          nil
+          {public_key, nil}
       end
 
     {:ok, public_key, private_key}

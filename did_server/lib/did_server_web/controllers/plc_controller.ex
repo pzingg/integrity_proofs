@@ -128,9 +128,8 @@ defmodule DidServerWeb.PlcController do
   Gets the most recent operation in the log for a DID.
   """
   def last_operation(conn, %{"did" => did}) do
-    case DidServer.Log.get_last_op(did) do
-      %Operation{} = op ->
-        data = Operation.to_json_data(op)
+    case DidServer.Log.get_last_op(did, :data) do
+      data when is_map(data) ->
         render(conn, :operation, operation: data)
 
       _ ->
@@ -142,37 +141,25 @@ defmodule DidServerWeb.PlcController do
   Gets the data for a DID document.
   """
   def did_data(conn, %{"did" => did}) do
-    with {:registered, %Operation{} = op} = {:registered, DidServer.Log.get_last_op(did)},
-         {:valid, data} when is_map(data) <- {:valid, CryptoUtils.Did.to_plc_operation_data(op)} do
-      render(conn, :operation, operation: data)
-    else
-      {:registered, _} ->
-        render_error(conn, 404, "DID not registered: #{did}")
+    case DidServer.Log.get_last_op(did, :did_data) do
+      data when is_map(data) ->
+        render(conn, :operation, operation: data)
 
-      {:valid, _} ->
-        render_error(conn, 404, "DID has been revoked: #{did}")
+      _ ->
+        render_error(conn, 404, "DID not registered: #{did}")
     end
   end
 
   def render_did_document_or_error(conn, did) do
-    case DidServer.Log.get_last_op(did) do
-      %Operation{} = last_op ->
-        doc = format_did_document(did, last_op)
+    case DidServer.Log.format_did_document(did) do
+      nil ->
+        render_error(conn, 404, "DID not registered: #{did}")
 
+      doc ->
         conn
         |> put_resp_content_type("application/did+ld+json")
         |> render(:did_document, document: doc)
-
-      other ->
-        render_error(conn, 404, "DID not registered: #{did}")
     end
-  end
-
-  def format_did_document(did, last_op) do
-    last_op
-    |> CryptoUtils.Did.to_plc_operation_data()
-    |> Map.put("did", did)
-    |> CryptoUtils.Did.format_did_plc_document()
   end
 
   def render_error(conn, status_code, reason) do

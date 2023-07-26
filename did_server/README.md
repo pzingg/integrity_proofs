@@ -1,7 +1,11 @@
 # DidServer
 
 A Phoenix-based web server backed by a PostgreSQL database 
-to demonstrate delivery and updating of DID identities.
+to demonstrate delivery and updating of DID identities. 
+
+Also exposes a basic user account schema for roaming identities
+that might be extended to support both ActivityPub and
+the Bluesky AT Protocol.
 
 Both did:web and did:plc methods are implemented.
 
@@ -49,6 +53,10 @@ More information is here:
   * [did-method-plc repository](https://github.com/bluesky-social/did-method-plc)
   * [How to set your domain as your handle](https://blueskyweb.xyz/blog/4-28-2023-domain-handle-tutorial)
 
+## User model
+
+
+
 ## did:web
 
 (Development) URLs for fetching DID documents are, e.g.
@@ -60,7 +68,7 @@ For a DID like `did:web:localhost%3A4000`:
 For a DID with path elements like `did:web:localhost%3A4000:user:alice` 
 (not supported by Bluesky):
 
-  * http://localhost:4000/user/alice/did.json
+  * http://localhost:4000/users/alice/did.json
 
 ## did:plc
 

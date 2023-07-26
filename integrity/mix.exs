@@ -15,7 +15,7 @@ defmodule Integrity.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :crypto, :public_key, :ssh]
+      extra_applications: [:logger, :crypto, :ssh, :public_key]
     ]
   end
 

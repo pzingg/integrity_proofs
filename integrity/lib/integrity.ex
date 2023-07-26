@@ -88,12 +88,12 @@ defmodule Integrity do
     end
   end
 
-  defmodule InvalidVerificationMethodURLError do
+  defmodule CreatedTimeDeviationError do
     defexception [:message]
 
     @impl true
-    def exception(url) do
-      %__MODULE__{message: "Invalid verification method URL #{url}"}
+    def exception(acceptable) do
+      %__MODULE__{message: "proof created time deviated more than #{acceptable} seconds"}
     end
   end
 
@@ -106,12 +106,12 @@ defmodule Integrity do
     end
   end
 
-  defmodule InvalidVerificationMethodError do
+  defmodule InvalidIntegrityProofError do
     defexception [:message]
 
     @impl true
-    def exception(method) do
-      %__MODULE__{message: "Invalid verification method #{inspect(method)}"}
+    def exception(reason) do
+      %__MODULE__{message: reason}
     end
   end
 
@@ -121,6 +121,24 @@ defmodule Integrity do
     @impl true
     def message(%{method: method, purpose: purpose}) do
       "Invalid proof purpose #{purpose} for verification method #{inspect(method)}"
+    end
+  end
+
+  defmodule InvalidVerificationMethodError do
+    defexception [:message]
+
+    @impl true
+    def exception(method) do
+      %__MODULE__{message: "Invalid verification method #{inspect(method)}"}
+    end
+  end
+
+  defmodule InvalidVerificationMethodURLError do
+    defexception [:message]
+
+    @impl true
+    def exception(url) do
+      %__MODULE__{message: "Invalid verification method URL #{url}"}
     end
   end
 
@@ -142,12 +160,12 @@ defmodule Integrity do
     end
   end
 
-  defmodule CreatedTimeDeviationError do
-    defexception [:message]
+  defmodule MissingIntegrityProofError do
+    defexception []
 
     @impl true
-    def exception(acceptable) do
-      %__MODULE__{message: "proof created time deviated more than #{acceptable} seconds"}
+    def message(_) do
+      "no VerifiableIdentityStatement in attachment"
     end
   end
 

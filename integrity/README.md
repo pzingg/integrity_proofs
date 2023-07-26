@@ -59,14 +59,14 @@ and then call `:crypto.sign/5` and `:crypto.verify/6`.
 can be generated from the command line with:
 
 ```sh
-ssh-keygen -t ed25519 -C "bob@example.com" -f test/fixtures/bob_example_ed25519
-mv test/fixtures/bob_example_ed25519 test/fixtures/bob_example_ed25519.pub
+ssh-keygen -t ed25519 -C "bob@example.com" -f test/support/fixtures/bob_example_ed25519
+mv test/support/fixtures/bob_example_ed25519 test/support/fixtures/bob_example_ed25519.pub
 
-openssl ecparam -name prime256v1 -genkey -noout -out test/fixtures/p256.priv
-openssl ec -in test/fixtures/p256.priv -pubout > test/fixtures/p256.pub
+openssl ecparam -name prime256v1 -genkey -noout -out test/support/fixtures/p256.priv
+openssl ec -in test/support/fixtures/p256.priv -pubout > test/support/fixtures/p256.pub
 
-openssl ecparam -name secp256k1 -genkey -noout -out test/fixtures/secp256k1.priv
-openssl ec -in test/fixtures/secp256k1.priv -pubout > test/fixtures/secp256k1.pub
+openssl ecparam -name secp256k1 -genkey -noout -out test/support/fixtures/secp256k1.priv
+openssl ec -in test/support/fixtures/secp256k1.priv -pubout > test/support/fixtures/secp256k1.pub
 ```
 
 ## did:key implementation

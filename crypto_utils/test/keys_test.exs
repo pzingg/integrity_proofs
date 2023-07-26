@@ -5,8 +5,38 @@ defmodule CryptoUtils.KeysTest do
   alias CryptoUtils.Keys.Keypair
 
   describe "pem decoding" do
+    test "decodes an ed25519 public key" do
+      {:ok, pem} = File.read("./test/support/fixtures/bob_example_ed25519.pub")
+
+      {:ok, public_key, _priv} =
+        CryptoUtils.Keys.decode_pem_ssh_file(pem, :public_key, :public_key)
+
+      assert {{:ECPoint, pub}, {:namedCurve, _curve}} = public_key
+      assert byte_size(pub) == 32
+      assert pub == @public_key_bytes
+    end
+
+    test "decodes an ed25519 private key" do
+      {:ok, pem} = File.read("./test/support/fixtures/bob_example_ed25519.priv")
+
+      {:ok, _pub, private_key} =
+        CryptoUtils.Keys.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
+
+      assert {:ECPrivateKey, 1, priv, {:namedCurve, _curve}, pub} = private_key
+      assert byte_size(priv) == 32
+      assert priv == @private_key_bytes
+      assert byte_size(pub) == 32
+      assert pub == @public_key_bytes
+    end
+
+    test "decodes a multibase encoded ed25519 public key" do
+      {:ok, decoded} = Multibase.decode("z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVtZxP")
+      assert byte_size(decoded) == 34
+      assert <<237, 1>> <> _pub = decoded
+    end
+
     test "decodes a pem-encoded p256 private key" do
-      {:ok, pem} = File.read("./test/fixtures/p256.priv")
+      {:ok, pem} = File.read("./test/support/fixtures/p256.priv")
 
       {:ok, _pub, private_key} = Keys.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
 
@@ -17,7 +47,7 @@ defmodule CryptoUtils.KeysTest do
     end
 
     test "decodes a pem-encoded secp256k1 private key" do
-      {:ok, pem} = File.read("./test/fixtures/secp256k1.priv")
+      {:ok, pem} = File.read("./test/support/fixtures/secp256k1.priv")
 
       {:ok, _pub, private_key} = Keys.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
 
@@ -28,7 +58,7 @@ defmodule CryptoUtils.KeysTest do
     end
 
     test "decodes and compresses a pem-encoded p256 public key" do
-      {:ok, pem} = File.read("./test/fixtures/p256.pub")
+      {:ok, pem} = File.read("./test/support/fixtures/p256.pub")
 
       assert {:ok, {{:ECPoint, pub}, {:namedCurve, {1, 2, 840, 10045, 3, 1, 7}}}, _} =
                Keys.decode_pem_public_key(pem, :public_key)
@@ -44,7 +74,7 @@ defmodule CryptoUtils.KeysTest do
     end
 
     test "decodes and compresses a pem-encoded p256 private key" do
-      {:ok, pem} = File.read("./test/fixtures/p256.priv")
+      {:ok, pem} = File.read("./test/support/fixtures/p256.priv")
 
       assert {:ok, _, {:ECPrivateKey, 1, priv, {:namedCurve, {1, 2, 840, 10045, 3, 1, 7}}, pub}} =
                Keys.decode_pem_public_key(pem, :public_key)

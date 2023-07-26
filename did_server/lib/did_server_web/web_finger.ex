@@ -47,12 +47,12 @@ defmodule DidServerWeb.WebFinger do
       %{
         "rel" => "self",
         "type" => "application/activity+json",
-        "href" => User.ap_id(user, "user/")
+        "href" => User.ap_id(user, "users/")
       }
       # %{
       #  "rel" => "http://webfinger.net/rel/profile-page",
       #  "type" => "text/html",
-      #  "href" => User.ap_id(user, "user/")
+      #  "href" => User.ap_id(user, "users/")
       # }
     ]
   end
@@ -60,7 +60,7 @@ defmodule DidServerWeb.WebFinger do
   defp gather_aliases(%User{} = user) do
     Accounts.list_also_known_as_users(user)
     |> Enum.filter(fn alias -> alias.id != user.id end)
-    |> Enum.map(fn alias -> User.ap_id(alias, "user/") end)
+    |> Enum.map(fn alias -> User.ap_id(alias, "users/") end)
   end
 
   def represent_user(%User{} = user, :json) do
