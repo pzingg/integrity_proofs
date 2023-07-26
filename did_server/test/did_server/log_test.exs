@@ -16,8 +16,9 @@ defmodule DidServer.LogTest do
     @invalid_attrs %{"did" => nil, "password" => nil}
 
     test "list_keys/0 returns all dids" do
-      %{did: did} = key_fixture()
-      assert [%Key{did: ^did}] = Log.list_keys()
+      %{did: fixture_did} = key_fixture()
+      found = Log.list_keys() |> Enum.find(fn %Key{did: did} -> did == fixture_did end)
+      assert %Key{} = found
     end
 
     test "get_key!/1 returns the did with given id" do

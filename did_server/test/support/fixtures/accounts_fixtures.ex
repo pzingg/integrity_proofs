@@ -5,7 +5,6 @@ defmodule DidServer.AccountsFixtures do
   """
 
   alias CryptoUtils.Keys.Keypair
-  alias DidServer.Accounts.User
 
   @example_domain "example.com"
 

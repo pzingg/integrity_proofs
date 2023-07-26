@@ -28,7 +28,7 @@ defmodule DidServer.AccountsTest do
     end
 
     test "returns the user if the email and password are valid" do
-      %{id: id, email: email} = user = user_fixture()
+      %{id: id, email: email} = user_fixture()
 
       assert %User{id: ^id} =
                Accounts.get_user_by_email_and_password(email, valid_user_password())

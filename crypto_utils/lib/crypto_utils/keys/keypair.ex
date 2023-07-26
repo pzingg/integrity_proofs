@@ -29,6 +29,20 @@ defmodule CryptoUtils.Keys.Keypair do
     |> new()
   end
 
+  def decode_pem_ssh_file(pem, type \\ :openssh_key_v1) do
+    case CryptoUtils.Keys.decode_pem_ssh_file(pem, type, :did_key) do
+      {:ok, did, private_key} -> {:ok, new({did, private_key, :did_key, :crypto_algo_key})}
+      error -> error
+    end
+  end
+
+  def decode_pem_public_key(pem) do
+    case CryptoUtils.Keys.decode_pem_public_key(pem, :did_key) do
+      {:ok, did, private_key} -> {:ok, new({did, private_key, :did_key, :crypto_algo_key})}
+      error -> error
+    end
+  end
+
   @doc """
   Returns the public key did for the keypair.
   """

@@ -23,6 +23,7 @@ defmodule DidServer.LogFixtures do
   ]
 
   @did_password "bluesky"
+  @example_domain "example.com"
 
   @operation_attrs %{
     type: "create",
@@ -42,8 +43,8 @@ defmodule DidServer.LogFixtures do
   def server_signing_key(path \\ nil) do
     path = path || "./test/support/fixtures/server.key"
     {:ok, pem} = File.read(path)
-    {:ok, did, private_key} = CryptoUtils.Keys.decode_pem_public_key(pem, :did_key)
-    CryptoUtils.Keys.Keypair.new({did, private_key, :did_key, :crypto_algo_key})
+    {:ok, keypair} = CryptoUtils.Keys.Keypair.decode_pem_public_key(pem)
+    keypair
   end
 
   def valid_create_op_attributes(attrs \\ %{}) do
