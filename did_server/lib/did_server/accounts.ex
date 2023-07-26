@@ -6,7 +6,8 @@ defmodule DidServer.Accounts do
   import Ecto.Query, warn: false
   alias DidServer.Repo
 
-  alias DidServer.Accounts.{User, UserToken, UserNotifier}
+  alias DidServer.Accounts.{User, UserKey, UserToken, UserNotifier}
+  alias DidServer.Log.Key
 
   ## Database getters
 
@@ -328,8 +329,27 @@ defmodule DidServer.Accounts do
     end
   end
 
+  def list_keys_by_username(username, domain, return_structs? \\ false) do
+    keys =
+      from(key in Key,
+        join: user_key in UserKey,
+        on: user_key.key_id == key.did,
+        join: user in User,
+        on: user.id == user_key.user_id,
+        where: user.username == ^username,
+        where: user.domain == ^domain
+      )
+      |> Repo.all()
+
+    if return_structs? do
+      keys
+    else
+      Enum.map(keys, fn %{did: did} -> did end)
+    end
+  end
+
   def list_users_by_did(did) when is_binary(did) do
-    did = DidServer.Log.get_key!(did)
+    did = DidServer.Log.get_key!(did) |> Repo.preload(:users)
     did.users
   end
 

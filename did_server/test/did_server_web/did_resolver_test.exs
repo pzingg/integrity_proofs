@@ -5,6 +5,8 @@ defmodule DidServerWeb.ResolverTest do
 
   use DidServerWeb.ConnCase
 
+  import DidServer.AccountsFixtures
+
   alias CryptoUtils.Keys.Keypair
 
   @impl true
@@ -42,6 +44,11 @@ defmodule DidServerWeb.ResolverTest do
 
   describe "resolves dids" do
     test "resolves a did:web", %{conn: conn} do
+      {:ok, user} =
+        DidServer.Accounts.register_user(
+          valid_user_attributes(username: "admin", domain: "example.com")
+        )
+
       opts = resolver_opts() |> Keyword.put(:test_conn, conn)
       assert {:ok, doc} = CryptoUtils.Resolver.resolve_did("did:web:example.com", opts)
       assert "https://example.com/users/admin" in doc["alsoKnownAs"]

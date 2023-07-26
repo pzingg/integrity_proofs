@@ -56,10 +56,8 @@ defmodule DidServer.Log do
   def get_domain_key() do
     domain = DidServer.Application.domain()
 
-    with %User{} = user <- Accounts.get_user_by_username("admin", domain),
-         [did | _] <- Accounts.list_keys_by_user(user) do
-      {:ok, did}
-    else
+    case Accounts.list_keys_by_username("admin", domain) do
+      [did | _] -> {:ok, did}
       _ -> {:error, "not found"}
     end
   end
@@ -143,6 +141,85 @@ defmodule DidServer.Log do
     end
   end
 
+  @doc """
+  Builds a did document.
+  """
+  def did_document_for_user(%User{} = user) do
+    case Accounts.list_keys_by_user(user) do
+      [did] ->
+        format_did_document(did)
+
+      [] ->
+        nil
+    end
+  end
+
+  def did_document_for_user(%{username: username, domain: domain}) do
+    case Accounts.list_keys_by_username(username, domain) do
+      [did] ->
+        format_did_document(did)
+
+      [] ->
+        nil
+    end
+  end
+
+  def format_did_document(did) do
+    op_data = get_last_op(did, :did_data)
+
+    case op_data do
+      %{"verificationMethods" => vms, "alsoKnownAs" => akas}
+      when is_map(vms) and map_size(vms) != 0 ->
+        linked_user_akas =
+          Accounts.list_users_by_did(did)
+          |> Enum.map(fn user -> [User.ap_id(user), User.domain_handle(user)] end)
+          |> List.flatten()
+
+        also_known_as = (akas ++ linked_user_akas) |> Enum.sort() |> Enum.uniq()
+
+        {sig_fragment, multibase_value, additional_vms} =
+          case Map.to_list(vms) do
+            [{key_id, key_value} | rest] ->
+              %{public_key_multibase: multibase_value} =
+                CryptoUtils.Did.context_and_key_for_did!(key_value)
+
+              more =
+                Enum.map(rest, fn {key_id, key_value} ->
+                  %{context: context, public_key_multibase: multibase_value} =
+                    CryptoUtils.Did.context_and_key_for_did!(key_value)
+
+                  {key_id, %{context: context, type: "Multikey", value: multibase_value}}
+                end)
+                |> Map.new()
+
+              {key_id, multibase_value, more}
+
+            _ ->
+              raise RuntimeError, "whoa"
+          end
+
+        CryptoUtils.Did.format_did_document!(did,
+          also_known_as: also_known_as,
+          signature_method_fragment: sig_fragment,
+          multibase_value: multibase_value,
+          additional_vms: additional_vms,
+          services: %{
+            "atproto_pds" => %{
+              type: "AtprotoPersonalDataServer",
+              endpoint: "https://pds.example.com"
+            },
+            "activitypub" => %{
+              type: "ActivityPubServer",
+              endpoint: "https://example.com"
+            }
+          }
+        )
+
+      _ ->
+        nil
+    end
+  end
+
   ## Operation log
 
   def list_registered_dids() do
@@ -203,14 +280,21 @@ defmodule DidServer.Log do
       nil
 
   """
-  def get_last_op(did) when is_binary(did) do
-    from(op in Operation,
-      where: op.did == ^did,
-      where: op.nullified == false,
-      order_by: [desc: :inserted_at],
-      limit: 1
-    )
-    |> Repo.one()
+  def get_last_op(did, decoder \\ nil) when is_binary(did) do
+    op =
+      from(op in Operation,
+        where: op.did == ^did,
+        where: op.nullified == false,
+        order_by: [desc: :inserted_at],
+        limit: 1
+      )
+      |> Repo.one()
+
+    case {op, decoder} do
+      {%Operation{}, :data} -> Operation.to_json_data(op)
+      {%Operation{}, :did_data} -> CryptoUtils.Did.to_plc_operation_data(op)
+      _ -> op
+    end
   end
 
   @doc """

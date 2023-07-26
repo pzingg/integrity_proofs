@@ -117,8 +117,20 @@ defmodule CryptoUtils.Did do
   end
 
   @valid_did_methods [:web, :key, :plc, :example]
-  @known_signature_key_formats ["Multikey", "JsonWebKey2020", "Ed25519VerificationKey2020"]
-  @known_encryption_key_formats ["Multikey", "JsonWebKey2020", "X25519KeyAgreementKey2020"]
+  @known_signature_key_formats [
+    "Multikey",
+    "JsonWebKey2020",
+    "Ed25519VerificationKey2020",
+    "EcdsaSecp256r1VerificationKey2019",
+    "EcdsaSecp256k1VerificationKey2019"
+  ]
+  @known_encryption_key_formats [
+    "Multikey",
+    "JsonWebKey2020",
+    "X25519KeyAgreementKey2020",
+    "EcdsaSecp256r1AgreementKey2019",
+    "EcdsaSecp256k1AgreementKey2019"
+  ]
 
   # @ed25519_code 0xED
   @ed25519_prefix <<0xED, 0x01>>
@@ -386,7 +398,7 @@ defmodule CryptoUtils.Did do
             end
           )
 
-        nil ->
+        _ ->
           {vms, @base_context ++ [sig_vm_context]}
       end
 
@@ -578,6 +590,7 @@ defmodule CryptoUtils.Did do
       format in @known_encryption_key_formats
   end
 
+  @deprecated "Use format_did_document!/1 instead"
   @doc """
   Create a DID document per the AT Protocol.
   """
