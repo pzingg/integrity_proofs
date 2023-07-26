@@ -196,7 +196,7 @@ defmodule DidServerWeb.WebFinger do
     address = get_address_from_domain(domain, encoded_account)
 
     with {:ok, body, headers} <-
-      CryptoUtils.Resolver.fetch(address,
+           CryptoUtils.Resolver.fetch(address,
              headers: [
                {"accept", @accept_header_value_xml},
                {"accept", @accept_header_value_json}
@@ -262,5 +262,4 @@ defmodule DidServerWeb.WebFinger do
         :error
     end
   end
-
 end

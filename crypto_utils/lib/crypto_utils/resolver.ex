@@ -3,6 +3,7 @@ defmodule CryptoUtils.Resolver do
   Makes HTTP requests with optional rewriting, and
   resolves both "web" and "plc" dids.
   """
+  @behaviour CryptoUtils.Fetcher
 
   alias CryptoUtils.Did
 
@@ -15,6 +16,7 @@ defmodule CryptoUtils.Resolver do
   If a pattern matches, the URL is rewritten, and no further
   rewrites are attempted.
   """
+  @impl true
   def fetch(url, opts) do
     httpc_http_opts = Keyword.get(opts, :http_opts, [])
     httpc_opts = Keyword.get(opts, :opts, [])
@@ -22,11 +24,7 @@ defmodule CryptoUtils.Resolver do
     content_type = Keyword.get(opts, :content_type, "plain/text")
     body = Keyword.get(opts, :body, "OK")
 
-    url =
-      case Keyword.get(opts, :rewrite_patterns) do
-        patterns when is_list(patterns) -> rewrite(url, patterns)
-        _ -> url
-      end
+    url = maybe_rewrite(url, opts)
 
     opts
     |> Keyword.get(:method, :get)
@@ -44,15 +42,12 @@ defmodule CryptoUtils.Resolver do
     end
   end
 
-  def rewrite(url, patterns) do
-    case Enum.find(patterns, fn {re, _} -> Regex.match?(re, url) end) do
-      {re, replacement} ->
-        rewritten = Regex.replace(re, url, replacement)
-        IO.puts("#{url} -> #{rewritten}")
-        rewritten
-
+  def maybe_rewrite(url, opts) do
+    with [_ | _] = patterns <- Keyword.get(opts, :rewrite_patterns),
+         {re, replacement} <- Enum.find(patterns, fn {re, _} -> Regex.match?(re, url) end) do
+      Regex.replace(re, url, replacement)
+    else
       _ ->
-        IO.puts("not rewritten #{url}")
         url
     end
   end
@@ -66,7 +61,9 @@ defmodule CryptoUtils.Resolver do
         :plc -> resolve_did_plc(parsed_did, opts)
       end
     rescue
-      _ -> {:error, "invalid did #{did}"}
+      error ->
+        IO.inspect(error)
+        {:error, "invalid did #{did}"}
     end
   end
 

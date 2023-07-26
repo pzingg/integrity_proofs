@@ -58,7 +58,7 @@ defmodule CryptoUtils.Plc.CreateOperation do
 
             rotation_keys =
               cond do
-                is_map(op.rotationKeys) && map_size(op.rotationKeys) != 0 ->
+                is_list(op.rotationKeys) && !Enum.empty?(op.rotationKeys) ->
                   op.rotationKeys
 
                 !is_nil(op.recoveryKey) && !is_nil(signing_key) ->

@@ -35,6 +35,7 @@ defmodule DidServerWeb.PlcControllerTest do
     end
 
     # TODO disable Ecto queries
+
     @tag :no_db
     test "healthcheck fails when database is unavailable", %{conn: conn} do
       _conn = get(conn, ~p"/plc/_health")
