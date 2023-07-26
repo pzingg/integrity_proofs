@@ -48,22 +48,33 @@ defmodule CryptoUtils.Plc.CreateOperation do
                 type
               end
 
+            verification_methods =
+              case op.verificationMethods do
+                vms when is_map(vms) and map_size(vms) != 0 -> vms
+                _ -> %{"atproto" => op.signingKey}
+              end
+
+            signing_key = Map.get(verification_methods, "atproto")
+
             rotation_keys =
-              case op.rotationKeys do
-                [_ | _] = keys -> keys
-                _ -> [op.recoveryKey]
+              cond do
+                is_list(op.rotationKeys) && !Enum.empty?(op.rotationKeys) ->
+                  op.rotationKeys
+
+                !is_nil(op.recoveryKey) && !is_nil(signing_key) ->
+                  [op.recoveryKey, signing_key]
+
+                !is_nil(op.recoveryKey) ->
+                  [op.recoveryKey]
+
+                true ->
+                  []
               end
 
             also_known_as =
               case op.alsoKnownAs do
                 [_ | _] = aka -> Enum.map(aka, &CryptoUtils.ensure_atproto_prefix/1)
                 _ -> [CryptoUtils.ensure_atproto_prefix(op.handle)]
-              end
-
-            verification_methods =
-              case op.verificationMethods do
-                vms when is_map(vms) and map_size(vms) != 0 -> vms
-                _ -> %{"atproto" => op.signingKey}
               end
 
             services =

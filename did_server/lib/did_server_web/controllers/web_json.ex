@@ -1,6 +1,6 @@
 defmodule DidServerWeb.WebJSON do
-  def show(%{document: doc}) do
-    %{data: doc}
+  def show(%{document: doc}) when is_map(doc) do
+    doc
   end
 
   def info(%{version: version}) do

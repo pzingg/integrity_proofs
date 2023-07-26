@@ -3,7 +3,7 @@ defmodule DidServerWeb.WebControllerTest do
 
   test "GET /.well-known/did.json", %{conn: conn} do
     conn = get(conn, ~p"/.well-known/did.json")
-    assert %{"data" => %{"id" => id}} = json_response(conn, 200)
+    assert %{"id" => id} = json_response(conn, 200)
     assert id =~ "did:key:z6"
   end
 end

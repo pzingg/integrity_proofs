@@ -7,7 +7,7 @@ defmodule CryptoUtils.DidTest do
                "did:key:zDnaedvvAsDE6H3BDdBejpx9ve2Tz95cymyCAKF66JbyMh1Lt"
              )
 
-    assert {:ecdsa, [key_bytes, :p256]} = algo_key
+    assert {:ecdsa, [key_bytes, :secp256r1]} = algo_key
     assert byte_size(key_bytes) == 65
   end
 end

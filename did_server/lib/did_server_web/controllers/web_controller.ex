@@ -1,6 +1,7 @@
 defmodule DidServerWeb.WebController do
   use DidServerWeb, :controller
 
+  alias CryptoUtils.Keys.Keypair
   alias DidServerWeb.ErrorJSON
 
   # TODO get domain from config
@@ -79,7 +80,6 @@ defmodule DidServerWeb.WebController do
 
   # TODO lookup did for registered user
   defp lookup_did_key(_user) do
-    {pub, _priv} = CryptoUtils.Keys.generate_keypair(:did_key, :ed25519)
-    pub
+    Keypair.generate(:ed25519, :did_key) |> Keypair.did()
   end
 end

@@ -104,6 +104,10 @@ defmodule CryptoUtils do
   @doc """
   Formats a did:plc operation for debugging purposes.
   """
+  def display_op(nil) do
+    "no op"
+  end
+
   def display_op(%{"type" => type, "prev" => prev}) do
     prev = prev || "nil"
     "type #{type} prev #{prev}"
@@ -227,6 +231,7 @@ defmodule CryptoUtils do
       when is_binary(path) do
     case String.split(path, ":") do
       [did_method | [did_value | _]] ->
+        did_method = String.to_atom(did_method)
         did_method in CryptoUtils.Did.valid_did_methods() && did_value != ""
 
       _ ->

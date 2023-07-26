@@ -19,7 +19,7 @@ defmodule DidServer.MixProject do
   def application do
     [
       mod: {DidServer.Application, []},
-      extra_applications: [:logger, :runtime_tools, :xmerl, :inets]
+      extra_applications: [:logger, :runtime_tools, :xmerl]
     ]
   end
 

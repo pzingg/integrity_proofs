@@ -43,11 +43,6 @@ defmodule CryptoUtils.Keys do
     public_key: <<>>
   )
 
-  # Named elliptic curves
-  @id_ed25519 {1, 3, 101, 112}
-  @id_p256 {1, 2, 840, 10045, 3, 1, 7}
-  @id_secp256k1 {1, 3, 132, 0, 10}
-
   # Extra mappings not in Multicodec v0.0.2
   @p256_code 0x1200
   @p256_prefix <<0x80, 0x24>>
@@ -66,28 +61,22 @@ defmodule CryptoUtils.Keys do
   @multicodec_mappings @p256_mappings ++ Multicodec.mappings()
 
   @doc """
-  Generates a new random public-private key pair. `fmt` determines the
+  Generates a new random public-private key pair. `public_key_format` determines the
   format of the keys returned. See `make_public_key/3`
   and `make_private_key/3` for details on the return
   formats.
   """
-  def generate_keypair(fmt, curve \\ :ed25519) do
-    type =
-      case curve do
-        :ed25519 -> :eddsa
-        :p256 -> :ecdh
-        :secp256k1 -> :ecdh
-        _ -> raise CryptoUtils.UnsupportedNamedCurveError, curve
-      end
-
-    priv_fmt =
-      case fmt do
+  def generate_keypair(curve, public_key_format) do
+    private_key_format =
+      case public_key_format do
         :did_key -> :crypto_algo_key
-        _ -> fmt
+        _ -> public_key_format
       end
 
-    {pub, priv} = :crypto.generate_key(type, curve)
-    {make_public_key(pub, curve, fmt), make_private_key({pub, priv}, curve, priv_fmt)}
+    {pub, priv} = :crypto.generate_key(Curves.erlang_algo(curve), Curves.erlang_ec_curve(curve))
+    public_key = make_public_key(pub, curve, public_key_format)
+    private_key = make_private_key({pub, priv}, curve, private_key_format)
+    {public_key, private_key, public_key_format, private_key_format}
   end
 
   @doc """
@@ -156,17 +145,8 @@ defmodule CryptoUtils.Keys do
     "did:key:" <> multikey
   end
 
-  def make_public_key(pub, :ed25519, :public_key)
-      when byte_size(pub) == 32 do
-    {ec_point(point: pub), {:namedCurve, @id_ed25519}}
-  end
-
-  def make_public_key(pub, :p256, :public_key) do
-    {ec_point(point: pub), {:namedCurve, @id_p256}}
-  end
-
-  def make_public_key(pub, :secp256k1, :public_key) do
-    {ec_point(point: pub), {:namedCurve, @id_secp256k1}}
+  def make_public_key(pub, curve, :public_key) do
+    {ec_point(point: pub), Curves.curve_params(curve)}
   end
 
   def make_public_key(pub, :ed25519, :crypto_algo_key)
@@ -222,21 +202,25 @@ defmodule CryptoUtils.Keys do
   """
   def make_private_key({pub, priv}, :ed25519, :public_key)
       when byte_size(pub) == 32 and byte_size(priv) == 32 do
-    ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_ed25519})
+    ec_private_key(private_key: priv, public_key: pub, parameters: Curves.curve_params(:ed25519))
   end
 
   def make_private_key({pub, priv}, :p256, :public_key) do
     # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
-    ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_p256})
+    ec_private_key(private_key: priv, public_key: pub, parameters: Curves.curve_params(:p256))
   end
 
   def make_private_key({pub, priv}, :secp256k1, :public_key) do
     # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
-    ec_private_key(private_key: priv, public_key: pub, parameters: {:namedCurve, @id_secp256k1})
+    ec_private_key(
+      private_key: priv,
+      public_key: pub,
+      parameters: Curves.curve_params(:secp256k1)
+    )
   end
 
   def make_private_key({pub, priv}, :ed25519, :crypto_algo_key)
@@ -249,7 +233,7 @@ defmodule CryptoUtils.Keys do
     # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
-    {:ecdsa, [priv, :p256]}
+    {:ecdsa, [priv, :secp256r1]}
   end
 
   def make_private_key({pub, priv}, :secp256k1, :crypto_algo_key)
@@ -269,36 +253,29 @@ defmodule CryptoUtils.Keys do
     raise CryptoUtils.UnsupportedNamedCurveError, curve
   end
 
-  def encode_pem_public_key({did_key, {:ecdsa, [priv, curve]}}) do
-    %{algo_key: {:ecdsa, [pub, _curve]}} = CryptoUtils.Did.parse_did_key!(did_key)
-
-    oid =
-      case curve do
-        :p256 -> @id_p256
-        :secp256k1 -> @id_secp256k1
-      end
-
-    curve_params = {:namedCurve, oid}
-    # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
-    private_key_asn1 = {:ECPrivateKey, 1, priv, curve_params, pub, :asn1_NOVALUE}
-    entry = :public_key.pem_entry_encode(:ECPrivateKey, private_key_asn1)
-    pem = :public_key.pem_encode([entry])
-    {:ok, pem}
-  end
-
-  def encode_pem_public_key({:ECPrivateKey, 1, priv, curve_params, pub}) do
-    # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
-    private_key_asn1 = {:ECPrivateKey, 1, priv, curve_params, pub, :asn1_NOVALUE}
-    entry = :public_key.pem_entry_encode(:ECPrivateKey, private_key_asn1)
-    pem = :public_key.pem_encode([entry])
-    {:ok, pem}
-  end
-
   def encode_pem_public_key({{:ECPoint, _pub}, _curve_params} = public_key) do
     # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
     entry = :public_key.pem_entry_encode(:SubjectPublicKeyInfo, public_key)
     pem = :public_key.pem_encode([entry])
     {:ok, pem}
+  end
+
+  def encode_pem_public_key(key) do
+    {:error, "unkown key format #{inspect(key)}"}
+  end
+
+  def encode_pem_private_key({:ECPrivateKey, 1, priv, curve_params, pub}) do
+    # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
+    private_key_asn1 = {:ECPrivateKey, 1, priv, curve_params, pub, :asn1_NOVALUE}
+    entry = :public_key.pem_entry_encode(:ECPrivateKey, private_key_asn1)
+    pem = :public_key.pem_encode([entry])
+    {:ok, pem}
+  end
+
+  def encode_pem_private_key({did_key, {:ecdsa, [priv, curve]}}) do
+    # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
+    %{algo_key: {:ecdsa, [pub, _curve]}} = CryptoUtils.Did.parse_did_key!(did_key)
+    encode_pem_private_key({:ECPrivateKey, 1, priv, Curves.curve_params(curve), pub})
   end
 
   def encode_pem_private_key(key) do
@@ -360,14 +337,6 @@ defmodule CryptoUtils.Keys do
       other ->
         IO.puts("Unexpected result decoding: #{inspect(other)}")
     end
-  end
-
-  @doc """
-  Formats an `:crypto_algo_key` keypair into a JSON-compatible
-  flattened list of strings.
-  """
-  def to_signer({pub, {algorithm, [priv, curve]}}) do
-    [pub, to_string(algorithm), priv, to_string(curve)]
   end
 
   defp decode_entries(decoded, fmt) when is_list(decoded) do

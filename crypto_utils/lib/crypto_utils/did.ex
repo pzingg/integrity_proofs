@@ -116,7 +116,7 @@ defmodule CryptoUtils.Did do
     end
   end
 
-  @valid_did_methods ["web", "key", "plc", "example"]
+  @valid_did_methods [:web, :key, :plc, :example]
   @known_signature_key_formats ["Multikey", "JsonWebKey2020", "Ed25519VerificationKey2020"]
   @known_encryption_key_formats ["Multikey", "JsonWebKey2020", "X25519KeyAgreementKey2020"]
 
@@ -176,15 +176,17 @@ defmodule CryptoUtils.Did do
     end
 
     [_, method, method_specific_id] = parts
-    expected_did_method = Keyword.get(options, :expected_did_method)
+    method = String.to_atom(method)
 
-    if !is_nil(expected_did_method) && expected_did_method != method do
+    expected_did_methods = Keyword.get(options, :expected_did_methods, []) |> List.wrap()
+
+    if expected_did_methods != [] && method not in expected_did_methods do
       raise UnexpectedDidMethodError, method
     end
 
     parsed = %{
       did_string: identifier,
-      method: String.to_atom(method),
+      method: method,
       method_specific_id: method_specific_id
     }
 
@@ -192,11 +194,14 @@ defmodule CryptoUtils.Did do
       parsed
     else
       case method do
-        "key" ->
+        :key ->
           validate_did!(:key, parsed, String.split(method_specific_id, ":"), options)
 
-        "web" ->
+        :web ->
           validate_did!(:web, parsed, String.split(method_specific_id, ":"), options)
+
+        :plc ->
+          validate_did!(:plc, parsed, [method_specific_id], options)
 
         _ ->
           raise InvalidDidError, identifier
@@ -280,6 +285,19 @@ defmodule CryptoUtils.Did do
     end
   end
 
+  defp validate_did!(
+         :plc,
+         %{did_string: identifier, method_specific_id: base32_cid} = parsed,
+         _,
+         _options
+       ) do
+    if byte_size(base32_cid) != 24 || Regex.match?(~r/[^a-z2-7]/, base32_cid) do
+      raise InvalidDidError, identifier
+    end
+
+    parsed
+  end
+
   defp validate_did!(_, %{did_string: identifier}, _, _) do
     raise InvalidDidError, identifier
   end
@@ -325,37 +343,84 @@ defmodule CryptoUtils.Did do
       verification_method: %{"id" => sig_vm_id} = signature_verification_method
     } = build_signature_method!(parsed_did, options)
 
-    document = %{
-      "@context" => @base_context ++ [sig_vm_context],
-      "id" => identifier,
-      "authentication" => [sig_vm_id],
-      "assertionMethod" => [sig_vm_id],
-      "capabilityInvocation" => [sig_vm_id],
-      "capabilityDelegation" => [sig_vm_id]
-    }
-
-    document =
+    vms =
       if Keyword.get(options, :enable_encryption_key_derivation, false) do
         %{
           context: _context,
-          verification_method: %{"id" => enc_vm_id} = encryption_verification_method
+          verification_method: %{"id" => _enc_vm_id} = encryption_verification_method
         } = build_encryption_method!(parsed_did, options)
 
-        document
-        |> Map.put("verificationMethod", [
-          signature_verification_method,
-          encryption_verification_method
-        ])
-        |> Map.put("keyAgreement", [enc_vm_id])
+        [signature_verification_method, encryption_verification_method]
       else
-        Map.put(document, "verificationMethod", [signature_verification_method])
+        [signature_verification_method]
       end
 
-    Encryption
+    {vms, context} =
+      case Keyword.get(options, :additional_vms) do
+        more when is_map(more) and map_size(more) != 0 ->
+          Enum.reduce(
+            more,
+            {vms, @base_context ++ [sig_vm_context]},
+            fn
+              {method_id,
+               %{
+                 type: type,
+                 value: value
+               } = vm_spec},
+              {acc_vms, acc_context} ->
+                value_key = Map.get(vm_spec, :value_type, "publicKeyMultibase")
+                vm_context = Map.get(vm_spec, :context)
 
-    case Keyword.get(options, :also_known_as) do
-      nil -> document
-      also_known_as -> Map.put(document, "alsoKnownAs", also_known_as)
+                vm = %{
+                  "id" => "#" <> method_id,
+                  "controller" => identifier,
+                  "type" => type,
+                  value_key => value
+                }
+
+                if is_nil(vm_context) do
+                  {acc_vms ++ [vm], acc_context}
+                else
+                  {acc_vms ++ [vm], acc_context ++ List.wrap(vm_context)}
+                end
+            end
+          )
+
+        nil ->
+          {vms, @base_context ++ [sig_vm_context]}
+      end
+
+    document = %{
+      "@context" => context,
+      "id" => identifier
+    }
+
+    document =
+      case Keyword.get(options, :also_known_as) do
+        nil -> document
+        also_known_as -> Map.put(document, "alsoKnownAs", also_known_as)
+      end
+
+    document =
+      Map.merge(document, %{
+        "verificationMethod" => vms,
+        "authentication" => [sig_vm_id],
+        "assertionMethod" => [sig_vm_id],
+        "capabilityInvocation" => [sig_vm_id],
+        "capabilityDelegation" => [sig_vm_id]
+      })
+
+    case Keyword.get(options, :services) do
+      services when is_map(services) and map_size(services) != 0 ->
+        services =
+          Enum.map(services, fn {service_id, %{type: type, endpoint: endpoint}} ->
+            %{"id" => "#" <> service_id, "type" => type, "serviceEndpoint" => endpoint}
+          end)
+
+        Map.put(document, "service", services)
+
+      _ ->
+        document
     end
   end
 
@@ -575,7 +640,7 @@ defmodule CryptoUtils.Did do
   end
 
   def parse_did_key!(did) do
-    %{multibase_value: multibase_value} = parse_did!(did, expected_did_method: "key")
+    %{multibase_value: multibase_value} = parse_did!(did, expected_did_methods: :key)
 
     prefixed_bytes = Multibase.decode!(multibase_value)
     <<prefix::binary-size(2), key_bytes::binary>> = prefixed_bytes
@@ -596,7 +661,7 @@ defmodule CryptoUtils.Did do
               curve: :p256,
               jwt_alg: @p256_jwt_alg,
               key_bytes: prefixed_bytes,
-              algo_key: {:ecdsa, [uncompressed, :p256]}
+              algo_key: {:ecdsa, [uncompressed, :secp256r1]}
             }
 
           _ ->
@@ -848,17 +913,21 @@ defmodule CryptoUtils.Did do
   end
 
   def did_for_create_op(%{"prev" => nil} = op) do
+    {:ok, did_for_op(op)}
+  end
+
+  def did_for_create_op(_) do
+    {:error, "not a create operation"}
+  end
+
+  def did_for_op(%{"type" => _type} = op) do
     cbor = Map.delete(op, "sig") |> CBOR.encode()
     hash_of_genesis = :crypto.hash(:sha256, cbor)
 
     truncated_id =
       hash_of_genesis |> Base.encode32(case: :lower, padding: false) |> String.slice(0, 24)
 
-    {:ok, "did:plc:#{truncated_id}"}
-  end
-
-  def did_for_create_op(_) do
-    {:error, "not a create operation"}
+    "did:plc:#{truncated_id}"
   end
 
   # tombstones must have "prev"
@@ -1000,6 +1069,10 @@ defmodule CryptoUtils.Did do
     end
   end
 
+  def validate_operation_log!(_did, []) do
+    raise ImproperOperationError, op: nil, message: "incorrect structure"
+  end
+
   # Signatures
 
   def cbor_encode(%{"type" => "plc_tombstone"} = op) do
@@ -1128,17 +1201,17 @@ defmodule CryptoUtils.Did do
   end
 
   defp validate_creation_op(did, op, prev, rotation_keys) do
-    if !is_nil(prev) do
-      raise ImproperOperationError, op: op, message: "expected null prev on create"
-    end
-
     assure_valid_op(op)
     assure_valid_sig(rotation_keys, op)
 
-    case did_for_create_op(op) do
-      {:ok, ^did} -> :ok
-      {:ok, expected_did} -> raise GenesisHashError, expected_did
-      {:error, reason} -> raise ImproperOperationError, op: op, message: reason
+    expected_did = did_for_op(op)
+
+    if expected_did != did do
+      raise GenesisHashError, expected_did
+    end
+
+    if !is_nil(prev) do
+      raise ImproperOperationError, op: op, message: "expected null prev on create"
     end
 
     op

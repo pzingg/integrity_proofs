@@ -2,6 +2,7 @@ defmodule CryptoUtils.KeysTest do
   use ExUnit.Case
 
   alias CryptoUtils.{Curves, Keys}
+  alias CryptoUtils.Keys.Keypair
 
   describe "pem decoding" do
     test "decodes a pem-encoded p256 private key" do
@@ -55,14 +56,18 @@ defmodule CryptoUtils.KeysTest do
 
   describe "pem encoding" do
     test "encodes an :secp256k1 private key" do
-      assert {_pub, priv} = Keys.generate_keypair(:public_key, :secp256k1)
-      assert {:ok, pem} = Keys.encode_pem_public_key(priv)
+      assert {:ok, pem} =
+               Keypair.generate(:secp256k1, :public_key)
+               |> Keypair.encode_pem_private_key()
+
       assert String.starts_with?(pem, "-----BEGIN EC PRIVATE KEY-----")
     end
 
     test "encodes an :secp256k1 public key" do
-      assert {pub, _priv} = Keys.generate_keypair(:public_key, :secp256k1)
-      assert {:ok, pem} = Keys.encode_pem_public_key(pub)
+      assert {:ok, pem} =
+               Keypair.generate(:secp256k1, :public_key)
+               |> Keypair.encode_pem_public_key()
+
       assert String.starts_with?(pem, "-----BEGIN PUBLIC KEY-----")
     end
   end
