@@ -16,11 +16,11 @@ defmodule CryptoUtils do
   end
 
   defmodule UnsupportedNamedCurveError do
-    defexception [:message]
+    defexception [:type, :curve, :format]
 
     @impl true
-    def exception(name) do
-      %__MODULE__{message: "unsupported named curve #{name}"}
+    def message(%__MODULE__{type: type, curve: curve, format: format}) do
+      "unsupported named curve #{curve} format #{format} for #{type} key"
     end
   end
 

@@ -39,6 +39,13 @@ defmodule DidServer.LogFixtures do
   def unique_user_username, do: "user#{System.unique_integer()}"
   def valid_did_password, do: @did_password
 
+  def server_signing_key(path \\ nil) do
+    path = path || "./test/support/fixtures/server.key"
+    {:ok, pem} = File.read(path)
+    {:ok, did, private_key} = CryptoUtils.Keys.decode_pem_public_key(pem, :did_key)
+    CryptoUtils.Keys.Keypair.new({did, private_key, :did_key, :crypto_algo_key})
+  end
+
   def valid_create_op_attributes(attrs \\ %{}) do
     username = unique_user_username()
     domain = @example_domain

@@ -341,8 +341,8 @@ defmodule DidServer.Log do
   """
   def create_operation(params) do
     case CryptoUtils.Did.create_operation(params) do
-      {:ok, {did, signed_op, password}} ->
-        validate_and_insert_operation(did, signed_op, password)
+      {:ok, {did, signed_op, password, keys_pem}} ->
+        validate_and_insert_operation(did, signed_op, password, keys_pem)
 
       error ->
         error

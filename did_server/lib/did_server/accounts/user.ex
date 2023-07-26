@@ -2,16 +2,29 @@ defmodule DidServer.Accounts.User do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias DidServer.Accounts
+
   schema "users" do
     field :email, :string
     field :username, :string
     field :domain, :string
-    # field :password, :string, virtual: true, redact: true
+    field :display_name, :string
+    field :description, :string
+    field :avatar, :binary
+    field :avatar_mime_type, :string
+    field :banner, :binary
+    field :banner_mime_type, :string
     # field :hashed_password, :string, redact: true
     field :confirmed_at, :naive_datetime
+    # used when linking to existing DID
+    field :did, :string, virtual: true
+    # used when creating a new DID
+    field :signing_key, {:array, :binary}, virtual: true
+    field :recovery_key, :string, virtual: true
+    field :password, :string, virtual: true, redact: true
 
-    has_many(:users_keys, DidServer.Accounts.UserKey)
-    has_many(:keys, through: [:users_keys, :key])
+    has_many :users_keys, DidServer.Accounts.UserKey
+    has_many :keys, through: [:users_keys, :key]
 
     timestamps()
   end
@@ -62,11 +75,20 @@ defmodule DidServer.Accounts.User do
   """
   def registration_changeset(user, attrs, opts \\ []) do
     user
-    # :password
-    |> cast(attrs, [:email, :username, :domain])
+    |> cast(attrs, [
+      :email,
+      :username,
+      :domain,
+      :display_name,
+      :password,
+      :did,
+      :signing_key,
+      :recovery_key
+    ])
     |> validate_email(opts)
     |> validate_domain()
     |> validate_username(opts)
+    |> validate_did_params()
 
     # |> validate_password(opts)
   end
@@ -102,6 +124,21 @@ defmodule DidServer.Accounts.User do
   def confirm_changeset(user) do
     now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
     change(user, confirmed_at: now)
+  end
+
+  @doc """
+  A user changeset for changing profile fields.
+  """
+  def profile_changeset(user, attrs) do
+    user
+    |> cast(attrs, [
+      :display_name,
+      :description,
+      :avatar,
+      :avatar_mime_type,
+      :banner,
+      :banner_mime_type
+    ])
   end
 
   @doc """
@@ -145,18 +182,39 @@ defmodule DidServer.Accounts.User do
   defp validate_domain(changeset) do
     changeset
     |> validate_required([:domain])
-    |> validate_format(:domain, ~r/^[^\s]+\.[^\s]+$/, message: "must have a . and no spaces")
-    |> validate_length(:domain, max: 160)
+    |> validate_length(:domain, min: 3, max: 160)
+    |> validate_change(:domain, fn :domain, domain ->
+      if Accounts.valid_domain?(domain) do
+        []
+      else
+        [:domain, "segments must contain only a-z, 0-9 and hyphens"]
+      end
+    end)
   end
 
   defp validate_username(changeset, opts) do
     changeset
     |> validate_required([:username])
-    |> validate_format(:username, ~r/^[a-z][-_.a-z0-9]+$/,
-      message: "must start with a-z, be only a-z, 0-9, . -, or _"
-    )
-    |> validate_length(:username, min: 3, max: 40)
+    |> validate_length(:username, min: 1, max: 40)
+    |> validate_change(:username, fn :username, username ->
+      if Accounts.valid_username?(username) do
+        []
+      else
+        [:username, "must contain only a-z, 0-9 and hyphens"]
+      end
+    end)
     |> maybe_validate_unique_username(opts)
+  end
+
+  defp validate_did_params(changeset) do
+    if changed?(changeset, :did) do
+      changeset
+      |> validate_required([:did])
+      |> validate_format(:did, ~r/^did\:([a-z]+)\:[:a-z0-9]+$/, message: "must be a valid DID")
+    else
+      changeset
+      |> validate_required([:signing_key])
+    end
   end
 
   defp maybe_validate_unique_email(changeset, opts) do

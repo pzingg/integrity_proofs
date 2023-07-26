@@ -790,7 +790,9 @@ defmodule CryptoUtils.Did do
     with {:ok, {%CreateParams{password: password} = op, signer}} <- CreateOperation.parse(params),
          op <- op |> normalize_op() |> add_signature(signer),
          {:ok, did} <- did_for_create_op(op) do
-      {:ok, {did, op, password}}
+      # TODO keys_pem
+      keys_pem = nil
+      {:ok, {did, op, password, keys_pem}}
     end
   end
 

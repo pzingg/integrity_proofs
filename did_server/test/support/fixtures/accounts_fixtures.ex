@@ -4,6 +4,7 @@ defmodule DidServer.AccountsFixtures do
   entities via the `DidServer.Accounts` context.
   """
 
+  alias CryptoUtils.Keys.Keypair
   alias DidServer.Accounts.User
 
   @example_domain "example.com"
@@ -14,26 +15,36 @@ defmodule DidServer.AccountsFixtures do
 
   def valid_user_attributes(attrs \\ %{}) do
     username = unique_user_username()
+    display_name = "Joe #{String.capitalize(username)}"
+    description = "Hi, I'm #{display_name}"
     domain = @example_domain
     email = "#{username}@#{domain}"
+    password = valid_user_password()
+    keypair = DidServer.LogFixtures.server_signing_key()
 
     Enum.into(attrs, %{
+      display_name: display_name,
+      description: description,
       email: email,
       username: username,
-      domain: domain
+      domain: domain,
+      password: password,
+      signing_key: Keypair.to_json(keypair),
+      recovery_key: Keypair.did(keypair)
     })
   end
 
   def user_fixture(attrs \\ %{}) do
-    {:ok, user} =
-      attrs
-      |> valid_user_attributes()
-      |> DidServer.Accounts.register_user()
+    attrs
+    |> valid_user_attributes()
+    |> DidServer.Accounts.register_user()
+    |> case do
+      {:ok, user} ->
+        user
 
-    %{did: did} = DidServer.LogFixtures.key_fixture(%{handle: User.domain_handle(user)})
-    _link = DidServer.Log.add_also_known_as(did, user)
-
-    user
+      {:error, changeset} ->
+        raise RuntimeError, "user fixture failed #{inspect(changeset.errors)}"
+    end
   end
 
   def extract_user_token(fun) do

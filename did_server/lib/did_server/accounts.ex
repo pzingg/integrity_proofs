@@ -54,8 +54,11 @@ defmodule DidServer.Accounts do
 
   def get_user_by_identifier(handle) when is_binary(handle) do
     case parse_user_identifier(handle) do
-      {username, domain} -> get_user_by_username(username, domain)
-      _ -> nil
+      {username, domain} ->
+        get_user_by_username(username, domain)
+
+      _ ->
+        nil
     end
   end
 
@@ -164,19 +167,25 @@ defmodule DidServer.Accounts do
 
   def parse_ap_id(_), do: nil
 
+  def valid_username?(username), do: valid_segment?(username, false)
+
+  def valid_domain?(domain) do
+    String.split(domain, ".")
+    |> Enum.reverse()
+    |> Enum.with_index()
+    |> Enum.all?(fn {segment, i} -> valid_segment?(segment, i == 0) end)
+  end
+
   defp ensure_valid_username_and_domain(username, domain) do
     username = String.trim(username) |> String.downcase()
     domain = String.trim(domain) |> String.downcase()
 
-    valid? =
-      [username | String.split(domain, ".")]
-      |> Enum.reverse()
-      |> Enum.with_index()
-      |> Enum.all?(fn {segment, i} -> valid_segment?(segment, i == 0) end)
-
-    if valid? do
+    if (String.length(username) >= 1 && String.length(username) <= 40 &&
+          String.length(domain) >= 3 && String.length(domain) <= 160) ||
+         (valid_username?(username) && valid_domain?(domain)) do
       {username, domain}
     else
+      IO.puts("rejected invalid '#{username}' dot '#{domain}'")
       nil
     end
   end
@@ -185,7 +194,7 @@ defmodule DidServer.Accounts do
   defp valid_segment?(s, top_level)
 
   defp valid_segment?(s, true) do
-    !String.ends_with?(s, "-") && Regex.match?(~r/^[a-z]([.-a-z0-9]*)$/, s)
+    !String.ends_with?(s, "-") && Regex.match?(~r/^[a-z]([-a-z0-9]+)$/, s)
   end
 
   defp valid_segment?(s, _) do
@@ -223,9 +232,75 @@ defmodule DidServer.Accounts do
 
   """
   def register_user(attrs) do
-    %User{}
-    |> User.registration_changeset(attrs)
-    |> Repo.insert()
+    user_changeset = User.registration_changeset(%User{}, attrs)
+    multi = Ecto.Multi.new() |> Ecto.Multi.insert(:user, user_changeset)
+
+    existing_did = Ecto.Changeset.get_change(user_changeset, :did)
+
+    multi =
+      if is_nil(existing_did) do
+        # Create did
+        Ecto.Multi.run(multi, :did, fn _, %{user: user} ->
+          signer = Ecto.Changeset.get_change(user_changeset, :signing_key)
+
+          signing_key =
+            if is_list(signer) do
+              hd(signer)
+            else
+              nil
+            end
+
+          recovery_key = Ecto.Changeset.get_change(user_changeset, :recovery_key, signing_key)
+
+          params = %{
+            type: "plc_operation",
+            signingKey: signing_key,
+            recoveryKey: recovery_key,
+            handle: User.domain_handle(user),
+            service: "https://pds.example.com",
+            password: Ecto.Changeset.get_change(user_changeset, :password),
+            signer: signer
+          }
+
+          try do
+            case DidServer.Log.create_operation(params) do
+              {:ok, %{operation: %{did: created_did}}} -> multi_add_link(created_did, user)
+              {:error, reason} -> {:error, reason}
+            end
+          rescue
+            e ->
+              {:error, Exception.message(e)}
+          end
+        end)
+      else
+        # Verify and link did
+        Ecto.Multi.run(multi, :did, fn _, %{user: user} -> multi_add_link(existing_did, user) end)
+      end
+
+    case Repo.transaction(multi) do
+      {:ok, %{user: %User{} = user, did: did}} ->
+        {:ok, %User{user | did: did, password: nil} |> Repo.preload(:keys)}
+
+      {:error, :user, %Ecto.Changeset{} = changeset, _} ->
+        {:error, changeset}
+
+      {:error, :did, _, _} ->
+        message =
+          if is_nil(existing_did) do
+            "could not create did"
+          else
+            "could not link to did #{existing_did}"
+          end
+
+        {:error, Ecto.Changeset.add_error(user_changeset, :did, message)}
+    end
+  end
+
+  defp multi_add_link(did, user) do
+    case DidServer.Log.add_also_known_as(did, user) do
+      {:ok, _user} -> {:ok, did}
+      _error -> {:error, "failed to link did #{did} to user #{user.email}"}
+    end
   end
 
   @doc """

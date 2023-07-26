@@ -21,6 +21,10 @@ defmodule DidServerWeb.Router do
     plug(:accepts, ["json"])
   end
 
+  pipeline :dual do
+    plug(:accepts, ["html", "json"])
+  end
+
   scope "/plc", DidServerWeb do
     pipe_through(:api)
 
@@ -52,6 +56,13 @@ defmodule DidServerWeb.Router do
 
   ## Authentication routes
   # TODO
+
+  scope "/user", DidServerWeb do
+    pipe_through(:dual)
+
+    get "/:handle", AccountController, :actor
+    get "/:handle/profile", AccountController, :actor
+  end
 
   scope "/home", DidServerWeb do
     pipe_through(:browser)

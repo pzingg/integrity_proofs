@@ -128,7 +128,7 @@ defmodule IntegrityTest do
   end
 
   test "decodes an ed25519 public key" do
-    {:ok, pem} = File.read("./test/fixtures/bob_example_ed25519.pub")
+    {:ok, pem} = File.read("./test/support/fixtures/bob_example_ed25519.pub")
 
     {:ok, public_key, _priv} = CryptoUtils.Keys.decode_pem_ssh_file(pem, :public_key, :public_key)
 
@@ -138,7 +138,7 @@ defmodule IntegrityTest do
   end
 
   test "decodes an ed25519 private key" do
-    {:ok, pem} = File.read("./test/fixtures/bob_example_ed25519.priv")
+    {:ok, pem} = File.read("./test/support/fixtures/bob_example_ed25519.priv")
 
     {:ok, _pub, private_key} =
       CryptoUtils.Keys.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)

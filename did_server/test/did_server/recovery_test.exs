@@ -299,9 +299,13 @@ defmodule DidServer.RecoveryTest do
 
     {did, signed_op, password, keys_pem} =
       if is_nil(did) || is_nil(prev) do
-        assert {:ok, pem} = Keypair.encode_pem_private_key(signing_keypair)
-        assert {:ok, {did, signed_op, password}} = CryptoUtils.Did.create_operation(params)
-        {did, signed_op, password, pem}
+        # TODO keys_pem
+        assert {:ok, keys_pem} = Keypair.encode_pem_private_key(signing_keypair)
+
+        assert {:ok, {did, signed_op, password, _keys_pem}} =
+                 CryptoUtils.Did.create_operation(params)
+
+        {did, signed_op, password, keys_pem}
       else
         assert %{did: ^did, operation: op_json} = Log.get_operation_by_cid(did, prev)
 

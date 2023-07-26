@@ -12,8 +12,8 @@ defmodule DidServer.AccountsTest do
     end
 
     test "returns the user if the email exists" do
-      %{id: id} = user = user_fixture()
-      assert %User{id: ^id} = Accounts.get_user_by_email(user.email)
+      %{id: id, email: email} = user_fixture()
+      assert %User{id: ^id} = Accounts.get_user_by_email(email)
     end
   end
 
@@ -28,10 +28,10 @@ defmodule DidServer.AccountsTest do
     end
 
     test "returns the user if the email and password are valid" do
-      %{id: id} = user = user_fixture()
+      %{id: id, email: email} = user = user_fixture()
 
       assert %User{id: ^id} =
-               Accounts.get_user_by_email_and_password(user.email, valid_user_password())
+               Accounts.get_user_by_email_and_password(email, valid_user_password())
     end
   end
 
@@ -50,12 +50,13 @@ defmodule DidServer.AccountsTest do
 
   describe "register_user/1" do
     test "requires email and username to be set" do
-      {:error, changeset} = Accounts.register_user(%{})
+      assert {:error, changeset} = Accounts.register_user(%{})
 
       assert %{
                email: ["can't be blank"],
                username: ["can't be blank"],
-               domain: ["can't be blank"]
+               domain: ["can't be blank"],
+               signing_key: ["can't be blank"]
                # password: ["can't be blank"],
              } = errors_on(changeset)
     end
@@ -64,15 +65,15 @@ defmodule DidServer.AccountsTest do
       {:error, changeset} =
         Accounts.register_user(%{
           email: "not valid",
-          username: "no",
+          username: "a",
           domain: "no"
           # password: "not valid"
         })
 
       assert %{
                email: ["must have the @ sign and no spaces"],
-               username: ["should be at least 3 character(s)"],
-               domain: ["must have a . and no spaces"]
+               domain: ["should be at least 3 character(s)"],
+               signing_key: ["can't be blank"]
                # password: ["should be at least 7 character(s)"]
              } = errors_on(changeset)
     end
@@ -107,18 +108,32 @@ defmodule DidServer.AccountsTest do
   describe "change_user_registration/2" do
     test "returns a changeset" do
       assert %Ecto.Changeset{} = changeset = Accounts.change_user_registration(%User{})
-      assert MapSet.new(changeset.required) == MapSet.new([:email, :username, :domain])
+
+      assert MapSet.new(changeset.required) ==
+               MapSet.new([:email, :username, :domain, :signing_key])
     end
 
     test "allows fields to be set" do
       email = unique_user_email()
       username = unique_user_username()
+      display_name = "Joe #{String.capitalize(username)}"
+      description = "Hi, I'm #{display_name}"
 
       changeset =
         Accounts.change_user_registration(
           %User{},
-          valid_user_attributes(email: email, username: username, domain: "example.com")
+          valid_user_attributes(
+            email: email,
+            display_name: display_name,
+            description: description,
+            username: username,
+            domain: "example.com"
+          )
         )
+
+      if !changeset.valid? do
+        IO.inspect(changeset.errors)
+      end
 
       assert changeset.valid?
       assert get_change(changeset, :email) == email
