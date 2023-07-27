@@ -602,15 +602,9 @@ defmodule Integrity do
   defp maybe_format_datetime(dt) when is_binary(dt), do: dt
 
   defp maybe_format_datetime(%DateTime{} = dt) do
-    %DateTime{
-      dt
-      | microsecond: {0, 0},
-        utc_offset: 0,
-        std_offset: 0,
-        zone_abbr: "UTC",
-        time_zone: "Etc/UTC"
-    }
-    |> DateTime.to_iso8601()
+    dt
+    |> DateTime.truncate(:second)
+    |> DateTime.to_iso8601(:extended, 0)
   end
 
   defp valid_datetime?(%DateTime{utc_offset: offset}), do: offset == 0

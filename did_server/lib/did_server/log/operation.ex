@@ -55,7 +55,10 @@ defmodule DidServer.Log.Operation do
       "cid" => op.cid,
       "nullified" => op.nullified,
       "operation" => Jason.decode!(op.operation),
-      "createdAt" => NaiveDateTime.to_iso8601(op.inserted_at)
+      "createdAt" =>
+        op.inserted_at
+        |> DateTime.truncate(:second)
+        |> DateTime.to_iso8601(:extended, 0)
     }
   end
 

@@ -359,6 +359,39 @@ defmodule DidServer.Accounts do
     |> List.flatten()
   end
 
+  @doc """
+  Builds a did document.
+  """
+  def get_did_document(%User{} = user) do
+    case list_keys_by_user(user) do
+      [did] ->
+        DidServer.Log.format_did_document(did)
+
+      [] ->
+        nil
+    end
+  end
+
+  def get_did_document(%{username: username, domain: domain}) do
+    case list_keys_by_username(username, domain) do
+      [did] ->
+        DidServer.Log.format_did_document(did)
+
+      [] ->
+        nil
+    end
+  end
+
+  def get_public_key(user, fmt, purpose \\ "assertionMethod") do
+    case get_did_document(user) do
+      nil ->
+        {:error, "could not locate did for user"}
+
+      doc ->
+        CryptoUtils.Keys.get_public_key(doc, fmt, purpose)
+    end
+  end
+
   ## Server statistics
 
   @doc """

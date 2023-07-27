@@ -141,29 +141,6 @@ defmodule DidServer.Log do
     end
   end
 
-  @doc """
-  Builds a did document.
-  """
-  def did_document_for_user(%User{} = user) do
-    case Accounts.list_keys_by_user(user) do
-      [did] ->
-        format_did_document(did)
-
-      [] ->
-        nil
-    end
-  end
-
-  def did_document_for_user(%{username: username, domain: domain}) do
-    case Accounts.list_keys_by_username(username, domain) do
-      [did] ->
-        format_did_document(did)
-
-      [] ->
-        nil
-    end
-  end
-
   def format_did_document(did) do
     op_data = get_last_op(did, :did_data)
 

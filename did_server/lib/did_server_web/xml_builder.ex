@@ -33,7 +33,9 @@ defmodule DidServerWeb.XMLBuilder do
   end
 
   def to_xml(%NaiveDateTime{} = time) do
-    NaiveDateTime.to_iso8601(time)
+    time
+    |> DateTime.truncate(:second)
+    |> DateTime.to_iso8601(:extended, 0)
   end
 
   def to_doc(content), do: ~s(<?xml version="1.0" encoding="UTF-8"?>) <> to_xml(content)

@@ -6,8 +6,8 @@ defmodule DidServerWeb.AccountsControllerTest do
   alias DidServer.Accounts.User
 
   test "gets actor JSON data", %{conn: conn} do
-    %{username: username} = user = user_fixture()
-
+    user = user_fixture()
+    ap_id = User.ap_id(user)
     handle = User.domain_handle(user)
 
     conn =
@@ -15,7 +15,7 @@ defmodule DidServerWeb.AccountsControllerTest do
       |> put_req_header("accept", "application/json")
       |> get(~p"/users/#{handle}")
 
-    assert %{"username" => ^username} = json_response(conn, 200)
+    assert %{"type" => "Person", "id" => ^ap_id} = json_response(conn, 200)
   end
 
   test "gets actor HTML data", %{conn: conn} do
