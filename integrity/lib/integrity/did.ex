@@ -19,7 +19,7 @@ defmodule Integrity.Did do
   end
 
   def resolve_did_web!(%{method: :web, did_string: identifier} = parsed_did, options) do
-    resolver_module = Keyword.fetch!(options, :web_resolver)
+    fetcher = Keyword.fetch!(options, :web_resolver)
 
     url =
       %URI{
@@ -30,7 +30,7 @@ defmodule Integrity.Did do
       }
       |> URI.to_string()
 
-    with {:ok, doc_json} <- apply(resolver_module, :fetch, [url, []]),
+    with {:ok, doc_json} <- fetcher.fetch(url, []),
          {:ok, document} <- Jason.decode(doc_json) do
       document
     else

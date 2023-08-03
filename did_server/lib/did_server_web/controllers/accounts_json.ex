@@ -78,11 +78,7 @@ defmodule DidServerWeb.AccountsJSON do
           } = user
       }) do
     ap_id = User.ap_id(user)
-
-    published =
-      DateTime.utc_now()
-      |> DateTime.truncate(:second)
-      |> DateTime.to_iso8601(:extended, 0)
+    published = NaiveDateTime.utc_now() |> CryptoUtils.format_datetime()
 
     public_key_pem =
       with {:ok, public_key} <- DidServer.Accounts.get_public_key(user, :public_key),

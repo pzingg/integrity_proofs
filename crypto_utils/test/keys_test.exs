@@ -4,12 +4,17 @@ defmodule CryptoUtils.KeysTest do
   alias CryptoUtils.{Curves, Keys}
   alias CryptoUtils.Keys.Keypair
 
+  @public_key_bytes <<243, 105, 212, 154, 54, 128, 250, 99, 47, 184, 242, 248, 144, 45, 17, 70,
+                      176, 243, 220, 174, 103, 200, 4, 192, 33, 143, 102, 29, 234, 149, 1, 188>>
+
+  @private_key_bytes <<112, 38, 151, 226, 182, 82, 47, 205, 7, 158, 217, 27, 159, 218, 142, 29,
+                       117, 44, 83, 74, 35, 121, 140, 91, 190, 215, 239, 144, 58, 42, 1, 200>>
+
   describe "pem decoding" do
     test "decodes an ed25519 public key" do
       {:ok, pem} = File.read("./test/support/fixtures/bob_example_ed25519.pub")
 
-      {:ok, public_key, _priv} =
-        CryptoUtils.Keys.decode_pem_ssh_file(pem, :public_key, :public_key)
+      {:ok, public_key, _priv} = Keys.decode_pem_ssh_file(pem, :public_key, :public_key)
 
       assert {{:ECPoint, pub}, {:namedCurve, _curve}} = public_key
       assert byte_size(pub) == 32
@@ -19,8 +24,7 @@ defmodule CryptoUtils.KeysTest do
     test "decodes an ed25519 private key" do
       {:ok, pem} = File.read("./test/support/fixtures/bob_example_ed25519.priv")
 
-      {:ok, _pub, private_key} =
-        CryptoUtils.Keys.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
+      {:ok, _pub, private_key} = Keys.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
 
       assert {:ECPrivateKey, 1, priv, {:namedCurve, _curve}, pub} = private_key
       assert byte_size(priv) == 32

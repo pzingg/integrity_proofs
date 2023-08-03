@@ -388,7 +388,7 @@ defmodule DidServer.Accounts do
         {:error, "could not locate did for user"}
 
       doc ->
-        CryptoUtils.Keys.get_public_key(doc, fmt, purpose)
+        CryptoUtils.Did.get_public_key(doc, fmt, purpose)
     end
   end
 

@@ -79,31 +79,6 @@ defmodule CryptoUtils.Keys do
     {public_key, private_key, public_key_format, private_key_format}
   end
 
-  def get_public_key(did_document, fmt, purpose \\ "assertionMethod")
-
-  def get_public_key(
-        %{"verificationMethod" => [%{"id" => first_vm_id} | _] = vm} = doc,
-        fmt,
-        purpose
-      ) do
-    vm_id =
-      case Map.get(doc, purpose) do
-        nil -> first_vm_id
-        id -> id
-      end
-
-    Enum.find(vm, fn %{"id" => id} -> String.ends_with?(id, vm_id) end)
-    |> case do
-      %{"publicKeyMultibase" => _value} = vm ->
-        CryptoUtils.Keys.extract_multikey(vm, fmt)
-
-      _ ->
-        {:error, "multibase method #{vm_id} not found in did document"}
-    end
-  end
-
-  def get_public_key(_doc, _fmt, _purpose), do: {:error, "not a valid did document"}
-
   @doc """
   Extracts the public key from a "Multikey" verification method.
 

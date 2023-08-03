@@ -84,7 +84,7 @@ defmodule Integrity do
 
     @impl true
     def exception(created) do
-      %__MODULE__{message: "Invalid proof datetime #{created}"}
+      %__MODULE__{message: "Invalid proof datetime #{inspect(created)}"}
     end
   end
 
@@ -223,8 +223,8 @@ defmodule Integrity do
 
     created = Keyword.get(options, :created)
 
-    if !valid_datetime?(created) do
-      raise Integrity.InvalidProofDatetimeError, maybe_format_datetime(created)
+    if !CryptoUtils.valid_datetime?(created) do
+      raise Integrity.InvalidProofDatetimeError, created
     end
 
     context = Keyword.get(options, :context) || Map.fetch!(unsecured_document, "@context")
@@ -233,7 +233,7 @@ defmodule Integrity do
       "@context": context,
       type: type,
       cryptosuite: cryptosuite,
-      created: maybe_format_datetime(created),
+      created: CryptoUtils.format_datetime(created),
       verificationMethod: verification_method,
       proofPurpose: proof_purpose
     }
@@ -599,27 +599,8 @@ defmodule Integrity do
     end)
   end
 
-  defp maybe_format_datetime(dt) when is_binary(dt), do: dt
-
-  defp maybe_format_datetime(%DateTime{} = dt) do
-    dt
-    |> DateTime.truncate(:second)
-    |> DateTime.to_iso8601(:extended, 0)
-  end
-
-  defp valid_datetime?(%DateTime{utc_offset: offset}), do: offset == 0
-
-  defp valid_datetime?(dt) when is_binary(dt) do
-    case DateTime.from_iso8601(dt) do
-      {:ok, _, 0} -> true
-      _ -> false
-    end
-  end
-
-  defp valid_datetime?(_), do: false
-
   defp valid_verification_method?(verification_method) when is_map(verification_method) do
-    case CryptoUtils.Keys.extract_multikey(verification_method) do
+    case CryptoUtils.Keys.extract_multikey(verification_method, :crypto_algo_key) do
       {:ok, _key} -> true
       _ -> false
     end

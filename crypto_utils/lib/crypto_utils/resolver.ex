@@ -81,7 +81,7 @@ defmodule CryptoUtils.Resolver do
 
     # opts = Keyword.put(opts, :headers, [{"accept", "application/json"}])
 
-    case apply(fetcher, :fetch, [url, opts]) do
+    case fetcher.fetch(url, opts) do
       {:ok, body} -> Jason.decode(body)
       error -> error
     end
@@ -93,7 +93,7 @@ defmodule CryptoUtils.Resolver do
     url = %URI{uri | path: "/#{parsed_did.did_string}"} |> URI.to_string()
     # opts = Keyword.put(opts, :headers, [{"accept", "application/json"}])
 
-    case apply(fetcher, :fetch, [url, opts]) do
+    case fetcher.fetch(url, opts) do
       {:ok, body} -> Jason.decode(body)
       error -> error
     end

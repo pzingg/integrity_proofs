@@ -144,6 +144,24 @@ defmodule DidServer.Log do
   def format_did_document(did) do
     op_data = get_last_op(did, :did_data)
 
+    %URI{scheme: scheme, host: host, port: port} =
+      Application.get_env(:did_server, :base_server, "https://example.com") |> URI.parse()
+
+    host =
+      if host == "127.0.0.1" do
+        "localhost"
+      else
+        host
+      end
+
+    host_port =
+      case {scheme, port} do
+        {_, nil} -> host
+        {:https, 443} -> host
+        {:http, 80} -> host
+        _ -> "#{host}:#{port}"
+      end
+
     case op_data do
       %{"verificationMethods" => vms, "alsoKnownAs" => akas}
       when is_map(vms) and map_size(vms) != 0 ->
@@ -183,11 +201,11 @@ defmodule DidServer.Log do
           services: %{
             "atproto_pds" => %{
               type: "AtprotoPersonalDataServer",
-              endpoint: "https://pds.example.com"
+              endpoint: "#{scheme}://pds.#{host_port}"
             },
             "activitypub" => %{
               type: "ActivityPubServer",
-              endpoint: "https://example.com"
+              endpoint: "#{scheme}://#{host_port}"
             }
           }
         )

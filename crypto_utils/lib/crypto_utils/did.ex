@@ -149,6 +149,8 @@ defmodule CryptoUtils.Did do
     "https://w3id.org/security/data-integrity/v1"
   ]
 
+  # DIDs
+
   @doc """
   Resolve the URL for a did:web identifier.
 
@@ -314,6 +316,8 @@ defmodule CryptoUtils.Did do
     raise InvalidDidError, identifier
   end
 
+  ## Creating DID documents
+
   @doc """
   Builds a DID document per § 3.1.1 Document Creation Algorithm.
 
@@ -329,9 +333,13 @@ defmodule CryptoUtils.Did do
      fail, an `InvalidDidError` MUST be raised.
   4. Initialize the `signature_verification_method` to the result of
      passing `identifier`, `multibase_value`, and `options` to § 3.1.2
-     Signature Method Creatio
-        "https://www.w3.org/ns/did/v1",
-        "https://w3id.org/security/data-integrity/v1"nd the `capabilityDelegation` properties
+     Signature Method Creation Algorithm.
+  5. Set `document.id` to `identifier`. If `document.id` is not a valid DID,
+     an `InvalidDidError` MUST be raised.
+  6. Initialize the `verificationMethod` property in `document` to an
+     array where the first value is the `signature_verification_method`.
+  7. Initialize the `authentication`, `assertionMethod`,
+    `capabilityInvocation`, and the `capabilityDelegation` properties
      in `document` to an array where the first item is the value of
      the `id` property in `signature_verification_method`.
   8.  If `options.enable_encryption_key_derivation` is set to `true`:
@@ -355,51 +363,82 @@ defmodule CryptoUtils.Did do
       verification_method: %{"id" => sig_vm_id} = signature_verification_method
     } = build_signature_method!(parsed_did, options)
 
-    vms =
+    relationships = %{
+      "assertionMethod" => [sig_vm_id],
+      "authentication" => [sig_vm_id],
+      "capabilityInvocation" => [sig_vm_id],
+      "capabilityDelegation" => [sig_vm_id]
+    }
+
+    {vms, relationships} =
       if Keyword.get(options, :enable_encryption_key_derivation, false) do
         %{
           context: _context,
-          verification_method: %{"id" => _enc_vm_id} = encryption_verification_method
+          verification_method: %{"id" => enc_vm_id} = encryption_verification_method
         } = build_encryption_method!(parsed_did, options)
 
-        [signature_verification_method, encryption_verification_method]
+        {[signature_verification_method, encryption_verification_method],
+         Map.put(relationships, "keyAgreement", enc_vm_id)}
       else
-        [signature_verification_method]
+        {[signature_verification_method], relationships}
       end
 
-    {vms, context} =
+    acc = {vms, relationships, @base_context ++ [sig_vm_context]}
+
+    {vms, relationships, context} =
       case Keyword.get(options, :additional_vms) do
         more when is_map(more) and map_size(more) != 0 ->
           Enum.reduce(
             more,
-            {vms, @base_context ++ [sig_vm_context]},
+            acc,
             fn
               {method_id,
                %{
                  type: type,
                  value: value
                } = vm_spec},
-              {acc_vms, acc_context} ->
+              {acc_vms, acc_rel, acc_context} ->
                 value_key = Map.get(vm_spec, :value_type, "publicKeyMultibase")
                 vm_context = Map.get(vm_spec, :context)
+                relationships = Map.get(vm_spec, :relationships, [])
+                vm_id = "#" <> method_id
 
                 vm = %{
-                  "id" => "#" <> method_id,
+                  "id" => vm_id,
                   "controller" => identifier,
                   "type" => type,
                   value_key => value
                 }
 
-                if is_nil(vm_context) do
-                  {acc_vms ++ [vm], acc_context}
-                else
-                  {acc_vms ++ [vm], acc_context ++ List.wrap(vm_context)}
-                end
+                acc_rel =
+                  case relationships do
+                    [] ->
+                      acc_rel
+
+                    rels when is_list(rels) ->
+                      Enum.reduce(rels, acc_rel, fn rel ->
+                        Map.update(acc_rel, rel, [], fn vm_ids ->
+                          case vm_ids do
+                            [] -> vm_id
+                            non_empty -> [vm_id | List.wrap(non_empty)]
+                          end
+                        end)
+                      end)
+                  end
+
+                acc_context =
+                  if is_nil(vm_context) do
+                    acc_context
+                  else
+                    acc_context ++ List.wrap(vm_context)
+                  end
+
+                {acc_vms ++ [vm], acc_rel, acc_context}
             end
           )
 
         _ ->
-          {vms, @base_context ++ [sig_vm_context]}
+          acc
       end
 
     document = %{
@@ -414,13 +453,9 @@ defmodule CryptoUtils.Did do
       end
 
     document =
-      Map.merge(document, %{
-        "verificationMethod" => vms,
-        "authentication" => [sig_vm_id],
-        "assertionMethod" => [sig_vm_id],
-        "capabilityInvocation" => [sig_vm_id],
-        "capabilityDelegation" => [sig_vm_id]
-      })
+      document
+      |> Map.put("verificationMethod", vms)
+      |> Map.merge(relationships)
 
     case Keyword.get(options, :services) do
       services when is_map(services) and map_size(services) != 0 ->
@@ -435,6 +470,94 @@ defmodule CryptoUtils.Did do
         document
     end
   end
+
+  @deprecated "Use format_did_document!/1 instead"
+  @doc """
+  Create a DID document per the AT Protocol.
+  """
+  def format_did_plc_document(%{"did" => did, "alsoKnownAs" => also_known_as} = data)
+      when is_binary(did) do
+    {context, verification_methods} =
+      Map.get(data, "verificationMethods", %{})
+      |> Enum.reduce(
+        {@base_context, []},
+        fn {key_id, key}, {ctx, vms} ->
+          %{context: context, type: type, public_key_multibase: public_key_multibase} =
+            context_and_key_for_did!(key)
+
+          ctx =
+            if context in [ctx] do
+              ctx
+            else
+              [context | ctx]
+            end
+
+          vms = [
+            %{
+              "id" => "#" <> key_id,
+              "type" => type,
+              "controller" => did,
+              "publicKeyMultibase" => public_key_multibase
+            }
+            | vms
+          ]
+
+          {ctx, vms}
+        end
+      )
+
+    services =
+      Map.get(data, "services", %{})
+      |> Enum.map(fn {service_id, %{"type" => type, "endpoint" => endpoint}} ->
+        %{"id" => "#" <> service_id, "type" => type, "serviceEndpoint" => endpoint}
+      end)
+
+    # REVIEW Why are these keys singular? "verificationMethod", "service"
+    %{
+      "@context" => Enum.reverse(context),
+      "id" => did,
+      "alsoKnownAs" => also_known_as,
+      "verificationMethod" => verification_methods,
+      "service" => services
+    }
+  end
+
+  ## Querying DID documents
+
+  def get_service_endpoint(%{"service" => svcs}, service_type) do
+    Enum.find(svcs, fn %{"type" => type} -> type == service_type end)
+    |> case do
+      %{"serviceEndpoint" => endpoint} -> {:ok, endpoint}
+      _ -> {:error, "service type #{service_type} not found in did document"}
+    end
+  end
+
+  def get_public_key(did_document, fmt, relationship \\ "assertionMethod")
+
+  def get_public_key(
+        %{"verificationMethod" => [%{"id" => first_vm_id} | _] = vm} = doc,
+        fmt,
+        relationship
+      ) do
+    vm_id =
+      case Map.get(doc, relationship) do
+        [id | _] -> "#" <> id
+        _ -> first_vm_id
+      end
+
+    Enum.find(vm, fn %{"id" => id} -> String.ends_with?(id, vm_id) end)
+    |> case do
+      %{"publicKeyMultibase" => _value} = vm ->
+        CryptoUtils.Keys.extract_multikey(vm, fmt)
+
+      _ ->
+        {:error, "multibase method #{vm_id} not found in did document"}
+    end
+  end
+
+  def get_public_key(_doc, _fmt, _relationship), do: {:error, "not a valid did document"}
+
+  ## DID document support
 
   @doc """
   Builds a verification method per § 3.1.2 Signature Method Creation
@@ -588,57 +711,6 @@ defmodule CryptoUtils.Did do
   defp valid_encryption_key_format?(format, options) do
     Keyword.get(options, :enable_experimental_key_types, false) ||
       format in @known_encryption_key_formats
-  end
-
-  @deprecated "Use format_did_document!/1 instead"
-  @doc """
-  Create a DID document per the AT Protocol.
-  """
-  def format_did_plc_document(%{"did" => did, "alsoKnownAs" => also_known_as} = data)
-      when is_binary(did) do
-    {context, verification_methods} =
-      Map.get(data, "verificationMethods", %{})
-      |> Enum.reduce(
-        {@base_context, []},
-        fn {key_id, key}, {ctx, vms} ->
-          %{context: context, type: type, public_key_multibase: public_key_multibase} =
-            context_and_key_for_did!(key)
-
-          ctx =
-            if context in [ctx] do
-              ctx
-            else
-              [context | ctx]
-            end
-
-          vms = [
-            %{
-              "id" => "#" <> key_id,
-              "type" => type,
-              "controller" => did,
-              "publicKeyMultibase" => public_key_multibase
-            }
-            | vms
-          ]
-
-          {ctx, vms}
-        end
-      )
-
-    services =
-      Map.get(data, "services", %{})
-      |> Enum.map(fn {service_id, %{"type" => type, "endpoint" => endpoint}} ->
-        %{"id" => "#" <> service_id, "type" => type, "serviceEndpoint" => endpoint}
-      end)
-
-    # REVIEW Why are these keys singular? "verificationMethod", "service"
-    %{
-      "@context" => Enum.reverse(context),
-      "id" => did,
-      "alsoKnownAs" => also_known_as,
-      "verificationMethod" => verification_methods,
-      "service" => services
-    }
   end
 
   def context_and_key_for_did!(did) do

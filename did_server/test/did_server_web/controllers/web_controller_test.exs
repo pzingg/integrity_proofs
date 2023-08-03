@@ -4,7 +4,7 @@ defmodule DidServerWeb.WebControllerTest do
   import DidServer.AccountsFixtures
 
   test "GET /.well-known/did.json", %{conn: conn} do
-    {:ok, user} =
+    {:ok, _user} =
       DidServer.Accounts.register_user(
         valid_user_attributes(username: "admin", domain: "example.com")
       )

@@ -44,7 +44,7 @@ defmodule DidServerWeb.ResolverTest do
 
   describe "resolves dids" do
     test "resolves a did:web", %{conn: conn} do
-      {:ok, user} =
+      {:ok, _user} =
         DidServer.Accounts.register_user(
           valid_user_attributes(username: "admin", domain: "example.com")
         )
