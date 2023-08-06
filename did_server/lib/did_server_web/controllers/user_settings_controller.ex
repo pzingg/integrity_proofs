@@ -18,7 +18,7 @@ defmodule DidServerWeb.UserSettingsController do
 
     case Accounts.apply_account_email(account, password, user_params) do
       {:ok, applied_account} ->
-        Accounts.deliver_account_update_email_instructions(
+        Accounts.deliver_user_update_email_instructions(
           applied_account,
           account.email,
           &url(~p"/users/settings/confirm_email/#{&1}")
@@ -84,7 +84,7 @@ defmodule DidServerWeb.UserSettingsController do
     # require_authenticated_user
     %{account: account} = conn.assigns.current_user
 
-    case Accounts.update_account_email(account, token) do
+    case Accounts.update_user_email(account, token) do
       :ok ->
         conn
         |> put_flash(:info, "Email changed successfully.")

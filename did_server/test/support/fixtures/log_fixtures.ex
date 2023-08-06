@@ -37,7 +37,7 @@ defmodule DidServer.LogFixtures do
 
   def recovery_keypair_fixture, do: @signer
   def signing_keypair_fixture, do: @signing_keypair
-  def unique_user_username, do: "user#{System.unique_integer()}"
+  def unique_account_username, do: "user#{System.unique_integer()}"
   def valid_did_password, do: @did_password
 
   def server_signing_key(path \\ nil) do
@@ -48,7 +48,7 @@ defmodule DidServer.LogFixtures do
   end
 
   def valid_create_op_attributes(attrs \\ %{}) do
-    username = unique_user_username()
+    username = unique_account_username()
     domain = @example_domain
 
     Enum.into(attrs, %{

@@ -2,6 +2,8 @@ defmodule DidServer.Identities.Key do
   use Ecto.Schema
   import Ecto.Changeset
 
+  require Logger
+
   @primary_key false
   schema "keys" do
     field :did, :string, primary_key: true
@@ -43,7 +45,7 @@ defmodule DidServer.Identities.Key do
     key
     |> cast(attrs, [:did, :method, :password, :password_confirmation])
     |> validate_required([:did])
-    |> unique_constraint(:did)
+    |> unique_constraint(:did, name: "keys_pkey")
     |> maybe_set_method()
     |> maybe_validate_password(opts)
   end
@@ -80,7 +82,7 @@ defmodule DidServer.Identities.Key do
   end
 
   def valid_password?(key, _) do
-    IO.puts("Did.valid_password? without hashed_password: #{inspect(key)}")
+    Logger.error("Did.valid_password? without hashed_password: #{inspect(key)}")
     Bcrypt.no_user_verify()
     false
   end
@@ -129,7 +131,6 @@ defmodule DidServer.Identities.Key do
   def maybe_hash_password(changeset, opts) do
     hash_password? = Keyword.get(opts, :hash_password, true)
     password = get_change(changeset, :password)
-    IO.puts("maybe_hash_password #{password} #{hash_password?}")
 
     if hash_password? && password && changeset.valid? do
       changeset

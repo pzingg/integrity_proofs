@@ -14,7 +14,7 @@ defmodule DidServerWeb.UserRegistrationController do
     case Accounts.register_account(user_params) do
       {:ok, user} ->
         {:ok, _} =
-          Accounts.deliver_account_confirmation_instructions(
+          Accounts.deliver_user_confirmation_instructions(
             user,
             &url(~p"/users/confirm/#{&1}")
           )

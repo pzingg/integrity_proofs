@@ -14,7 +14,7 @@ defmodule DidServerWeb.UserAuthTest do
       |> Map.replace!(:secret_key_base, DidServerWeb.Endpoint.config(:secret_key_base))
       |> init_test_session(%{})
 
-    %{user: user_fixture(), conn: conn}
+    %{user: account_fixture(), conn: conn}
   end
 
   describe "log_in_user/3" do

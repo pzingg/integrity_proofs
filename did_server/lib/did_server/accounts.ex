@@ -205,7 +205,7 @@ defmodule DidServer.Accounts do
          (valid_username?(username) && valid_domain?(domain)) do
       {username, domain}
     else
-      IO.puts("rejected invalid '#{username}' dot '#{domain}'")
+      Logger.error("rejected invalid '#{username}' dot '#{domain}'")
       nil
     end
   end
@@ -403,27 +403,27 @@ defmodule DidServer.Accounts do
   If the token matches, the account email is updated and the token is deleted.
   The confirmed_at date is also updated to the current time.
   """
-  def update_account_email(account, token) do
+  def update_user_email(%User{account: account} = user, token) do
     context = "change:#{account.email}"
 
     with {:ok, query} <- UserToken.verify_change_email_token_query(token, context),
          %UserToken{sent_to: email} <- Repo.one(query),
-         {:ok, _} <- Repo.transaction(account_email_multi(account, email, context)) do
+         {:ok, _} <- Repo.transaction(user_email_multi(user, email, context)) do
       :ok
     else
       _ -> :error
     end
   end
 
-  defp account_email_multi(account, email, context) do
-    changeset =
+  defp user_email_multi(%User{account: account} = user, email, context) do
+    account_changeset =
       account
       |> Account.email_changeset(%{email: email})
       |> Account.confirm_changeset()
 
     Ecto.Multi.new()
-    |> Ecto.Multi.update(:account, changeset)
-    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(account, [context]))
+    |> Ecto.Multi.update(:account, account_changeset)
+    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, [context]))
   end
 
   @doc ~S"""
@@ -431,17 +431,17 @@ defmodule DidServer.Accounts do
 
   ## Examples
 
-      iex> deliver_account_update_email_instructions(account, current_email, &url(~p"/users/settings/confirm_email/#{&1})")
+      iex> deliver_user_update_email_instructions(user, current_email, &url(~p"/users/settings/confirm_email/#{&1})")
       {:ok, %{to: ..., body: ...}}
 
   """
-  def deliver_account_update_email_instructions(
-        %Account{} = account,
+  def deliver_user_update_email_instructions(
+        %User{account: account} = user,
         current_email,
         update_email_url_fun
       )
       when is_function(update_email_url_fun, 1) do
-    {encoded_token, user_token} = UserToken.build_email_token(account, "change:#{current_email}")
+    {encoded_token, user_token} = UserToken.build_email_token(user, "change:#{current_email}")
 
     Repo.insert!(user_token)
     UserNotifier.deliver_update_email_instructions(account, update_email_url_fun.(encoded_token))
@@ -495,7 +495,6 @@ defmodule DidServer.Accounts do
   """
   def generate_user_session_token(user) do
     {token, user_token} = UserToken.build_session_token(user)
-    Logger.error("generate #{inspect(user_token)}")
     Repo.insert!(user_token)
     token
   end
@@ -523,19 +522,19 @@ defmodule DidServer.Accounts do
 
   ## Examples
 
-      iex> deliver_account_confirmation_instructions(account, &url(~p"/users/confirm/#{&1}"))
+      iex> deliver_user_confirmation_instructions(user, &url(~p"/users/confirm/#{&1}"))
       {:ok, %{to: ..., body: ...}}
 
-      iex> deliver_account_confirmation_instructions(confirmed_user, &url(~p"/users/confirm/#{&1}"))
+      iex> deliver_user_confirmation_instructions(confirmed_user, &url(~p"/users/confirm/#{&1}"))
       {:error, :already_confirmed}
 
   """
-  def deliver_account_confirmation_instructions(%Account{} = account, confirmation_url_fun)
+  def deliver_user_confirmation_instructions(%User{account: account} = user, confirmation_url_fun)
       when is_function(confirmation_url_fun, 1) do
     if account.confirmed_at do
       {:error, :already_confirmed}
     else
-      {encoded_token, user_token} = UserToken.build_email_token(account, "confirm")
+      {encoded_token, user_token} = UserToken.build_email_token(user, "confirm")
       Repo.insert!(user_token)
 
       UserNotifier.deliver_confirmation_instructions(
@@ -551,7 +550,7 @@ defmodule DidServer.Accounts do
   If the token matches, the account is marked as confirmed
   and the token is deleted.
   """
-  def confirm_account(token) do
+  def confirm_user(token) do
     with {:ok, query} <- UserToken.verify_email_token_query(token, "confirm"),
          %User{} = user <- Repo.one(query) |> Repo.preload(:account),
          {:ok, %{account: account}} <- Repo.transaction(confirm_user_multi(user)) do
@@ -561,7 +560,7 @@ defmodule DidServer.Accounts do
     end
   end
 
-  defp confirm_user_multi(%{account: account} = user) do
+  defp confirm_user_multi(%User{account: account} = user) do
     Ecto.Multi.new()
     |> Ecto.Multi.update(:account, Account.confirm_changeset(account))
     |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, ["confirm"]))
@@ -574,13 +573,16 @@ defmodule DidServer.Accounts do
 
   ## Examples
 
-      iex> deliver_account_reset_password_instructions(account, &url(~p"/users/reset_password/#{&1}"))
+      iex> deliver_user_reset_password_instructions(user, &url(~p"/users/reset_password/#{&1}"))
       {:ok, %{to: ..., body: ...}}
 
   """
-  def deliver_account_reset_password_instructions(%Account{} = account, reset_password_url_fun)
+  def deliver_user_reset_password_instructions(
+        %User{account: account} = user,
+        reset_password_url_fun
+      )
       when is_function(reset_password_url_fun, 1) do
-    {encoded_token, user_token} = UserToken.build_email_token(account, "reset_password")
+    {encoded_token, user_token} = UserToken.build_email_token(user, "reset_password")
     Repo.insert!(user_token)
 
     UserNotifier.deliver_reset_password_instructions(

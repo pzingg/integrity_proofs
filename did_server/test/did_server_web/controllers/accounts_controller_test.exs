@@ -6,7 +6,7 @@ defmodule DidServerWeb.AccountsControllerTest do
   alias DidServer.Accounts.Account
 
   test "gets actor JSON data", %{conn: conn} do
-    user = user_fixture()
+    user = account_fixture()
     ap_id = Account.ap_id(user)
     handle = Account.domain_handle(user)
 
@@ -19,7 +19,7 @@ defmodule DidServerWeb.AccountsControllerTest do
   end
 
   test "gets actor HTML data", %{conn: conn} do
-    user = user_fixture()
+    user = account_fixture()
     handle = Account.domain_handle(user)
 
     conn =
@@ -32,7 +32,7 @@ defmodule DidServerWeb.AccountsControllerTest do
   end
 
   test "gets profile HTML data", %{conn: conn} do
-    user = user_fixture()
+    user = account_fixture()
     handle = Account.domain_handle(user)
 
     conn =

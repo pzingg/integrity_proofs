@@ -3,6 +3,7 @@ defmodule DidServer.Accounts.UserToken do
   import Ecto.Query
   import Ecto.Changeset
 
+  alias DidServer.Accounts.User
   alias __MODULE__
 
   @hash_algorithm :sha256
@@ -20,7 +21,7 @@ defmodule DidServer.Accounts.UserToken do
     field(:context, :string, primary_key: true)
     field(:token, :binary, primary_key: true)
     field(:sent_to, :string)
-    belongs_to(:user, Accounts.User, type: Ecto.UUID)
+    belongs_to(:user, DidServer.Accounts.User, type: Ecto.UUID)
 
     timestamps(updated_at: false)
   end
@@ -88,7 +89,7 @@ defmodule DidServer.Accounts.UserToken do
   Users can easily adapt the existing code to provide other types of delivery methods,
   for example, by phone numbers.
   """
-  def build_email_token(%{id: user_id, user: %{email: email}}, context) do
+  def build_email_token(%User{id: user_id, account: %{email: email}}, context) do
     build_hashed_token(user_id, context, email)
   end
 

@@ -5,7 +5,7 @@ config :did_server, DidServer.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "did_log",
+  database: "did_server",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

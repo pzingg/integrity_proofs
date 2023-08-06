@@ -8,17 +8,17 @@ defmodule DidServer.AccountsFixtures do
 
   @example_domain "example.com"
 
-  def unique_user_email, do: "#{unique_user_username()}@#{@example_domain}"
-  def unique_user_username, do: "user#{System.unique_integer()}"
-  defdelegate valid_user_password, to: DidServer.LogFixtures, as: :valid_did_password
+  def unique_account_email, do: "#{unique_account_username()}@#{@example_domain}"
+  def unique_account_username, do: "user#{System.unique_integer()}"
+  defdelegate valid_account_password, to: DidServer.LogFixtures, as: :valid_did_password
 
-  def valid_user_attributes(attrs \\ %{}) do
-    username = unique_user_username()
+  def valid_account_attributes(attrs \\ %{}) do
+    username = unique_account_username()
     display_name = "Joe #{String.capitalize(username)}"
     description = "Hi, I'm #{display_name}"
     domain = @example_domain
     email = "#{username}@#{domain}"
-    password = valid_user_password()
+    password = valid_account_password()
     keypair = DidServer.LogFixtures.server_signing_key()
 
     Enum.into(attrs, %{
@@ -28,22 +28,28 @@ defmodule DidServer.AccountsFixtures do
       username: username,
       domain: domain,
       password: password,
-      signing_key: Keypair.to_json(keypair),
+      signer: Keypair.to_json(keypair),
+      signing_key: Keypair.did(keypair),
       recovery_key: Keypair.did(keypair)
     })
   end
 
-  def user_fixture(attrs \\ %{}) do
+  def account_fixture(attrs \\ %{}) do
     attrs
-    |> valid_user_attributes()
+    |> valid_account_attributes()
     |> DidServer.Accounts.register_account()
     |> case do
-      {:ok, user} ->
-        user
+      {:ok, account} ->
+        account
 
       {:error, changeset} ->
-        raise RuntimeError, "user fixture failed #{inspect(changeset.errors)}"
+        raise RuntimeError, "account fixture failed #{inspect(changeset.errors)}"
     end
+  end
+
+  def user_fixture(attrs \\ %{}) do
+    account = account_fixture(attrs) |> DidServer.Repo.preload(:users)
+    hd(account.users) |> DidServer.Repo.preload(:account)
   end
 
   def extract_user_token(fun) do
