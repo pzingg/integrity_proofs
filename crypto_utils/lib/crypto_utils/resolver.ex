@@ -5,6 +5,8 @@ defmodule CryptoUtils.Resolver do
   """
   @behaviour CryptoUtils.Fetcher
 
+  require Logger
+
   alias CryptoUtils.Did
 
   @doc """
@@ -62,7 +64,7 @@ defmodule CryptoUtils.Resolver do
       end
     rescue
       error ->
-        IO.inspect(error)
+        Logger.error("parsing did failed: #{inspect(error)}")
         {:error, "invalid did #{did}"}
     end
   end

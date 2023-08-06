@@ -88,7 +88,7 @@ defmodule DidServerWeb.PlcController do
   end
 
   def domain_did(conn, _params) do
-    did = DidServer.Log.get_domain_key()
+    did = DidServer.Identities.get_domain_key()
     render_did_document_or_error(conn, did)
   end
 
@@ -151,7 +151,7 @@ defmodule DidServerWeb.PlcController do
   end
 
   def render_did_document_or_error(conn, did) do
-    case DidServer.Log.format_did_document(did) do
+    case DidServer.Identities.format_did_document(did) do
       nil ->
         render_error(conn, 404, "DID not registered: #{did}")
 

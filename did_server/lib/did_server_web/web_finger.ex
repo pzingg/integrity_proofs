@@ -128,7 +128,7 @@ defmodule DidServerWeb.WebFinger do
               Map.put(data, "subscribe_address", link["template"])
 
             _ ->
-              Logger.debug("Unhandled type: #{inspect(link["type"])}")
+              Logger.error("Unhandled type: #{inspect(link["type"])}")
               data
           end
         end)
@@ -239,7 +239,7 @@ defmodule DidServerWeb.WebFinger do
       if res == "", do: nil, else: res
     catch
       _e ->
-        Logger.debug("Couldn't find xpath #{xpath} in XML doc")
+        Logger.error("Couldn't find xpath #{xpath} in XML doc")
         nil
     end
   end
@@ -254,11 +254,11 @@ defmodule DidServerWeb.WebFinger do
       {:ok, doc}
     rescue
       _e ->
-        Logger.debug("Couldn't parse XML: #{inspect(text)}")
+        Logger.error("Couldn't parse XML: #{text}")
         :error
     catch
       :exit, _error ->
-        Logger.debug("Couldn't parse XML: #{inspect(text)}")
+        Logger.error("Couldn't parse XML: #{text}")
         :error
     end
   end

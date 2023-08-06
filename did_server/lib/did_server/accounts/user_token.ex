@@ -1,7 +1,10 @@
 defmodule DidServer.Accounts.UserToken do
   use Ecto.Schema
   import Ecto.Query
-  alias DidServer.Accounts.UserToken
+  import Ecto.Changeset
+
+  alias DidServer.Identities
+  alias __MODULE__
 
   @hash_algorithm :sha256
   @rand_size 32
@@ -13,11 +16,12 @@ defmodule DidServer.Accounts.UserToken do
   @change_email_validity_in_days 7
   @session_validity_in_days 60
 
+  @primary_key false
   schema "users_tokens" do
-    field :token, :binary
-    field :context, :string
-    field :sent_to, :string
-    belongs_to :user, DidServer.Accounts.User
+    field(:context, :string, primary_key: true)
+    field(:token, :binary, primary_key: true)
+    field(:sent_to, :string)
+    belongs_to(:user_key, Identities.UserKey, foreign_key: :user_id, type: Ecto.UUID)
 
     timestamps(updated_at: false)
   end
@@ -41,9 +45,16 @@ defmodule DidServer.Accounts.UserToken do
   and devices in the UI and allow users to explicitly expire any
   session they deem invalid.
   """
-  def build_session_token(user) do
+  def build_session_token(user_key) do
     token = :crypto.strong_rand_bytes(@rand_size)
-    {token, %UserToken{token: token, context: "session", user_id: user.id}}
+    {token, changeset(%{user_id: user_key.id, context: "session", token: token})}
+  end
+
+  defp changeset(attrs) do
+    %UserToken{}
+    |> cast(attrs, [:user_id, :context, :token, :sent_to])
+    |> validate_required([:user_id, :context, :token])
+    |> foreign_key_constraint(:user_id, name: "users_tokens_user_id_fkey")
   end
 
   @doc """
@@ -56,10 +67,11 @@ defmodule DidServer.Accounts.UserToken do
   """
   def verify_session_token_query(token) do
     query =
-      from token in token_and_context_query(token, "session"),
-        join: user in assoc(token, :user),
+      from(token in token_and_context_query(token, "session"),
+        join: user_key in assoc(token, :user_key),
         where: token.inserted_at > ago(@session_validity_in_days, "day"),
-        select: user
+        select: user_key
+      )
 
     {:ok, query}
   end
@@ -77,21 +89,16 @@ defmodule DidServer.Accounts.UserToken do
   Users can easily adapt the existing code to provide other types of delivery methods,
   for example, by phone numbers.
   """
-  def build_email_token(user, context) do
-    build_hashed_token(user, context, user.email)
+  def build_email_token(%{id: user_id, user: %{email: email}}, context) do
+    build_hashed_token(user_id, context, email)
   end
 
-  defp build_hashed_token(user, context, sent_to) do
+  defp build_hashed_token(user_id, context, sent_to) do
     token = :crypto.strong_rand_bytes(@rand_size)
     hashed_token = :crypto.hash(@hash_algorithm, token)
 
     {Base.url_encode64(token, padding: false),
-     %UserToken{
-       token: hashed_token,
-       context: context,
-       sent_to: sent_to,
-       user_id: user.id
-     }}
+     changeset(%{user_id: user_id, context: context, token: hashed_token, sent_to: sent_to})}
   end
 
   @doc """
@@ -114,10 +121,12 @@ defmodule DidServer.Accounts.UserToken do
         days = days_for_context(context)
 
         query =
-          from token in token_and_context_query(hashed_token, context),
-            join: user in assoc(token, :user),
+          from(token in token_and_context_query(hashed_token, context),
+            join: user_key in assoc(token, :user_key),
+            join: user in assoc(user_key, :user),
             where: token.inserted_at > ago(^days, "day") and token.sent_to == user.email,
-            select: user
+            select: user_key
+          )
 
         {:ok, query}
 
@@ -149,8 +158,9 @@ defmodule DidServer.Accounts.UserToken do
         hashed_token = :crypto.hash(@hash_algorithm, decoded_token)
 
         query =
-          from token in token_and_context_query(hashed_token, context),
+          from(token in token_and_context_query(hashed_token, context),
             where: token.inserted_at > ago(@change_email_validity_in_days, "day")
+          )
 
         {:ok, query}
 
@@ -163,17 +173,17 @@ defmodule DidServer.Accounts.UserToken do
   Returns the token struct for the given token value and context.
   """
   def token_and_context_query(token, context) do
-    from UserToken, where: [token: ^token, context: ^context]
+    from(UserToken, where: [token: ^token, context: ^context])
   end
 
   @doc """
   Gets all tokens for the given user for the given contexts.
   """
   def user_and_contexts_query(user, :all) do
-    from t in UserToken, where: t.user_id == ^user.id
+    from(t in UserToken, where: t.user_id == ^user.id)
   end
 
   def user_and_contexts_query(user, [_ | _] = contexts) do
-    from t in UserToken, where: t.user_id == ^user.id and t.context in ^contexts
+    from(t in UserToken, where: t.user_id == ^user.id and t.context in ^contexts)
   end
 end

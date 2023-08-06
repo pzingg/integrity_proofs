@@ -1,16 +1,19 @@
-defmodule DidServer.Log.Key do
+defmodule DidServer.Identities.Key do
   use Ecto.Schema
   import Ecto.Changeset
 
   @primary_key false
   schema "keys" do
-    field(:did, :string, primary_key: true)
-    field(:method, :string)
-    field(:password, :string, virtual: true, redact: true)
-    field(:hashed_password, :string, redact: true)
+    field :did, :string, primary_key: true
+    field :method, :string
+    field :current_user_id, :integer, virtual: true
+    # Password authentication
+    field :password, :string, virtual: true, redact: true
+    field :password_confirmation, :string, virtual: true, redact: true
+    field :hashed_password, :string, redact: true
 
-    has_many(:users_keys, DidServer.Accounts.UserKey, references: :did, foreign_key: :key_id)
-    has_many(:users, through: [:users_keys, :user])
+    has_many :users_keys, DidServer.Identities.UserKey, references: :did, foreign_key: :key_id
+    has_many :users, through: [:users_keys, :user]
 
     timestamps()
   end
@@ -38,9 +41,9 @@ defmodule DidServer.Log.Key do
   """
   def changeset(%__MODULE__{} = key, attrs, opts \\ []) do
     key
-    |> cast(attrs, [:did, :method, :password])
+    |> cast(attrs, [:did, :method, :password, :password_confirmation])
     |> validate_required([:did])
-    |> unique_constraint(:did, name: "keys_pkey")
+    |> unique_constraint(:did)
     |> maybe_set_method()
     |> maybe_validate_password(opts)
   end
@@ -59,7 +62,8 @@ defmodule DidServer.Log.Key do
   """
   def password_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:password])
+    |> cast(attrs, [:current_user_id, :password, :password_confirmation])
+    |> validate_required(:current_user_id)
     |> validate_confirmation(:password, message: "does not match password")
     |> validate_password(opts)
   end
@@ -125,6 +129,7 @@ defmodule DidServer.Log.Key do
   def maybe_hash_password(changeset, opts) do
     hash_password? = Keyword.get(opts, :hash_password, true)
     password = get_change(changeset, :password)
+    IO.puts("maybe_hash_password #{password} #{hash_password?}")
 
     if hash_password? && password && changeset.valid? do
       changeset

@@ -8,7 +8,7 @@ defmodule DidServerWeb.WebController do
 
   def domain_did(conn, _params) do
     %{username: "admin", domain: @domain}
-    |> DidServer.Accounts.get_did_document()
+    |> DidServer.Identities.get_did_document()
     |> case do
       doc when is_map(doc) ->
         render(conn, :show, document: doc)
@@ -24,7 +24,7 @@ defmodule DidServerWeb.WebController do
   def show(conn, %{"path" => path}) do
     if Enum.count(path) > 1 && List.last(path) == "did.json" do
       with %{username: _username, domain: _domain} = user <- parse_user(path),
-           doc when is_map(doc) <- DidServer.Accounts.get_did_document(user) do
+           doc when is_map(doc) <- DidServer.Identities.get_did_document(user) do
         render(conn, :show, document: doc)
       else
         _ ->

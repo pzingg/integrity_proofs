@@ -5,6 +5,9 @@ defmodule DidServerWeb.UserAuth do
   import Phoenix.Controller
 
   alias DidServer.Accounts
+  alias DidServer.Accounts.User
+  alias DidServer.Identities
+  alias DidServer.Identities.UserKey
 
   # Make the remember me cookie valid for 60 days.
   # If you want bump or reduce this value, also change
@@ -25,8 +28,14 @@ defmodule DidServerWeb.UserAuth do
   disconnected on log out. The line can be safely removed
   if you are not using LiveView.
   """
-  def log_in_user(conn, user, params \\ %{}) do
-    token = Accounts.generate_user_session_token(user)
+  def log_in_user(conn, user_or_user_key, params \\ %{})
+
+  def log_in_user(conn, %User{} = user, params) do
+    log_in_user(conn, Identities.get_user_key(user), params)
+  end
+
+  def log_in_user(conn, %UserKey{} = user_key, params) do
+    token = Accounts.generate_user_session_token(user_key)
     user_return_to = get_session(conn, :user_return_to)
 
     conn
@@ -34,6 +43,12 @@ defmodule DidServerWeb.UserAuth do
     |> put_token_in_session(token)
     |> maybe_write_remember_me_cookie(token, params)
     |> redirect(to: user_return_to || signed_in_path(conn))
+  end
+
+  def log_in_user(conn, _, _params) do
+    conn
+    |> put_flash(:error, "Cannot fetch key for user")
+    |> redirect(to: ~p"/home")
   end
 
   defp maybe_write_remember_me_cookie(conn, token, %{"remember_me" => "true"}) do
@@ -81,7 +96,7 @@ defmodule DidServerWeb.UserAuth do
     conn
     |> renew_session()
     |> delete_resp_cookie(@remember_me_cookie)
-    |> redirect(to: ~p"/")
+    |> redirect(to: ~p"/home")
   end
 
   @doc """
@@ -90,8 +105,8 @@ defmodule DidServerWeb.UserAuth do
   """
   def fetch_current_user(conn, _opts) do
     {user_token, conn} = ensure_user_token(conn)
-    user = user_token && Accounts.get_user_by_session_token(user_token)
-    assign(conn, :current_user, user)
+    user_key = user_token && Accounts.get_user_by_session_token(user_token)
+    assign(conn, :current_user, user_key)
   end
 
   defp ensure_user_token(conn) do
@@ -223,5 +238,5 @@ defmodule DidServerWeb.UserAuth do
 
   defp maybe_store_return_to(conn), do: conn
 
-  defp signed_in_path(_conn), do: ~p"/"
+  defp signed_in_path(_conn), do: ~p"/users/settings"
 end

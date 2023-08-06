@@ -2,8 +2,10 @@ defmodule DidServer.Accounts.User do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias DidServer.Accounts
+  alias DidServer.{Accounts, Identities}
+  alias DidServer.Identities.Key
 
+  @primary_key {:id, :binary_id, autogenerate: true}
   schema "users" do
     field :email, :string
     field :username, :string
@@ -19,12 +21,14 @@ defmodule DidServer.Accounts.User do
     # used when linking to existing DID
     field :did, :string, virtual: true
     # used when creating a new DID
-    field :signing_key, {:array, :binary}, virtual: true
+    field :signer, {:array, :binary}, virtual: true
+    field :signing_key, :string, virtual: true
     field :recovery_key, :string, virtual: true
     field :password, :string, virtual: true, redact: true
 
-    has_many :users_keys, DidServer.Accounts.UserKey
+    has_many :users_keys, DidServer.Identities.UserKey
     has_many :keys, through: [:users_keys, :key]
+    has_many :credentials, through: [:users_keys, :credentials]
 
     timestamps()
   end
@@ -82,6 +86,7 @@ defmodule DidServer.Accounts.User do
       :display_name,
       :password,
       :did,
+      :signer,
       :signing_key,
       :recovery_key
     ])
@@ -149,8 +154,8 @@ defmodule DidServer.Accounts.User do
   """
   def valid_password?(%__MODULE__{} = user, password) when byte_size(password) > 0 do
     did_that_validated =
-      DidServer.Accounts.list_keys_by_user(user, true)
-      |> Enum.find(fn did -> DidServer.Log.Key.valid_password?(did, password) end)
+      Identities.list_keys_by_user(user, true)
+      |> Enum.find(fn did -> Key.valid_password?(did, password) end)
 
     !is_nil(did_that_validated)
   end
@@ -213,7 +218,7 @@ defmodule DidServer.Accounts.User do
       |> validate_format(:did, ~r/^did\:([a-z]+)\:[:a-z0-9]+$/, message: "must be a valid DID")
     else
       changeset
-      |> validate_required([:signing_key])
+      |> validate_required([:signer])
     end
   end
 

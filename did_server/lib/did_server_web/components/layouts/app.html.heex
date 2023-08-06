@@ -26,12 +26,22 @@
       >
         GitHub
       </a>
-      <a
-        href="https://hexdocs.pm/phoenix/overview.html"
-        class="rounded-lg bg-zinc-100 px-2 py-1 text-[0.8125rem] font-semibold leading-6 text-zinc-900 hover:bg-zinc-200/80 active:text-zinc-900/70"
-      >
-        Get Started <span aria-hidden="true">&rarr;</span>
-      </a>
+      <%= if @conn.assigns[:current_user] do %>
+        <.link
+          href={~p"/users/log_out"}
+          method="delete"
+          class="rounded-lg bg-zinc-100 px-2 py-1 text-[0.8125rem] font-semibold leading-6 text-zinc-900 hover:bg-zinc-200/80 active:text-zinc-900/70"
+        >
+          Log Out
+        </.link>
+      <% else %>
+        <a
+          href="https://hexdocs.pm/phoenix/overview.html"
+          class="rounded-lg bg-zinc-100 px-2 py-1 text-[0.8125rem] font-semibold leading-6 text-zinc-900 hover:bg-zinc-200/80 active:text-zinc-900/70"
+        >
+          Get Started <span aria-hidden="true">&rarr;</span>
+        </a>
+      <% end %>
     </div>
   </div>
 </header>

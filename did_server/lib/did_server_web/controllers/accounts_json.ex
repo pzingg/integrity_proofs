@@ -81,7 +81,7 @@ defmodule DidServerWeb.AccountsJSON do
     published = NaiveDateTime.utc_now() |> CryptoUtils.format_datetime()
 
     public_key_pem =
-      with {:ok, public_key} <- DidServer.Accounts.get_public_key(user, :public_key),
+      with {:ok, public_key} <- DidServer.Identities.get_public_key(user, :public_key),
            {:ok, pem} <- CryptoUtils.Keys.encode_pem_public_key(public_key) do
         pem
       else

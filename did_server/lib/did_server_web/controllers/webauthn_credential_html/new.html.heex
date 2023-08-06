@@ -1,0 +1,129 @@
+<div class="mx-auto max-w-sm">
+  <.header>
+    Passkey Authentication
+    <:subtitle>
+      <%= if @login do %>
+        <p>Hello <em><%= @login %></em>!</p>
+      <% else %>
+        <p>Hello!</p>
+      <% end %>
+      <%= if @with_webauthn do %>
+        <.button id="safari-button" style="display:none" onclick="triggerAuthenticate()">
+          Authenticate
+        </.button>
+        <img id="auth-img" src={static_path(@conn, "/images/fingerprint-scanning.svg")} />
+        <%= if @login do %>
+          <p><em><%= String.capitalize(@login) %></em>, press your authenticator now!</p>
+        <% else %>
+          <p>Press your authenticator now!</p>
+        <% end %>
+      <% end %>
+    </:subtitle>
+  </.header>
+
+  <.simple_form
+    :let={f}
+    for={@conn.params["user"]}
+    as={:webauthn}
+    id="waf"
+    action={~p"/wauth/log_in"}
+  >
+    <.input field={f[:rawID]} type="hidden" />
+    <.input field={f[:type]} type="hidden" />
+    <.input field={f[:clientDataJSON]} type="hidden" />
+    <.input field={f[:authenticatorData]} type="hidden" />
+    <.input field={f[:sig]} type="hidden" />
+    <.input field={f[:userHandle]} type="hidden" />
+  </.simple_form>
+
+  <p style="font-size:0.6em; color: grey">
+    Image from
+    <a style="color: grey" href="https://www.flaticon.com/free-icon/fingerprint-scanning_25930">
+      https://www.flaticon.com/free-icon/fingerprint-scanning_25930
+    </a>
+  </p>
+</div>
+
+<script>
+  document.getElementById("webauthn_support").value = typeof(PublicKeyCredential) != "undefined"
+</script>
+
+<%= if @with_webauthn do %>
+  <script>
+    function _arrayBufferToString( buffer ) {
+      var binary = '';
+      var bytes = new Uint8Array( buffer );
+      var len = bytes.byteLength;
+      for (var i = 0; i < len; i++) {
+        binary += String.fromCharCode( bytes[ i ] );
+      }
+      return binary;
+    }
+
+    function _arrayBufferToBase64( buffer ) {
+      var binary = '';
+      var bytes = new Uint8Array( buffer );
+      var len = bytes.byteLength;
+      for (var i = 0; i < len; i++) {
+        binary += String.fromCharCode( bytes[ i ] );
+      }
+      return window.btoa( binary );
+    }
+
+    function _base64ToArrayBuffer(base64) {
+        var binary_string =  window.atob(base64);
+        var len = binary_string.length;
+        var bytes = new Uint8Array( len );
+        for (var i = 0; i < len; i++)        {
+            bytes[i] = binary_string.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+
+    function triggerAuthenticate(){
+      document.getElementById('safari-button').style.display = 'none';
+      document.getElementById('auth-img').style.display = 'inline';
+
+      navigator.credentials.get({
+        publicKey: {
+          challenge: _base64ToArrayBuffer("<%= @challenge %>"),
+
+          allowCredentials: [
+          <%= for cred_id <- @cred_ids do %>
+            {
+              id: _base64ToArrayBuffer("<%= cred_id %>"),
+              type: "public-key"
+            },
+          <% end %>
+          ]
+        }
+      }).then(function (newCredential) {
+        // .simple_form prefixes input id with the form id
+        document.getElementById('waf_rawID').value = _arrayBufferToBase64(newCredential.rawId);
+        document.getElementById('waf_type').value = newCredential.type;
+        document.getElementById('waf_clientDataJSON').value =
+          _arrayBufferToString(newCredential.response.clientDataJSON)
+        document.getElementById('waf_authenticatorData').value =
+          _arrayBufferToBase64(newCredential.response.authenticatorData)
+        document.getElementById('waf_sig').value =
+          _arrayBufferToBase64(newCredential.response.signature)
+        if(newCredential.response.userHandle){
+          document.getElementById('waf_userHandle').value =
+            _arrayBufferToBase64(newCredential.response.userHandle)
+          }
+
+        document.getElementById('waf').submit();
+      }).catch((err) => {
+        if(err.name == 'NotAllowedError') {
+            document.getElementById('safari-button').style.display = 'inline-block';
+            document.getElementById('auth-img').style.display = 'none';
+          }
+        else {
+            console.log(err);
+          }
+      });
+    }
+
+    triggerAuthenticate()
+  </script>
+<% end %>

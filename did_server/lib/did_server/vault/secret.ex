@@ -19,7 +19,7 @@ defmodule DidServer.Vault.Secret do
     secret
     |> cast(attrs, [:name, :description, :secret, :key_id, :nonce])
     |> validate_required([:secret])
-    |> unique_constraint([:name])
+    |> unique_constraint(:name)
     |> generate_key_id_and_nonce()
   end
 

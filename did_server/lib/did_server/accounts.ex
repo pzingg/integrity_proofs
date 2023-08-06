@@ -4,12 +4,25 @@ defmodule DidServer.Accounts do
   """
 
   import Ecto.Query, warn: false
-  alias DidServer.Repo
 
-  alias DidServer.Accounts.{User, UserKey, UserToken, UserNotifier}
-  alias DidServer.Log.Key
+  require Logger
+
+  alias DidServer.Repo
+  alias DidServer.Accounts.{User, UserToken, UserNotifier}
+  alias DidServer.Identities.UserKey
 
   ## Database getters
+
+  def list_users_by_did(did) when is_binary(did) do
+    did = DidServer.Identities.get_key!(did) |> Repo.preload(:users)
+    did.users
+  end
+
+  def list_also_known_as_users(user) do
+    DidServer.Identities.list_keys_by_user(user)
+    |> Enum.map(&list_users_by_did(&1))
+    |> List.flatten()
+  end
 
   @doc """
   Gets a user by email.
@@ -24,7 +37,7 @@ defmodule DidServer.Accounts do
 
   """
   def get_user_by_email(email) when is_binary(email) do
-    Repo.get_by(User, email: email)
+    Repo.get_by(User, email: email) |> Repo.preload(:keys)
   end
 
   @doc """
@@ -41,7 +54,7 @@ defmodule DidServer.Accounts do
   """
   def get_user_by_email_and_password(email, password)
       when is_binary(email) and is_binary(password) do
-    user = Repo.get_by(User, email: email)
+    user = Repo.get_by(User, email: email) |> Repo.preload(:keys)
     if User.valid_password?(user, password), do: user
   end
 
@@ -51,6 +64,13 @@ defmodule DidServer.Accounts do
       where: user.domain == ^domain
     )
     |> Repo.one()
+    |> Repo.preload(:keys)
+  end
+
+  def get_user_by_username_and_password(username, domain, password)
+      when is_binary(username) and is_binary(domain) and is_binary(password) do
+    user = get_user_by_username(username, domain)
+    if User.valid_password?(user, password), do: user
   end
 
   def get_user_by_identifier(handle) when is_binary(handle) do
@@ -216,7 +236,7 @@ defmodule DidServer.Accounts do
       ** (Ecto.NoResultsError)
 
   """
-  def get_user!(id), do: Repo.get!(User, id)
+  def get_user!(id), do: Repo.get!(User, id) |> Repo.preload(:keys)
 
   ## User registration
 
@@ -242,15 +262,8 @@ defmodule DidServer.Accounts do
       if is_nil(existing_did) do
         # Create did
         Ecto.Multi.run(multi, :did, fn _, %{user: user} ->
-          signer = Ecto.Changeset.get_change(user_changeset, :signing_key)
-
-          signing_key =
-            if is_list(signer) do
-              hd(signer)
-            else
-              nil
-            end
-
+          signer = Ecto.Changeset.get_change(user_changeset, :signer)
+          signing_key = Ecto.Changeset.get_change(user_changeset, :signing_key, hd(signer))
           recovery_key = Ecto.Changeset.get_change(user_changeset, :recovery_key, signing_key)
 
           params = %{
@@ -285,7 +298,9 @@ defmodule DidServer.Accounts do
       {:error, :user, %Ecto.Changeset{} = changeset, _} ->
         {:error, changeset}
 
-      {:error, :did, _, _} ->
+      {:error, :did, {:error, changeset_or_reason}, _} ->
+        Logger.error("multi did error #{inspect(changeset_or_reason)}")
+
         message =
           if is_nil(existing_did) do
             "could not create did"
@@ -298,7 +313,7 @@ defmodule DidServer.Accounts do
   end
 
   defp multi_add_link(did, user) do
-    case DidServer.Log.add_also_known_as(did, user) do
+    case DidServer.Identities.add_also_known_as(did, user) do
       {:ok, _user} -> {:ok, did}
       _error -> {:error, "failed to link did #{did} to user #{user.email}"}
     end
@@ -315,81 +330,6 @@ defmodule DidServer.Accounts do
   """
   def change_user_registration(%User{} = user, attrs \\ %{}) do
     User.registration_changeset(user, attrs, validate_email: false)
-  end
-
-  ## DIDs
-
-  def list_keys_by_user(user, return_structs? \\ false) do
-    user = Repo.preload(user, :keys)
-
-    if return_structs? do
-      user.keys
-    else
-      Enum.map(user.keys, fn %{did: did} -> did end)
-    end
-  end
-
-  def list_keys_by_username(username, domain, return_structs? \\ false) do
-    keys =
-      from(key in Key,
-        join: user_key in UserKey,
-        on: user_key.key_id == key.did,
-        join: user in User,
-        on: user.id == user_key.user_id,
-        where: user.username == ^username,
-        where: user.domain == ^domain
-      )
-      |> Repo.all()
-
-    if return_structs? do
-      keys
-    else
-      Enum.map(keys, fn %{did: did} -> did end)
-    end
-  end
-
-  def list_users_by_did(did) when is_binary(did) do
-    did = DidServer.Log.get_key!(did) |> Repo.preload(:users)
-    did.users
-  end
-
-  def list_also_known_as_users(user) do
-    list_keys_by_user(user)
-    |> Enum.map(&list_users_by_did(&1))
-    |> List.flatten()
-  end
-
-  @doc """
-  Builds a did document.
-  """
-  def get_did_document(%User{} = user) do
-    case list_keys_by_user(user) do
-      [did] ->
-        DidServer.Log.format_did_document(did)
-
-      [] ->
-        nil
-    end
-  end
-
-  def get_did_document(%{username: username, domain: domain}) do
-    case list_keys_by_username(username, domain) do
-      [did] ->
-        DidServer.Log.format_did_document(did)
-
-      [] ->
-        nil
-    end
-  end
-
-  def get_public_key(user, fmt, purpose \\ "assertionMethod") do
-    case get_did_document(user) do
-      nil ->
-        {:error, "could not locate did for user"}
-
-      doc ->
-        CryptoUtils.Did.get_public_key(doc, fmt, purpose)
-    end
   end
 
   ## Server statistics
@@ -548,18 +488,19 @@ defmodule DidServer.Accounts do
   @doc """
   Generates a session token.
   """
-  def generate_user_session_token(user) do
-    {token, user_token} = UserToken.build_session_token(user)
+  def generate_user_session_token(user_key) do
+    {token, user_token} = UserToken.build_session_token(user_key)
+    Logger.error("generate #{inspect(user_token)}")
     Repo.insert!(user_token)
     token
   end
 
   @doc """
-  Gets the user with the given signed token.
+  Gets the `UserKey` with the given signed token.
   """
   def get_user_by_session_token(token) do
     {:ok, query} = UserToken.verify_session_token_query(token)
-    Repo.one(query)
+    Repo.one(query) |> Repo.preload([:user, :key])
   end
 
   @doc """
@@ -603,18 +544,18 @@ defmodule DidServer.Accounts do
   """
   def confirm_user(token) do
     with {:ok, query} <- UserToken.verify_email_token_query(token, "confirm"),
-         %User{} = user <- Repo.one(query),
-         {:ok, %{user: user}} <- Repo.transaction(confirm_user_multi(user)) do
+         %UserKey{} = user_key <- Repo.one(query) |> Repo.preload(:user),
+         {:ok, %{user: user}} <- Repo.transaction(confirm_user_multi(user_key)) do
       {:ok, user}
     else
       _ -> :error
     end
   end
 
-  defp confirm_user_multi(user) do
+  defp confirm_user_multi(%{user: user} = user_key) do
     Ecto.Multi.new()
     |> Ecto.Multi.update(:user, User.confirm_changeset(user))
-    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, ["confirm"]))
+    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user_key, ["confirm"]))
   end
 
   ## Reset password
@@ -649,8 +590,8 @@ defmodule DidServer.Accounts do
   """
   def get_user_by_reset_password_token(token) do
     with {:ok, query} <- UserToken.verify_email_token_query(token, "reset_password"),
-         %User{} = user <- Repo.one(query) do
-      user
+         %UserKey{} = user_key <- Repo.one(query) |> Repo.preload(:user) do
+      user_key
     else
       _ -> nil
     end

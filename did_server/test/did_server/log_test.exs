@@ -9,7 +9,7 @@ defmodule DidServer.LogTest do
   @rotation_key_2 Keypair.generate(:secp256k1, :did_key)
 
   describe "keys" do
-    alias DidServer.Log.Key
+    alias DidServer.Identities.Key
 
     import DidServer.LogFixtures
 

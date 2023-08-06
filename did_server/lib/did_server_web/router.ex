@@ -1,16 +1,17 @@
 defmodule DidServerWeb.Router do
   use DidServerWeb, :router
 
-  # import DidServerWeb.UserAuth
+  import DidServerWeb.UserAuth
 
   pipeline :browser do
     plug(:accepts, ["html"])
-    # plug :fetch_session
+    plug(:fetch_session)
     # plug :fetch_live_flash
+    plug(:fetch_flash)
     plug(:put_root_layout, {DidServerWeb.Layouts, :root})
-    # plug :protect_from_forgery
-    # plug :put_secure_browser_headers
-    # plug :fetch_current_user
+    plug(:protect_from_forgery)
+    plug(:put_secure_browser_headers)
+    plug(:fetch_current_user)
   end
 
   pipeline :plain do
@@ -55,7 +56,35 @@ defmodule DidServerWeb.Router do
   end
 
   ## Authentication routes
-  # TODO
+
+  scope "/", DidServerWeb do
+    pipe_through([:browser])
+
+    delete("/users/log_out", UserSessionController, :delete)
+  end
+
+  scope "/", DidServerWeb do
+    pipe_through([:browser, :redirect_if_user_is_authenticated])
+
+    get("/users/register", UserRegistrationController, :new)
+    post("/users/register", UserRegistrationController, :create)
+
+    get("/wauth/log_in", WebAuthnCredentialController, :new)
+    post("/wauth/log_in", WebAuthnCredentialController, :create)
+
+    get("/users/log_in", UserSessionController, :new)
+    post("/users/log_in", UserSessionController, :create)
+  end
+
+  scope "/", DidServerWeb do
+    pipe_through([:browser, :require_authenticated_user])
+
+    get("/wauth/register", WebAuthnKeyController, :new)
+    post("/wauth/register", WebAuthnKeyController, :create)
+
+    get("/users/settings", UserSettingsController, :edit)
+    put("/users/settings", UserSettingsController, :update)
+  end
 
   scope "/users", DidServerWeb do
     pipe_through(:dual)

@@ -61,7 +61,7 @@ I am experimenting with an idea of multiple user "personas" all under the umbrel
 
 Each persona has its own display name, user name, domain name, and profile information (description, avatar, banner). The schema for the persona is the `DidServer.Accounts.User` module.
 
-The identity did holds the single hashed password for authentication. Any of the personas linked to the did can use this password for authentication. The schema for the did is the `DidServer.Log.Key` module.
+The identity did holds the single hashed password for authentication. Any of the personas linked to the did can use this password for authentication. The schema for the did is the `DidServer.Identities.Key` module.
 
 The thing I'm finding difficult to understand from the Bluesky protocols, is where the private keys for the "signing key" (a public-private keypair) and for the "rotation keys" (each one a keypair) come from, and if and where they need to be stored.
 
