@@ -31,7 +31,7 @@ defmodule DidServer.Identities.Credential do
     field :raw_id, :string, primary_key: true
     field :cose_key, Identities.EctoCoseKey
     field :aaguid, :string
-    belongs_to :user, Accounts.User, foreign_key: :user_id, type: Ecto.UUID
+    belongs_to :user, DidServer.Accounts.User, type: Ecto.UUID
 
     timestamps(updated_at: false)
   end

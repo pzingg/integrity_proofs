@@ -42,6 +42,10 @@ defmodule DidServer.Application do
     Application.get_env(:did_server, :server_domain, "example.com")
   end
 
+  def email_from do
+    Application.get_env(:did_server, :email_from, "support@example.com")
+  end
+
   def version do
     {:ok, vsn} = :application.get_key(:did_server, :vsn)
     List.to_string(vsn)
