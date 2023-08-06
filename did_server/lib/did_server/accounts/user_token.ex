@@ -3,7 +3,6 @@ defmodule DidServer.Accounts.UserToken do
   import Ecto.Query
   import Ecto.Changeset
 
-  alias DidServer.Identities
   alias __MODULE__
 
   @hash_algorithm :sha256
@@ -21,7 +20,7 @@ defmodule DidServer.Accounts.UserToken do
     field(:context, :string, primary_key: true)
     field(:token, :binary, primary_key: true)
     field(:sent_to, :string)
-    belongs_to(:user_key, Identities.UserKey, foreign_key: :user_id, type: Ecto.UUID)
+    belongs_to(:user, Accounts.User, type: Ecto.UUID)
 
     timestamps(updated_at: false)
   end
@@ -45,9 +44,9 @@ defmodule DidServer.Accounts.UserToken do
   and devices in the UI and allow users to explicitly expire any
   session they deem invalid.
   """
-  def build_session_token(user_key) do
+  def build_session_token(user) do
     token = :crypto.strong_rand_bytes(@rand_size)
-    {token, changeset(%{user_id: user_key.id, context: "session", token: token})}
+    {token, changeset(%{user_id: user.id, context: "session", token: token})}
   end
 
   defp changeset(attrs) do
@@ -68,9 +67,9 @@ defmodule DidServer.Accounts.UserToken do
   def verify_session_token_query(token) do
     query =
       from(token in token_and_context_query(token, "session"),
-        join: user_key in assoc(token, :user_key),
+        join: user in assoc(token, :user),
         where: token.inserted_at > ago(@session_validity_in_days, "day"),
-        select: user_key
+        select: user
       )
 
     {:ok, query}
@@ -122,10 +121,10 @@ defmodule DidServer.Accounts.UserToken do
 
         query =
           from(token in token_and_context_query(hashed_token, context),
-            join: user_key in assoc(token, :user_key),
-            join: user in assoc(user_key, :user),
-            where: token.inserted_at > ago(^days, "day") and token.sent_to == user.email,
-            select: user_key
+            join: user in assoc(token, :user),
+            join: account in assoc(user, :account),
+            where: token.inserted_at > ago(^days, "day") and token.sent_to == account.email,
+            select: user
           )
 
         {:ok, query}

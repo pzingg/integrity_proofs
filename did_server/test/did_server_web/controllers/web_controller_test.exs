@@ -5,7 +5,7 @@ defmodule DidServerWeb.WebControllerTest do
 
   test "GET /.well-known/did.json", %{conn: conn} do
     {:ok, _user} =
-      DidServer.Accounts.register_user(
+      DidServer.Accounts.register_account(
         valid_user_attributes(username: "admin", domain: "example.com")
       )
 

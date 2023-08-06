@@ -9,7 +9,7 @@ defmodule DidServerWeb.UserSessionController do
   end
 
   def create(conn, %{"user" => %{"email" => email, "password" => password} = user_params}) do
-    if user = Accounts.get_user_by_email_and_password(email, password) do
+    if user = Accounts.get_account_by_email_and_password(email, password) do
       conn
       |> put_flash(:info, "Welcome back!")
       |> UserAuth.log_in_user(user, user_params)
@@ -23,7 +23,7 @@ defmodule DidServerWeb.UserSessionController do
         "user" =>
           %{"username" => username, "domain" => domain, "password" => password} = user_params
       }) do
-    if user = Accounts.get_user_by_username_and_password(username, domain, password) do
+    if user = Accounts.get_account_by_username_and_password(username, domain, password) do
       conn
       |> put_flash(:info, "Welcome back!")
       |> UserAuth.log_in_user(user, user_params)

@@ -4,34 +4,34 @@ defmodule DidServer.AccountsTest do
   alias DidServer.Accounts
 
   import DidServer.AccountsFixtures
-  alias DidServer.Accounts.{User, UserToken}
+  alias DidServer.Accounts.{Account, UserToken}
 
-  describe "get_user_by_email/1" do
+  describe "get_account_by_email/1" do
     test "does not return the user if the email does not exist" do
-      refute Accounts.get_user_by_email("unknown@example.com")
+      refute Accounts.get_account_by_email("unknown@example.com")
     end
 
     test "returns the user if the email exists" do
       %{id: id, email: email} = user_fixture()
-      assert %User{id: ^id} = Accounts.get_user_by_email(email)
+      assert %Account{id: ^id} = Accounts.get_account_by_email(email)
     end
   end
 
-  describe "get_user_by_email_and_password/2" do
+  describe "get_account_by_email_and_password/2" do
     test "does not return the user if the email does not exist" do
-      refute Accounts.get_user_by_email_and_password("unknown@example.com", "hello world!")
+      refute Accounts.get_account_by_email_and_password("unknown@example.com", "hello world!")
     end
 
     test "does not return the user if the password is not valid" do
       user = user_fixture()
-      refute Accounts.get_user_by_email_and_password(user.email, "invalid")
+      refute Accounts.get_account_by_email_and_password(user.email, "invalid")
     end
 
     test "returns the user if the email and password are valid" do
       %{id: id, email: email} = user_fixture()
 
-      assert %User{id: ^id} =
-               Accounts.get_user_by_email_and_password(email, valid_user_password())
+      assert %Account{id: ^id} =
+               Accounts.get_account_by_email_and_password(email, valid_user_password())
     end
   end
 
@@ -44,13 +44,13 @@ defmodule DidServer.AccountsTest do
 
     test "returns the user with the given id" do
       %{id: id} = user = user_fixture()
-      assert %User{id: ^id} = Accounts.get_user!(user.id)
+      assert %Account{id: ^id} = Accounts.get_user!(user.id)
     end
   end
 
-  describe "register_user/1" do
+  describe "register_account/1" do
     test "requires email and username to be set" do
-      assert {:error, changeset} = Accounts.register_user(%{})
+      assert {:error, changeset} = Accounts.register_account(%{})
 
       assert %{
                email: ["can't be blank"],
@@ -63,7 +63,7 @@ defmodule DidServer.AccountsTest do
 
     test "validates email and password when given" do
       {:error, changeset} =
-        Accounts.register_user(%{
+        Accounts.register_account(%{
           email: "not valid",
           username: "a",
           domain: "no"
@@ -80,24 +80,24 @@ defmodule DidServer.AccountsTest do
 
     test "validates maximum values for email and password for security" do
       too_long = String.duplicate("db", 100)
-      {:error, changeset} = Accounts.register_user(%{email: too_long, password: too_long})
+      {:error, changeset} = Accounts.register_account(%{email: too_long, password: too_long})
       assert "should be at most 160 character(s)" in errors_on(changeset).email
       # assert "should be at most 72 character(s)" in errors_on(changeset).password
     end
 
     test "validates email uniqueness" do
       %{email: email} = user_fixture()
-      {:error, changeset} = Accounts.register_user(%{email: email})
+      {:error, changeset} = Accounts.register_account(%{email: email})
       assert "has already been taken" in errors_on(changeset).email
 
       # Now try with the upper cased email too, to check that email case is ignored.
-      {:error, changeset} = Accounts.register_user(%{email: String.upcase(email)})
+      {:error, changeset} = Accounts.register_account(%{email: String.upcase(email)})
       assert "has already been taken" in errors_on(changeset).email
     end
 
     test "registers users with a hashed password" do
       email = unique_user_email()
-      {:ok, user} = Accounts.register_user(valid_user_attributes(email: email))
+      {:ok, user} = Accounts.register_account(valid_user_attributes(email: email))
       assert user.email == email
       assert is_nil(user.confirmed_at)
       # assert is_binary(user.hashed_password)
@@ -105,9 +105,9 @@ defmodule DidServer.AccountsTest do
     end
   end
 
-  describe "change_user_registration/2" do
+  describe "change_account_registration/2" do
     test "returns a changeset" do
-      assert %Ecto.Changeset{} = changeset = Accounts.change_user_registration(%User{})
+      assert %Ecto.Changeset{} = changeset = Accounts.change_account_registration(%Account{})
 
       assert MapSet.new(changeset.required) ==
                MapSet.new([:email, :username, :domain, :signing_key])
@@ -120,8 +120,8 @@ defmodule DidServer.AccountsTest do
       description = "Hi, I'm #{display_name}"
 
       changeset =
-        Accounts.change_user_registration(
-          %User{},
+        Accounts.change_account_registration(
+          %Account{},
           valid_user_attributes(
             email: email,
             display_name: display_name,
@@ -144,26 +144,26 @@ defmodule DidServer.AccountsTest do
     end
   end
 
-  describe "change_user_email/2" do
+  describe "change_account_email/2" do
     test "returns a user changeset" do
-      assert %Ecto.Changeset{} = changeset = Accounts.change_user_email(%User{})
+      assert %Ecto.Changeset{} = changeset = Accounts.change_account_email(%Account{})
       assert changeset.required == [:email]
     end
   end
 
-  describe "apply_user_email/3" do
+  describe "apply_account_email/3" do
     setup do
       %{user: user_fixture()}
     end
 
     test "requires email to change", %{user: user} do
-      {:error, changeset} = Accounts.apply_user_email(user, valid_user_password(), %{})
+      {:error, changeset} = Accounts.apply_account_email(user, valid_user_password(), %{})
       assert %{email: ["did not change"]} = errors_on(changeset)
     end
 
     test "validates email", %{user: user} do
       {:error, changeset} =
-        Accounts.apply_user_email(user, valid_user_password(), %{email: "not valid"})
+        Accounts.apply_account_email(user, valid_user_password(), %{email: "not valid"})
 
       assert %{email: ["must have the @ sign and no spaces"]} = errors_on(changeset)
     end
@@ -172,7 +172,7 @@ defmodule DidServer.AccountsTest do
       too_long = String.duplicate("db", 100)
 
       {:error, changeset} =
-        Accounts.apply_user_email(user, valid_user_password(), %{email: too_long})
+        Accounts.apply_account_email(user, valid_user_password(), %{email: too_long})
 
       assert "should be at most 160 character(s)" in errors_on(changeset).email
     end
@@ -181,27 +181,27 @@ defmodule DidServer.AccountsTest do
       %{email: email} = user_fixture()
       password = valid_user_password()
 
-      {:error, changeset} = Accounts.apply_user_email(user, password, %{email: email})
+      {:error, changeset} = Accounts.apply_account_email(user, password, %{email: email})
 
       assert "has already been taken" in errors_on(changeset).email
     end
 
     test "validates current password", %{user: user} do
       {:error, changeset} =
-        Accounts.apply_user_email(user, "invalid", %{email: unique_user_email()})
+        Accounts.apply_account_email(user, "invalid", %{email: unique_user_email()})
 
       assert %{current_password: ["is not valid"]} = errors_on(changeset)
     end
 
     test "applies the email without persisting it", %{user: user} do
       email = unique_user_email()
-      {:ok, user} = Accounts.apply_user_email(user, valid_user_password(), %{email: email})
+      {:ok, user} = Accounts.apply_account_email(user, valid_user_password(), %{email: email})
       assert user.email == email
       assert Accounts.get_user!(user.id).email != email
     end
   end
 
-  describe "deliver_user_update_email_instructions/3" do
+  describe "deliver_account_update_email_instructions/3" do
     setup do
       %{user: user_fixture()}
     end
@@ -209,7 +209,7 @@ defmodule DidServer.AccountsTest do
     test "sends token through notification", %{user: user} do
       token =
         extract_user_token(fn url ->
-          Accounts.deliver_user_update_email_instructions(user, "current@example.com", url)
+          Accounts.deliver_account_update_email_instructions(user, "current@example.com", url)
         end)
 
       {:ok, token} = Base.url_decode64(token, padding: false)
@@ -220,22 +220,26 @@ defmodule DidServer.AccountsTest do
     end
   end
 
-  describe "update_user_email/2" do
+  describe "update_account_email/2" do
     setup do
       user = user_fixture()
       email = unique_user_email()
 
       token =
         extract_user_token(fn url ->
-          Accounts.deliver_user_update_email_instructions(%{user | email: email}, user.email, url)
+          Accounts.deliver_account_update_email_instructions(
+            %{user | email: email},
+            user.email,
+            url
+          )
         end)
 
       %{user: user, token: token, email: email}
     end
 
     test "updates the email with a valid token", %{user: user, token: token, email: email} do
-      assert Accounts.update_user_email(user, token) == :ok
-      changed_user = Repo.get!(User, user.id)
+      assert Accounts.update_account_email(user, token) == :ok
+      changed_user = Repo.get!(Account, user.id)
       assert changed_user.email != user.email
       assert changed_user.email == email
       assert changed_user.confirmed_at
@@ -244,21 +248,23 @@ defmodule DidServer.AccountsTest do
     end
 
     test "does not update email with invalid token", %{user: user} do
-      assert Accounts.update_user_email(user, "oops") == :error
-      assert Repo.get!(User, user.id).email == user.email
+      assert Accounts.update_account_email(user, "oops") == :error
+      assert Repo.get!(Account, user.id).email == user.email
       assert Repo.get_by(UserToken, user_id: user.id)
     end
 
     test "does not update email if user email changed", %{user: user, token: token} do
-      assert Accounts.update_user_email(%{user | email: "current@example.com"}, token) == :error
-      assert Repo.get!(User, user.id).email == user.email
+      assert Accounts.update_account_email(%{user | email: "current@example.com"}, token) ==
+               :error
+
+      assert Repo.get!(Account, user.id).email == user.email
       assert Repo.get_by(UserToken, user_id: user.id)
     end
 
     test "does not update email if token expired", %{user: user, token: token} do
       {1, nil} = Repo.update_all(UserToken, set: [inserted_at: ~N[2020-01-01 00:00:00]])
-      assert Accounts.update_user_email(user, token) == :error
-      assert Repo.get!(User, user.id).email == user.email
+      assert Accounts.update_account_email(user, token) == :error
+      assert Repo.get!(Account, user.id).email == user.email
       assert Repo.get_by(UserToken, user_id: user.id)
     end
   end
@@ -315,7 +321,7 @@ defmodule DidServer.AccountsTest do
     end
   end
 
-  describe "deliver_user_confirmation_instructions/2" do
+  describe "deliver_account_confirmation_instructions/2" do
     setup do
       %{user: user_fixture()}
     end
@@ -323,7 +329,7 @@ defmodule DidServer.AccountsTest do
     test "sends token through notification", %{user: user} do
       token =
         extract_user_token(fn url ->
-          Accounts.deliver_user_confirmation_instructions(user, url)
+          Accounts.deliver_account_confirmation_instructions(user, url)
         end)
 
       {:ok, token} = Base.url_decode64(token, padding: false)
@@ -340,7 +346,7 @@ defmodule DidServer.AccountsTest do
 
       token =
         extract_user_token(fn url ->
-          Accounts.deliver_user_confirmation_instructions(user, url)
+          Accounts.deliver_account_confirmation_instructions(user, url)
         end)
 
       %{user: user, token: token}
@@ -350,25 +356,25 @@ defmodule DidServer.AccountsTest do
       assert {:ok, confirmed_user} = Accounts.confirm_user(token)
       assert confirmed_user.confirmed_at
       assert confirmed_user.confirmed_at != user.confirmed_at
-      assert Repo.get!(User, user.id).confirmed_at
+      assert Repo.get!(Account, user.id).confirmed_at
       refute Repo.get_by(UserToken, user_id: user.id)
     end
 
     test "does not confirm with invalid token", %{user: user} do
       assert Accounts.confirm_user("oops") == :error
-      refute Repo.get!(User, user.id).confirmed_at
+      refute Repo.get!(Account, user.id).confirmed_at
       assert Repo.get_by(UserToken, user_id: user.id)
     end
 
     test "does not confirm email if token expired", %{user: user, token: token} do
       {1, nil} = Repo.update_all(UserToken, set: [inserted_at: ~N[2020-01-01 00:00:00]])
       assert Accounts.confirm_user(token) == :error
-      refute Repo.get!(User, user.id).confirmed_at
+      refute Repo.get!(Account, user.id).confirmed_at
       assert Repo.get_by(UserToken, user_id: user.id)
     end
   end
 
-  describe "deliver_user_reset_password_instructions/2" do
+  describe "deliver_account_reset_password_instructions/2" do
     setup do
       %{user: user_fixture()}
     end
@@ -376,7 +382,7 @@ defmodule DidServer.AccountsTest do
     test "sends token through notification", %{user: user} do
       token =
         extract_user_token(fn url ->
-          Accounts.deliver_user_reset_password_instructions(user, url)
+          Accounts.deliver_account_reset_password_instructions(user, url)
         end)
 
       {:ok, token} = Base.url_decode64(token, padding: false)
@@ -393,14 +399,14 @@ defmodule DidServer.AccountsTest do
 
       token =
         extract_user_token(fn url ->
-          Accounts.deliver_user_reset_password_instructions(user, url)
+          Accounts.deliver_account_reset_password_instructions(user, url)
         end)
 
       %{user: user, token: token}
     end
 
     test "returns the user with valid token", %{user: %{id: id}, token: token} do
-      assert %User{id: ^id} = Accounts.get_user_by_reset_password_token(token)
+      assert %Account{id: ^id} = Accounts.get_user_by_reset_password_token(token)
       assert Repo.get_by(UserToken, user_id: id)
     end
 

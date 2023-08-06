@@ -23,9 +23,9 @@ defmodule DidServerWeb.WebAuthnCredentialController do
           } = webauthn_params
       }) do
     maybe_user_handle = if maybe_user_handle_b64 <> "", do: Base.decode64!(maybe_user_handle_b64)
-    user_key = Identities.get_user_key(maybe_user_handle)
+    user = Identities.get_user_key(maybe_user_handle)
 
-    if is_nil(user_key) do
+    if is_nil(user) do
       authentication_failed(conn, "No user found for handle")
     else
       authenticator_data_raw = Base.decode64!(authenticator_data_b64)
@@ -48,7 +48,7 @@ defmodule DidServerWeb.WebAuthnCredentialController do
 
         conn
         |> put_flash(:info, "Welcome back!")
-        |> UserAuth.log_in_user(user_key, webauthn_params)
+        |> UserAuth.log_in_user(user, webauthn_params)
       else
         {:error, e} ->
           authentication_failed(conn, Exception.message(e))
@@ -77,7 +77,7 @@ defmodule DidServerWeb.WebAuthnCredentialController do
   end
 
   defp login_with_handle(conn, %{user: user, credentials: credentials} = _user_key) do
-    handle = DidServer.Accounts.User.domain_handle(user)
+    handle = DidServer.Accounts.Account.domain_handle(user)
 
     case credentials do
       [] ->

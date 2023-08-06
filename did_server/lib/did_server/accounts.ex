@@ -8,103 +8,102 @@ defmodule DidServer.Accounts do
   require Logger
 
   alias DidServer.Repo
-  alias DidServer.Accounts.{User, UserToken, UserNotifier}
-  alias DidServer.Identities.UserKey
+  alias DidServer.Accounts.{Account, User, UserToken, UserNotifier}
 
   ## Database getters
 
-  def list_users_by_did(did) when is_binary(did) do
-    did = DidServer.Identities.get_key!(did) |> Repo.preload(:users)
-    did.users
+  def list_accounts_by_did(did) when is_binary(did) do
+    did = DidServer.Identities.get_key!(did)
+    did.accounts
   end
 
-  def list_also_known_as_users(user) do
-    DidServer.Identities.list_keys_by_user(user)
-    |> Enum.map(&list_users_by_did(&1))
+  def list_also_known_as_accounts(%Account{} = account) do
+    DidServer.Identities.list_keys_by_account(account)
+    |> Enum.map(&list_accounts_by_did(&1))
     |> List.flatten()
   end
 
   @doc """
-  Gets a user by email.
+  Gets an account by email.
 
   ## Examples
 
-      iex> get_user_by_email("foo@example.com")
-      %User{}
+      iex> get_account_by_email("foo@example.com")
+      %Account{}
 
-      iex> get_user_by_email("unknown@example.com")
+      iex> get_account_by_email("unknown@example.com")
       nil
 
   """
-  def get_user_by_email(email) when is_binary(email) do
-    Repo.get_by(User, email: email) |> Repo.preload(:keys)
+  def get_account_by_email(email) when is_binary(email) do
+    Repo.get_by(Account, email: email) |> Repo.preload(:keys)
   end
 
   @doc """
-  Gets a user by email and password.
+  Gets an account by email and password.
 
   ## Examples
 
-      iex> get_user_by_email_and_password("foo@example.com", "correct_password")
-      %User{}
+      iex> get_account_by_email_and_password("foo@example.com", "correct_password")
+      %Account{}
 
-      iex> get_user_by_email_and_password("foo@example.com", "invalid_password")
+      iex> get_account_by_email_and_password("foo@example.com", "invalid_password")
       nil
 
   """
-  def get_user_by_email_and_password(email, password)
+  def get_account_by_email_and_password(email, password)
       when is_binary(email) and is_binary(password) do
-    user = Repo.get_by(User, email: email) |> Repo.preload(:keys)
-    if User.valid_password?(user, password), do: user
+    account = Repo.get_by(Account, email: email) |> Repo.preload(:keys)
+    if Account.valid_password?(account, password), do: account
   end
 
-  def get_user_by_username(username, domain) when is_binary(username) and is_binary(domain) do
-    from(user in User,
-      where: user.username == ^username,
-      where: user.domain == ^domain
+  def get_account_by_username(username, domain) when is_binary(username) and is_binary(domain) do
+    from(account in Account,
+      where: account.username == ^username,
+      where: account.domain == ^domain
     )
     |> Repo.one()
     |> Repo.preload(:keys)
   end
 
-  def get_user_by_username_and_password(username, domain, password)
+  def get_account_by_username_and_password(username, domain, password)
       when is_binary(username) and is_binary(domain) and is_binary(password) do
-    user = get_user_by_username(username, domain)
-    if User.valid_password?(user, password), do: user
+    account = get_account_by_username(username, domain)
+    if Account.valid_password?(account, password), do: account
   end
 
-  def get_user_by_identifier(handle) when is_binary(handle) do
-    case parse_user_identifier(handle) do
+  def get_account_by_identifier(handle) when is_binary(handle) do
+    case parse_account_identifier(handle) do
       {username, domain} ->
-        get_user_by_username(username, domain)
+        get_account_by_username(username, domain)
 
       _ ->
         nil
     end
   end
 
-  def get_user_by_domain_handle(handle) when is_binary(handle) do
+  def get_account_by_domain_handle(handle) when is_binary(handle) do
     case parse_domain_handle(handle) do
-      {username, domain} -> get_user_by_username(username, domain)
+      {username, domain} -> get_account_by_username(username, domain)
       _ -> nil
     end
   end
 
-  def get_user_by_ap_id(ap_id) when is_binary(ap_id) do
+  def get_account_by_ap_id(ap_id) when is_binary(ap_id) do
     case parse_ap_id(ap_id) do
-      {username, domain} -> get_user_by_username(username, domain)
+      {username, domain} -> get_account_by_username(username, domain)
       _ -> nil
     end
   end
 
-  def get_user_by_ap_acct(acct) when is_binary(acct) do
+  def get_account_by_ap_acct(acct) when is_binary(acct) do
     case parse_ap_acct(acct) do
-      {username, domain} -> get_user_by_username(username, domain)
+      {username, domain} -> get_account_by_username(username, domain)
       _ -> nil
     end
   end
 
-  def parse_user_identifier(handle) do
+  def parse_account_identifier(handle) do
     case URI.parse(handle) do
       %URI{scheme: "at"} ->
         parse_domain_handle(handle)
@@ -223,62 +222,62 @@ defmodule DidServer.Accounts do
   end
 
   @doc """
-  Gets a single user.
+  Gets a single account.
 
-  Raises `Ecto.NoResultsError` if the User does not exist.
+  Raises `Ecto.NoResultsError` if the Account does not exist.
 
   ## Examples
 
-      iex> get_user!(123)
-      %User{}
+      iex> get_account!("abcde-ghkchie")
+      %Account{}
 
-      iex> get_user!(456)
+      iex> get_account!("not-a-uuid")
       ** (Ecto.NoResultsError)
 
   """
-  def get_user!(id), do: Repo.get!(User, id) |> Repo.preload(:keys)
+  def get_account!(id), do: Repo.get!(Account, id) |> Repo.preload(:keys)
 
-  ## User registration
+  ## Account registration
 
   @doc """
-  Registers a user.
+  Registers an account.
 
   ## Examples
 
-      iex> register_user(%{field: value})
-      {:ok, %User{}}
+      iex> register_account(%{field: value})
+      {:ok, %Account{}}
 
-      iex> register_user(%{field: bad_value})
+      iex> register_account(%{field: bad_value})
       {:error, %Ecto.Changeset{}}
 
   """
-  def register_user(attrs) do
-    user_changeset = User.registration_changeset(%User{}, attrs)
-    multi = Ecto.Multi.new() |> Ecto.Multi.insert(:user, user_changeset)
+  def register_account(attrs) do
+    account_changeset = Account.registration_changeset(%Account{}, attrs)
+    multi = Ecto.Multi.new() |> Ecto.Multi.insert(:account, account_changeset)
 
-    existing_did = Ecto.Changeset.get_change(user_changeset, :did)
+    existing_did = Ecto.Changeset.get_change(account_changeset, :did)
 
     multi =
       if is_nil(existing_did) do
         # Create did
-        Ecto.Multi.run(multi, :did, fn _, %{user: user} ->
-          signer = Ecto.Changeset.get_change(user_changeset, :signer)
-          signing_key = Ecto.Changeset.get_change(user_changeset, :signing_key, hd(signer))
-          recovery_key = Ecto.Changeset.get_change(user_changeset, :recovery_key, signing_key)
+        Ecto.Multi.run(multi, :did, fn _, %{account: account} ->
+          signer = Ecto.Changeset.get_change(account_changeset, :signer)
+          signing_key = Ecto.Changeset.get_change(account_changeset, :signing_key, hd(signer))
+          recovery_key = Ecto.Changeset.get_change(account_changeset, :recovery_key, signing_key)
 
           params = %{
             type: "plc_operation",
             signingKey: signing_key,
             recoveryKey: recovery_key,
-            handle: User.domain_handle(user),
+            handle: Account.domain_handle(account),
             service: "https://pds.example.com",
-            password: Ecto.Changeset.get_change(user_changeset, :password),
+            password: Ecto.Changeset.get_change(account_changeset, :password),
             signer: signer
           }
 
           try do
             case DidServer.Log.create_operation(params) do
-              {:ok, %{operation: %{did: created_did}}} -> multi_add_link(created_did, user)
+              {:ok, %{operation: %{did: created_did}}} -> multi_add_link(created_did, account)
               {:error, reason} -> {:error, reason}
             end
           rescue
@@ -288,14 +287,16 @@ defmodule DidServer.Accounts do
         end)
       else
         # Verify and link did
-        Ecto.Multi.run(multi, :did, fn _, %{user: user} -> multi_add_link(existing_did, user) end)
+        Ecto.Multi.run(multi, :did, fn _, %{account: account} ->
+          multi_add_link(existing_did, account)
+        end)
       end
 
     case Repo.transaction(multi) do
-      {:ok, %{user: %User{} = user, did: did}} ->
-        {:ok, %User{user | did: did, password: nil} |> Repo.preload(:keys)}
+      {:ok, %{account: %Account{} = account, did: did}} ->
+        {:ok, %Account{account | did: did, password: nil} |> Repo.preload(:keys)}
 
-      {:error, :user, %Ecto.Changeset{} = changeset, _} ->
+      {:error, :account, %Ecto.Changeset{} = changeset, _} ->
         {:error, changeset}
 
       {:error, :did, {:error, changeset_or_reason}, _} ->
@@ -308,28 +309,28 @@ defmodule DidServer.Accounts do
             "could not link to did #{existing_did}"
           end
 
-        {:error, Ecto.Changeset.add_error(user_changeset, :did, message)}
+        {:error, Ecto.Changeset.add_error(account_changeset, :did, message)}
     end
   end
 
-  defp multi_add_link(did, user) do
-    case DidServer.Identities.add_also_known_as(did, user) do
-      {:ok, _user} -> {:ok, did}
-      _error -> {:error, "failed to link did #{did} to user #{user.email}"}
+  defp multi_add_link(did, account) do
+    case DidServer.Identities.add_also_known_as(did, account) do
+      {:ok, _account} -> {:ok, did}
+      _error -> {:error, "failed to link did #{did} to account #{account.email}"}
     end
   end
 
   @doc """
-  Returns an `%Ecto.Changeset{}` for tracking user changes.
+  Returns an `%Ecto.Changeset{}` for tracking account changes.
 
   ## Examples
 
-      iex> change_user_registration(user)
-      %Ecto.Changeset{data: %User{}}
+      iex> change_account_registration(account)
+      %Ecto.Changeset{data: %Account{}}
 
   """
-  def change_user_registration(%User{} = user, attrs \\ %{}) do
-    User.registration_changeset(user, attrs, validate_email: false)
+  def change_account_registration(%Account{} = account, attrs \\ %{}) do
+    Account.registration_changeset(account, attrs, validate_email: false)
   end
 
   ## Server statistics
@@ -348,14 +349,14 @@ defmodule DidServer.Accounts do
     now = NaiveDateTime.utc_now()
     one_month = DateTime.add(now, -(31 * 24 * 3600), :second)
     half_year = DateTime.add(now, -(184 * 24 * 3600), :second)
-    total = Repo.aggregate(User, :count)
+    total = Repo.aggregate(Account, :count)
 
     active_month =
-      from(user in User, where: user.updated_at >= ^one_month)
+      from(account in Account, where: account.updated_at >= ^one_month)
       |> Repo.aggregate(:count)
 
     active_half_year =
-      from(user in User, where: user.updated_at >= ^half_year)
+      from(account in Account, where: account.updated_at >= ^half_year)
       |> Repo.aggregate(:count)
 
     %{total: total, activeMonth: active_month, activeHalfYear: active_half_year}
@@ -364,16 +365,16 @@ defmodule DidServer.Accounts do
   ## Settings
 
   @doc """
-  Returns an `%Ecto.Changeset{}` for changing the user email.
+  Returns an `%Ecto.Changeset{}` for changing the account email.
 
   ## Examples
 
-      iex> change_user_email(user)
-      %Ecto.Changeset{data: %User{}}
+      iex> change_account_email(account)
+      %Ecto.Changeset{data: %Account{}}
 
   """
-  def change_user_email(user, attrs \\ %{}) do
-    User.email_changeset(user, attrs, validate_email: false)
+  def change_account_email(account, attrs \\ %{}) do
+    Account.email_changeset(account, attrs, validate_email: false)
   end
 
   @doc """
@@ -382,104 +383,108 @@ defmodule DidServer.Accounts do
 
   ## Examples
 
-      iex> apply_user_email(user, "valid password", %{email: ...})
-      {:ok, %User{}}
+      iex> apply_account_email(account, "valid password", %{email: ...})
+      {:ok, %Account{}}
 
-      iex> apply_user_email(user, "invalid password", %{email: ...})
+      iex> apply_account_email(account, "invalid password", %{email: ...})
       {:error, %Ecto.Changeset{}}
 
   """
-  def apply_user_email(user, password, attrs) do
-    user
-    |> User.email_changeset(attrs)
-    |> User.validate_current_password(password)
+  def apply_account_email(account, password, attrs) do
+    account
+    |> Account.email_changeset(attrs)
+    |> Account.validate_current_password(password)
     |> Ecto.Changeset.apply_action(:update)
   end
 
   @doc """
-  Updates the user email using the given token.
+  Updates the account email using the given token.
 
-  If the token matches, the user email is updated and the token is deleted.
+  If the token matches, the account email is updated and the token is deleted.
   The confirmed_at date is also updated to the current time.
   """
-  def update_user_email(user, token) do
-    context = "change:#{user.email}"
+  def update_account_email(account, token) do
+    context = "change:#{account.email}"
 
     with {:ok, query} <- UserToken.verify_change_email_token_query(token, context),
          %UserToken{sent_to: email} <- Repo.one(query),
-         {:ok, _} <- Repo.transaction(user_email_multi(user, email, context)) do
+         {:ok, _} <- Repo.transaction(account_email_multi(account, email, context)) do
       :ok
     else
       _ -> :error
     end
   end
 
-  defp user_email_multi(user, email, context) do
+  defp account_email_multi(account, email, context) do
     changeset =
-      user
-      |> User.email_changeset(%{email: email})
-      |> User.confirm_changeset()
+      account
+      |> Account.email_changeset(%{email: email})
+      |> Account.confirm_changeset()
 
     Ecto.Multi.new()
-    |> Ecto.Multi.update(:user, changeset)
-    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, [context]))
+    |> Ecto.Multi.update(:account, changeset)
+    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(account, [context]))
   end
 
   @doc ~S"""
-  Delivers the update email instructions to the given user.
+  Delivers the update email instructions to the given account.
 
   ## Examples
 
-      iex> deliver_user_update_email_instructions(user, current_email, &url(~p"/users/settings/confirm_email/#{&1})")
+      iex> deliver_account_update_email_instructions(account, current_email, &url(~p"/users/settings/confirm_email/#{&1})")
       {:ok, %{to: ..., body: ...}}
 
   """
-  def deliver_user_update_email_instructions(%User{} = user, current_email, update_email_url_fun)
+  def deliver_account_update_email_instructions(
+        %Account{} = account,
+        current_email,
+        update_email_url_fun
+      )
       when is_function(update_email_url_fun, 1) do
-    {encoded_token, user_token} = UserToken.build_email_token(user, "change:#{current_email}")
+    {encoded_token, user_token} = UserToken.build_email_token(account, "change:#{current_email}")
 
     Repo.insert!(user_token)
-    UserNotifier.deliver_update_email_instructions(user, update_email_url_fun.(encoded_token))
+    UserNotifier.deliver_update_email_instructions(account, update_email_url_fun.(encoded_token))
   end
 
   @doc """
-  Returns an `%Ecto.Changeset{}` for changing the user username and domain.
+  Returns an `%Ecto.Changeset{}` for changing the account username and domain.
 
   ## Examples
 
-      iex> change_user_username(user)
-      %Ecto.Changeset{data: %User{}}
+      iex> change_account_username(account)
+      %Ecto.Changeset{data: %Account{}}
 
   """
-  def change_user_username(user, attrs \\ %{}) do
-    User.username_changeset(user, attrs, validate_username: true)
+  def change_account_username(account, attrs \\ %{}) do
+    Account.username_changeset(account, attrs, validate_username: true)
   end
 
   @doc """
-  Updates the user username and domain.
+  Updates the account username and domain.
 
   ## Examples
 
-      iex> update_user_username(user, "valid password", %{username: ..., domain: ...})
-      {:ok, %User{}}
+      iex> update_account_username(account, "valid password", %{username: ..., domain: ...})
+      {:ok, %Account{}}
 
-      iex> update_user_username(user, "invalid password", %{username: ..., domain: ...})
+      iex> update_account_username(account, "invalid password", %{username: ..., domain: ...})
       {:error, %Ecto.Changeset{}}
 
   """
-  def update_user_username(user, password, attrs) do
+  def update_account_username(account, password, attrs) do
     changeset =
-      user
-      |> User.username_changeset(attrs)
-      |> User.validate_current_password(password)
+      account
+      |> Account.username_changeset(attrs)
+      |> Account.validate_current_password(password)
 
     Ecto.Multi.new()
-    |> Ecto.Multi.update(:user, changeset)
-    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, :all))
+    |> Ecto.Multi.update(:account, changeset)
+    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(account, :all))
     |> Repo.transaction()
     |> case do
-      {:ok, %{user: user}} -> {:ok, user}
-      {:error, :user, changeset, _} -> {:error, changeset}
+      {:ok, %{account: account}} -> {:ok, account}
+      {:error, :account, changeset, _} -> {:error, changeset}
     end
   end
 
@@ -488,19 +493,19 @@ defmodule DidServer.Accounts do
   @doc """
   Generates a session token.
   """
-  def generate_user_session_token(user_key) do
-    {token, user_token} = UserToken.build_session_token(user_key)
+  def generate_user_session_token(user) do
+    {token, user_token} = UserToken.build_session_token(user)
     Logger.error("generate #{inspect(user_token)}")
     Repo.insert!(user_token)
     token
   end
 
   @doc """
-  Gets the `UserKey` with the given signed token.
+  Gets the `User` with the given signed token.
   """
   def get_user_by_session_token(token) do
     {:ok, query} = UserToken.verify_session_token_query(token)
-    Repo.one(query) |> Repo.preload([:user, :key])
+    Repo.one(query) |> Repo.preload([:account, :key])
   end
 
   @doc """
@@ -514,75 +519,83 @@ defmodule DidServer.Accounts do
   ## Confirmation
 
   @doc ~S"""
-  Delivers the confirmation email instructions to the given user.
+  Delivers the confirmation email instructions to the given account.
 
   ## Examples
 
-      iex> deliver_user_confirmation_instructions(user, &url(~p"/users/confirm/#{&1}"))
+      iex> deliver_account_confirmation_instructions(account, &url(~p"/users/confirm/#{&1}"))
       {:ok, %{to: ..., body: ...}}
 
-      iex> deliver_user_confirmation_instructions(confirmed_user, &url(~p"/users/confirm/#{&1}"))
+      iex> deliver_account_confirmation_instructions(confirmed_user, &url(~p"/users/confirm/#{&1}"))
       {:error, :already_confirmed}
 
   """
-  def deliver_user_confirmation_instructions(%User{} = user, confirmation_url_fun)
+  def deliver_account_confirmation_instructions(%Account{} = account, confirmation_url_fun)
       when is_function(confirmation_url_fun, 1) do
-    if user.confirmed_at do
+    if account.confirmed_at do
       {:error, :already_confirmed}
     else
-      {encoded_token, user_token} = UserToken.build_email_token(user, "confirm")
+      {encoded_token, user_token} = UserToken.build_email_token(account, "confirm")
       Repo.insert!(user_token)
-      UserNotifier.deliver_confirmation_instructions(user, confirmation_url_fun.(encoded_token))
+
+      UserNotifier.deliver_confirmation_instructions(
+        account,
+        confirmation_url_fun.(encoded_token)
+      )
     end
   end
 
   @doc """
-  Confirms a user by the given token.
+  Confirms an account by the given token.
 
-  If the token matches, the user account is marked as confirmed
+  If the token matches, the account is marked as confirmed
   and the token is deleted.
   """
-  def confirm_user(token) do
+  def confirm_account(token) do
     with {:ok, query} <- UserToken.verify_email_token_query(token, "confirm"),
-         %UserKey{} = user_key <- Repo.one(query) |> Repo.preload(:user),
-         {:ok, %{user: user}} <- Repo.transaction(confirm_user_multi(user_key)) do
-      {:ok, user}
+         %User{} = user <- Repo.one(query) |> Repo.preload(:account),
+         {:ok, %{account: account}} <- Repo.transaction(confirm_user_multi(user)) do
+      {:ok, account}
     else
       _ -> :error
     end
   end
 
-  defp confirm_user_multi(%{user: user} = user_key) do
+  defp confirm_user_multi(%{account: account} = user) do
     Ecto.Multi.new()
-    |> Ecto.Multi.update(:user, User.confirm_changeset(user))
-    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user_key, ["confirm"]))
+    |> Ecto.Multi.update(:account, Account.confirm_changeset(account))
+    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, ["confirm"]))
   end
 
   ## Reset password
 
   @doc ~S"""
-  Delivers the reset password email to the given user.
+  Delivers the reset password email to the given account.
 
   ## Examples
 
-      iex> deliver_user_reset_password_instructions(user, &url(~p"/users/reset_password/#{&1}"))
+      iex> deliver_account_reset_password_instructions(account, &url(~p"/users/reset_password/#{&1}"))
       {:ok, %{to: ..., body: ...}}
 
   """
-  def deliver_user_reset_password_instructions(%User{} = user, reset_password_url_fun)
+  def deliver_account_reset_password_instructions(%Account{} = account, reset_password_url_fun)
       when is_function(reset_password_url_fun, 1) do
-    {encoded_token, user_token} = UserToken.build_email_token(user, "reset_password")
+    {encoded_token, user_token} = UserToken.build_email_token(account, "reset_password")
     Repo.insert!(user_token)
-    UserNotifier.deliver_reset_password_instructions(user, reset_password_url_fun.(encoded_token))
+
+    UserNotifier.deliver_reset_password_instructions(
+      account,
+      reset_password_url_fun.(encoded_token)
+    )
   end
 
   @doc """
-  Gets the user by reset password token.
+  Gets the account by reset password token.
 
   ## Examples
 
       iex> get_user_by_reset_password_token("validtoken")
-      %User{}
+      %Account{}
 
       iex> get_user_by_reset_password_token("invalidtoken")
       nil
@@ -590,8 +603,8 @@ defmodule DidServer.Accounts do
   """
   def get_user_by_reset_password_token(token) do
     with {:ok, query} <- UserToken.verify_email_token_query(token, "reset_password"),
-         %UserKey{} = user_key <- Repo.one(query) |> Repo.preload(:user) do
-      user_key
+         %User{} = user <- Repo.one(query) |> Repo.preload(:account) do
+      user
     else
       _ -> nil
     end

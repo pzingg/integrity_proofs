@@ -2,7 +2,7 @@ defmodule DidServer.Identities.Credential do
   @moduledoc """
   Credential as returned by Wax library.
 
-  Credentials belong to a `UserKey`, a user-DID relationship.
+  Credentials belong to a `User`, a user-DID relationship.
 
   `:raw_id` is the
   `::aaguid` is the UUID.
@@ -31,7 +31,7 @@ defmodule DidServer.Identities.Credential do
     field :raw_id, :string, primary_key: true
     field :cose_key, Identities.EctoCoseKey
     field :aaguid, :string
-    belongs_to :user_key, Identities.UserKey, foreign_key: :user_id, type: Ecto.UUID
+    belongs_to :user, Accounts.User, foreign_key: :user_id, type: Ecto.UUID
 
     timestamps(updated_at: false)
   end

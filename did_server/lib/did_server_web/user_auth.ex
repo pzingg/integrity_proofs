@@ -5,9 +5,9 @@ defmodule DidServerWeb.UserAuth do
   import Phoenix.Controller
 
   alias DidServer.Accounts
-  alias DidServer.Accounts.User
+  alias DidServer.Accounts.Account
   alias DidServer.Identities
-  alias DidServer.Identities.UserKey
+  alias DidServer.Accounts.User
 
   # Make the remember me cookie valid for 60 days.
   # If you want bump or reduce this value, also change
@@ -30,12 +30,12 @@ defmodule DidServerWeb.UserAuth do
   """
   def log_in_user(conn, user_or_user_key, params \\ %{})
 
-  def log_in_user(conn, %User{} = user, params) do
+  def log_in_user(conn, %Account{} = user, params) do
     log_in_user(conn, Identities.get_user_key(user), params)
   end
 
-  def log_in_user(conn, %UserKey{} = user_key, params) do
-    token = Accounts.generate_user_session_token(user_key)
+  def log_in_user(conn, %User{} = user, params) do
+    token = Accounts.generate_user_session_token(user)
     user_return_to = get_session(conn, :user_return_to)
 
     conn
@@ -105,8 +105,8 @@ defmodule DidServerWeb.UserAuth do
   """
   def fetch_current_user(conn, _opts) do
     {user_token, conn} = ensure_user_token(conn)
-    user_key = user_token && Accounts.get_user_by_session_token(user_token)
-    assign(conn, :current_user, user_key)
+    user = user_token && Accounts.get_user_by_session_token(user_token)
+    assign(conn, :current_user, user)
   end
 
   defp ensure_user_token(conn) do

@@ -5,10 +5,9 @@ defmodule DidServerWeb.WebAuthnKeyController do
 
   def new(conn, params) do
     # require_authenticated_user
-    %{user: user} = user_key = conn.assigns.current_user
-    handle = DidServer.Accounts.User.domain_handle(user)
-
-    user_id = Base.encode64(user_key.id)
+    %{id: user_id, account: account} = conn.assigns.current_user
+    handle = DidServer.Accounts.Account.domain_handle(account)
+    user_id = Base.encode64(user_id)
 
     opts =
       if Map.get(params, "direct", "false") == "true" do

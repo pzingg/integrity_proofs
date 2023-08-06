@@ -19,7 +19,7 @@ if Mix.env() == :dev do
   signer = CryptoUtils.Keys.Keypair.to_json(recovery_keypair)
 
   {:ok, bob_example_com} =
-    DidServer.Accounts.register_user(%{
+    DidServer.Accounts.register_account(%{
       email: "bob@example.com",
       username: "bob",
       domain: "example.com",
@@ -29,16 +29,16 @@ if Mix.env() == :dev do
       recovery_key: recovery_key
     })
 
-  %{did: did} = DidServer.Identities.get_user_did(bob_example_com)
+  %{did: did} = DidServer.Identities.get_account_did(bob_example_com)
 
   {:ok, _bob_bsky_social} =
-    DidServer.Accounts.register_user(%{
+    DidServer.Accounts.register_account(%{
       email: "bob@bsky.social",
       username: "bob",
       domain: "bsky.social",
       did: did
     })
 
-  also_known_as = DidServer.Accounts.list_also_known_as_users(bob_example_com)
+  also_known_as = DidServer.Accounts.list_also_known_as_accounts(bob_example_com)
   IO.puts("#{Enum.count(also_known_as)} user(s) in did #{did}")
 end

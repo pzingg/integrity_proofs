@@ -59,7 +59,7 @@ Discussion from https://matrix.to/#/!vpdMrhHjzaPbBUSgOs:matrix.org/$Gc0872Gfhxin
 
 I am experimenting with an idea of multiple user "personas" all under the umbrella of a single identity, which is represented by a did.
 
-Each persona has its own display name, user name, domain name, and profile information (description, avatar, banner). The schema for the persona is the `DidServer.Accounts.User` module.
+Each persona has its own display name, user name, domain name, and profile information (description, avatar, banner). The schema for the persona is the `DidServer.Accounts.Account` module.
 
 The identity did holds the single hashed password for authentication. Any of the personas linked to the did can use this password for authentication. The schema for the did is the `DidServer.Identities.Key` module.
 

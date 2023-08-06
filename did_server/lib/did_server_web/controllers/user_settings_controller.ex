@@ -1,7 +1,7 @@
 defmodule DidServerWeb.UserSettingsController do
   use DidServerWeb, :controller
 
-  alias DidServer.{Accounts, Identities, Log}
+  alias DidServer.{Accounts, Identities}
   alias DidServerWeb.UserAuth
 
   plug(:assign_email_and_password_changesets)
@@ -14,13 +14,13 @@ defmodule DidServerWeb.UserSettingsController do
     %{"current_password" => password, "user" => user_params} = params
 
     # require_authenticated_user
-    %{user: user, key: key} = conn.assigns.current_user
+    %{account: account} = conn.assigns.current_user
 
-    case Accounts.apply_user_email(user, password, user_params) do
-      {:ok, applied_user} ->
-        Accounts.deliver_user_update_email_instructions(
-          applied_user,
-          user.email,
+    case Accounts.apply_account_email(account, password, user_params) do
+      {:ok, applied_account} ->
+        Accounts.deliver_account_update_email_instructions(
+          applied_account,
+          account.email,
           &url(~p"/users/settings/confirm_email/#{&1}")
         )
 
@@ -40,10 +40,10 @@ defmodule DidServerWeb.UserSettingsController do
     %{"current_password" => password, "user" => user_params} = params
 
     # require_authenticated_user
-    %{user: user, key: key} = conn.assigns.current_user
+    %{account: account} = user = conn.assigns.current_user
 
-    case Accounts.update_user_username(user, password, user_params) do
-      {:ok, user} ->
+    case Accounts.update_account_username(account, password, user_params) do
+      {:ok, _account} ->
         conn
         |> put_flash(:info, "Username updated successfully.")
         |> put_session(:user_return_to, ~p"/users/settings")
@@ -59,13 +59,13 @@ defmodule DidServerWeb.UserSettingsController do
       params
 
     # require_authenticated_user
-    %{user: user, key: key} = conn.assigns.current_user
+    %{account: account, key: key} = user = conn.assigns.current_user
 
-    if is_nil(key) || user.id != user_id do
+    if is_nil(key) || account.id != user_id do
       conn
       |> put_status(500)
       |> put_view(ErrorJSON)
-      |> render("500.json", "Internal Server Error: user id mismatch")
+      |> render("500.json", "Internal Server Error: account id mismatch")
     else
       case Identities.update_did_password(key, password, key_params) do
         {:ok, _key} ->
@@ -82,9 +82,9 @@ defmodule DidServerWeb.UserSettingsController do
 
   def confirm_email(conn, %{"token" => token}) do
     # require_authenticated_user
-    %{user: user, key: key} = conn.assigns.current_user
+    %{account: account} = conn.assigns.current_user
 
-    case Accounts.update_user_email(user, token) do
+    case Accounts.update_account_email(account, token) do
       :ok ->
         conn
         |> put_flash(:info, "Email changed successfully.")
@@ -99,12 +99,12 @@ defmodule DidServerWeb.UserSettingsController do
 
   defp assign_email_and_password_changesets(conn, _opts) do
     # require_authenticated_user
-    %{user: user, key: key} = conn.assigns.current_user
+    %{account: account, key: key} = conn.assigns.current_user
 
     conn
-    |> assign(:email_changeset, Accounts.change_user_email(user))
-    |> assign(:username_changeset, Accounts.change_user_username(user))
-    |> assign(:password_changeset, Identities.change_did_password(key, user.id))
+    |> assign(:email_changeset, Accounts.change_account_email(account))
+    |> assign(:username_changeset, Accounts.change_account_username(account))
+    |> assign(:password_changeset, Identities.change_did_password(key, account.id))
     |> assign(:password_did, key.did)
   end
 end

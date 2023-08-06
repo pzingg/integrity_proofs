@@ -36,7 +36,7 @@ defmodule DidServer.AccountsFixtures do
   def user_fixture(attrs \\ %{}) do
     attrs
     |> valid_user_attributes()
-    |> DidServer.Accounts.register_user()
+    |> DidServer.Accounts.register_account()
     |> case do
       {:ok, user} ->
         user

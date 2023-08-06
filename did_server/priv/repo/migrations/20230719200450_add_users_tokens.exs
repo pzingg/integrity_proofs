@@ -5,7 +5,7 @@ defmodule DidServer.Repo.Migrations.AddUsersTokens do
     create table(:users_tokens, primary_key: false) do
       add :context, :string, primary_key: true
       add :token, :binary, primary_key: true
-      add :user_id, references(:users_keys, type: :uuid, on_delete: :delete_all), null: false
+      add :user_id, references(:users, type: :uuid, on_delete: :delete_all), null: false
       add :sent_to, :string
       timestamps(updated_at: false)
     end

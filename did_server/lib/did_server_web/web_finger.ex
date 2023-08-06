@@ -8,7 +8,7 @@ defmodule DidServerWeb.WebFinger do
   require Logger
 
   alias DidServer.Accounts
-  alias DidServer.Accounts.User
+  alias DidServer.Accounts.Account
   alias DidServerWeb.XMLBuilder
 
   @accept_header_value_xml "application/xrd+xml"
@@ -33,45 +33,45 @@ defmodule DidServerWeb.WebFinger do
   end
 
   def webfinger(resource, fmt) when is_binary(resource) and fmt in [:xml, :json] do
-    case Accounts.get_user_by_identifier(resource) do
-      %User{} = user ->
+    case Accounts.get_account_by_identifier(resource) do
+      %Account{} = user ->
         {:ok, represent_user(user, fmt)}
 
       _ ->
-        {:error, "User not found"}
+        {:error, "Account not found"}
     end
   end
 
-  defp gather_links(%User{} = user) do
+  defp gather_links(%Account{} = user) do
     [
       %{
         "rel" => "self",
         "type" => "application/activity+json",
-        "href" => User.ap_id(user, "users/")
+        "href" => Account.ap_id(user, "users/")
       }
       # %{
       #  "rel" => "http://webfinger.net/rel/profile-page",
       #  "type" => "text/html",
-      #  "href" => User.ap_id(user, "users/")
+      #  "href" => Account.ap_id(user, "users/")
       # }
     ]
   end
 
-  defp gather_aliases(%User{} = user) do
-    Accounts.list_also_known_as_users(user)
+  defp gather_aliases(%Account{} = user) do
+    Accounts.list_also_known_as_accounts(user)
     |> Enum.filter(fn alias -> alias.id != user.id end)
-    |> Enum.map(fn alias -> User.ap_id(alias, "users/") end)
+    |> Enum.map(fn alias -> Account.ap_id(alias, "users/") end)
   end
 
-  def represent_user(%User{} = user, :json) do
+  def represent_user(%Account{} = user, :json) do
     %{
-      "subject" => User.ap_acct(user, "acct:"),
+      "subject" => Account.ap_acct(user, "acct:"),
       "aliases" => gather_aliases(user),
       "links" => gather_links(user)
     }
   end
 
-  def represent_user(%User{} = user, :xml) do
+  def represent_user(%Account{} = user, :xml) do
     aliases =
       user
       |> gather_aliases()
@@ -85,7 +85,7 @@ defmodule DidServerWeb.WebFinger do
       :XRD,
       %{xmlns: "http://docs.oasis-open.org/ns/xri/xrd-1.0"},
       [
-        {:Subject, User.ap_acct(user, "acct:")}
+        {:Subject, Account.ap_acct(user, "acct:")}
       ] ++ aliases ++ links
     }
     |> XMLBuilder.to_doc()

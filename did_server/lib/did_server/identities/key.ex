@@ -12,16 +12,16 @@ defmodule DidServer.Identities.Key do
     field :password_confirmation, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
 
-    has_many :users_keys, DidServer.Identities.UserKey, references: :did, foreign_key: :key_id
-    has_many :users, through: [:users_keys, :user]
+    has_many :users, DidServer.Accounts.User, references: :did, foreign_key: :key_id
+    has_many :accounts, through: [:users, :account]
 
     timestamps()
   end
 
   @doc """
-  A changeset for creating a new did key.
+  A changeset for creating a new DID key.
 
-  The password can be omitted for transient dids, not associated
+  The password can be omitted for transient DIDs, not associated
   with user accounts.
 
   It is important to validate the length of the password.

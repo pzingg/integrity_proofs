@@ -6,8 +6,8 @@ defmodule DidServer.Identities do
   import Ecto.Query, warn: false
 
   alias DidServer.{Accounts, Repo}
-  alias DidServer.Accounts.User
-  alias DidServer.Identities.{Credential, Key, UserKey}
+  alias DidServer.Accounts.{Account, User}
+  alias DidServer.Identities.{Credential, Key}
 
   ## Keys (DIDs with passwords and associated credentials)
 
@@ -24,25 +24,25 @@ defmodule DidServer.Identities do
     Repo.all(Key)
   end
 
-  def list_keys_by_user(user, return_structs? \\ false) do
-    user = Repo.preload(user, :keys)
+  def list_keys_by_account(account, return_structs? \\ false) do
+    account = Repo.preload(account, :keys)
 
     if return_structs? do
-      user.keys
+      account.keys
     else
-      Enum.map(user.keys, fn %{did: did} -> did end)
+      Enum.map(account.keys, fn %{did: did} -> did end)
     end
   end
 
   def list_keys_by_username(username, domain, return_structs? \\ false) do
     keys =
       from(key in Key,
-        join: user_key in UserKey,
-        on: user_key.key_id == key.did,
         join: user in User,
-        on: user.id == user_key.user_id,
-        where: user.username == ^username,
-        where: user.domain == ^domain
+        on: user.key_id == key.did,
+        join: account in Account,
+        on: account.id == user.user_id,
+        where: account.username == ^username,
+        where: account.domain == ^domain
       )
       |> Repo.all()
 
@@ -67,7 +67,9 @@ defmodule DidServer.Identities do
       ** (Ecto.NoResultsError)
 
   """
-  def get_key!(did) when is_binary(did), do: Repo.get_by!(Key, [did: did], preload: :users)
+  def get_key!(did) when is_binary(did) do
+    Repo.get_by!(Key, did: did) |> Repo.preload([:users, :accounts])
+  end
 
   def get_domain_key() do
     domain = DidServer.Application.domain()
@@ -79,34 +81,34 @@ defmodule DidServer.Identities do
   end
 
   def get_user_key(user_id) when is_binary(user_id) do
-    Repo.get(UserKey, user_id) |> Repo.preload(:user)
+    Repo.get(User, user_id) |> Repo.preload(:account)
   end
 
-  def get_user_key(%User{} = user) do
-    user = Repo.preload(user, :users_keys)
+  def get_user_key(%Account{} = account) do
+    account = Repo.preload(account, :users)
 
-    case user.users_keys do
+    case account.users do
       [] -> nil
-      [user_key] -> %UserKey{user_key | user: user}
-      _ -> raise RuntimeError, "multiple DIDs for user"
+      [user] -> %User{user | account: account}
+      _ -> raise RuntimeError, "multiple DIDs for account"
     end
   end
 
-  def get_user_did(%User{} = user) do
-    user = Repo.preload(user, :keys)
+  def get_account_did(%Account{} = account) do
+    account = Repo.preload(account, :keys)
 
-    case user.keys do
+    case account.keys do
       [] -> nil
       [key] -> key
-      _ -> raise RuntimeError, "multiple DIDs for user"
+      _ -> raise RuntimeError, "multiple DIDs for account"
     end
   end
 
   @doc """
   Builds a did document.
   """
-  def get_did_document(%User{} = user) do
-    case get_user_did(user) do
+  def get_did_document(%Account{} = account) do
+    case get_account_did(account) do
       nil -> nil
       did -> format_did_document(did)
     end
@@ -122,10 +124,10 @@ defmodule DidServer.Identities do
     end
   end
 
-  def get_public_key(user, fmt, purpose \\ "assertionMethod") do
-    case get_did_document(user) do
+  def get_public_key(account, fmt, purpose \\ "assertionMethod") do
+    case get_did_document(account) do
       nil ->
-        {:error, "could not locate did for user"}
+        {:error, "could not locate did for account"}
 
       doc ->
         CryptoUtils.Did.get_public_key(doc, fmt, purpose)
@@ -164,52 +166,54 @@ defmodule DidServer.Identities do
   end
 
   @doc """
-  Links a user to a DID. If the `user` argument is `nil`,
-  removes all user links for the did, otherwise creates
-  a new link from the DID to the user.
+  Links an account to a DID. If the `account` argument is `nil`,
+  removes all account links for the DID, otherwise creates
+  a new link from the DID to the account.
 
-  On success, returns `{:ok, user}`.
+  On success, returns `{:ok, account}`.
   """
-  def add_also_known_as(did, user)
+  def add_also_known_as(did, account)
 
   def add_also_known_as(did, nil) when is_binary(did) do
     _ =
-      from(user_key in UserKey,
-        where: user_key.key_id == ^did
+      from(user in User,
+        where: user.key_id == ^did
       )
       |> Repo.delete_all()
 
     {:ok, nil}
   end
 
-  def add_also_known_as(did, %User{} = user) when is_binary(did) do
-    UserKey.build_link(did, user)
+  def add_also_known_as(did, %Account{} = account) when is_binary(did) do
+    User.build_link(did, account)
     |> Repo.insert()
     |> case do
-      {:ok, _} -> {:ok, user}
+      {:ok, _} -> {:ok, account}
       {:error, reason} -> {:error, reason}
     end
   end
 
   @doc """
-  Removes the link from the DID to a single user.
+  Removes the link from the DID to a single account.
 
-  On success, returns `{:ok, user}`.
+  On success, returns `{:ok, account}`.
   """
-  def remove_also_known_as(did, %User{} = user) when is_binary(did) do
+  def remove_also_known_as(did, %Account{} = account) when is_binary(did) do
     {n, _} =
-      from(user_key in UserKey,
-        where: user_key.user_id == ^user.id,
-        where: user_key.key_id == ^did
+      from(user in User,
+        where: user.user_id == ^account.id,
+        where: user.key_id == ^did
       )
       |> Repo.delete_all()
 
     if n == 0 do
       {:error, "not found"}
     else
-      {:ok, user}
+      {:ok, account}
     end
   end
+
+  ## Documents
 
   def format_did_document(did) do
     op_data = DidServer.Log.get_last_op(did, :did_data)
@@ -236,8 +240,8 @@ defmodule DidServer.Identities do
       %{"verificationMethods" => vms, "alsoKnownAs" => akas}
       when is_map(vms) and map_size(vms) != 0 ->
         linked_user_akas =
-          Accounts.list_users_by_did(did)
-          |> Enum.map(fn user -> [User.ap_id(user), User.domain_handle(user)] end)
+          Accounts.list_accounts_by_did(did)
+          |> Enum.map(fn account -> [Account.ap_id(account), Account.domain_handle(account)] end)
           |> List.flatten()
 
         also_known_as = (akas ++ linked_user_akas) |> Enum.sort() |> Enum.uniq()
@@ -304,7 +308,7 @@ defmodule DidServer.Identities do
   ## Examples
 
       iex> update_did_password(key, "valid password", %{password: ...})
-      {:ok, %User{}}
+      {:ok, %Account{}}
 
       iex> update_did_password(key, "invalid password", %{password: ...})
       {:error, %Ecto.Changeset{}}
@@ -325,7 +329,7 @@ defmodule DidServer.Identities do
   ## Examples
 
       iex> reset_did_password(key, %{password: "new long password", password_confirmation: "new long password"})
-      {:ok, %User{}}
+      {:ok, %Account{}}
 
       iex> reset_did_password(key, %{password: "valid", password_confirmation: "not the same"})
       {:error, %Ecto.Changeset{}}
@@ -340,24 +344,19 @@ defmodule DidServer.Identities do
   ## WebAuthn credentials
 
   @doc """
-  `user_or_id` is either a `User` struct or a `UserKey` struct,
-  or the UUID for a `UserKey` record.
+  `user_or_id` is either a `Account` struct or a `User` struct,
+  or the UUID for a `User` record.
   """
   def get_credentials(user_or_id)
 
   def get_credentials(user_id) when is_binary(user_id) do
-    case Repo.get(UserKey, user_id) do
+    case Repo.get(User, user_id) do
       nil ->
         []
 
-      user_key ->
-        get_credentials(user_key)
+      user ->
+        get_credentials(user)
     end
-  end
-
-  def get_credentials(%UserKey{} = user_key) do
-    user_key = Repo.preload(user_key, :credentials)
-    user_key.credentials
   end
 
   def get_credentials(%User{} = user) do
@@ -365,11 +364,16 @@ defmodule DidServer.Identities do
     user.credentials
   end
 
+  def get_credentials(%Account{} = account) do
+    account = Repo.preload(account, :credentials)
+    account.credentials
+  end
+
   def get_credentials(_), do: []
 
   @doc """
-  `user_or_id` is either a `User` struct or a `UserKey` struct,
-  or the UUID for a `UserKey` record.
+  `user_or_id` is either a `Account` struct or a `User` struct,
+  or the UUID for a `User` record.
   """
   def get_wax_params(user_or_id) do
     get_credentials(user_or_id) |> to_wax_params()
@@ -387,7 +391,7 @@ defmodule DidServer.Identities do
   end
 
   @doc """
-  `user_id` is the UUID for a `UserKey` record.
+  `user_id` is the UUID for a `User` record.
   """
   def register_credential(user_id, raw_id, cose_key, maybe_aaguid) do
     # Check that the raw_id is not already in use as per bullet point 17 here:

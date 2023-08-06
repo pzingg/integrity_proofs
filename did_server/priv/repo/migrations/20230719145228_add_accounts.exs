@@ -1,10 +1,10 @@
-defmodule DidServer.Repo.Migrations.AddUsers do
+defmodule DidServer.Repo.Migrations.AddAccounts do
   use Ecto.Migration
 
   def change do
     execute("CREATE EXTENSION IF NOT EXISTS citext", "")
 
-    create table(:users, primary_key: false) do
+    create table(:accounts, primary_key: false) do
       add(:id, :uuid, primary_key: true)
       add(:email, :citext, null: false)
       add(:username, :citext, null: false)
@@ -14,7 +14,7 @@ defmodule DidServer.Repo.Migrations.AddUsers do
       timestamps()
     end
 
-    create(unique_index(:users, [:email]))
-    create(unique_index(:users, [:username, :domain]))
+    create(unique_index(:accounts, [:email]))
+    create(unique_index(:accounts, [:username, :domain]))
   end
 end

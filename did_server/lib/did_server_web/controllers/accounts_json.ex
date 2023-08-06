@@ -1,5 +1,5 @@
 defmodule DidServerWeb.AccountsJSON do
-  alias DidServer.Accounts.User
+  alias DidServer.Accounts.Account
 
   import Bitwise
 
@@ -68,7 +68,7 @@ defmodule DidServerWeb.AccountsJSON do
 
   def actor(%{
         user:
-          %User{
+          %Account{
             username: username,
             domain: domain,
             display_name: display_name,
@@ -77,7 +77,7 @@ defmodule DidServerWeb.AccountsJSON do
             banner_mime_type: banner_mime_type
           } = user
       }) do
-    ap_id = User.ap_id(user)
+    ap_id = Account.ap_id(user)
     published = NaiveDateTime.utc_now() |> CryptoUtils.format_datetime()
 
     public_key_pem =
@@ -91,8 +91,8 @@ defmodule DidServerWeb.AccountsJSON do
 
     # TODO alsoKnownAs in did document?
     aka =
-      DidServer.Accounts.list_also_known_as_users(user)
-      |> Enum.map(fn u -> User.ap_id(u) end)
+      DidServer.Accounts.list_also_known_as_accounts(user)
+      |> Enum.map(fn u -> Account.ap_id(u) end)
       |> Enum.filter(fn id -> id != ap_id end)
       |> Enum.sort()
 
@@ -110,7 +110,7 @@ defmodule DidServerWeb.AccountsJSON do
       "preferredUsername" => username,
       "name" => display_name,
       "summary" => uni_encode(description),
-      "url" => User.ap_id(user, "@"),
+      "url" => Account.ap_id(user, "@"),
       "manuallyApprovesFollowers" => false,
       "discoverable" => true,
       "published" => published <> "Z",
