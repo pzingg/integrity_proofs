@@ -72,16 +72,16 @@
   }
 
   function _base64ToArrayBuffer(base64) {
-      var binary_string =  window.atob(base64);
-      var len = binary_string.length;
-      var bytes = new Uint8Array( len );
-      for (var i = 0; i < len; i++)        {
-          bytes[i] = binary_string.charCodeAt(i);
-      }
-      return bytes.buffer;
+    var binary_string =  window.atob(base64);
+    var len = binary_string.length;
+    var bytes = new Uint8Array( len );
+    for (var i = 0; i < len; i++)        {
+        bytes[i] = binary_string.charCodeAt(i);
+    }
+    return bytes.buffer;
   }
 
-  function triggerAttestation(){
+  function triggerAttestation() {
     document.getElementById('safari-button').style.display = 'none';
     document.getElementById('auth-img').style.display = 'inline';
 
@@ -95,7 +95,7 @@
         // relying party
         rp: {
           id: rp_id,
-          name: 'Wax FTW'
+          name: "<%= @rp_name %>"
         },
         user: {
           id: user_id,
@@ -103,8 +103,10 @@
           displayName: user
         },
         pubKeyCredParams: [
+          // "ES256" IANA COSE Algorithms registry
           {
-            type: "public-key", alg: -7 // "ES256" IANA COSE Algorithms registry
+            type: 'public-key',
+            alg: -7
           }
         ],
        attestation: "<%= @attestation %>",
@@ -112,7 +114,7 @@
           residentKey: 'preferred'
         }
       }
-    }).then(function (newCredential) {
+    }).then((newCredential) => {
       // .simple_form prefixes input id with the form id
       document.getElementById('waf_rawID').value = _arrayBufferToBase64(newCredential.rawId);
       document.getElementById('waf_type').value = newCredential.type;
@@ -122,14 +124,13 @@
         _arrayBufferToBase64(newCredential.response.attestationObject)
 
       document.getElementById('waf').submit();
-    }).catch(function (err) {
-      if(err.name == 'NotAllowedError') {
-          document.getElementById('safari-button').style.display = 'inline-block';
-          document.getElementById('auth-img').style.display = 'none';
-        }
-      else {
-          console.log(err);
-        }
+    }).catch((err) => {
+      if (err.name == 'NotAllowedError') {
+        document.getElementById('safari-button').style.display = 'inline-block';
+        document.getElementById('auth-img').style.display = 'none';
+      } else {
+        console.log(err);
+      }
     });
   }
 

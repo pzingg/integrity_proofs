@@ -34,6 +34,7 @@ defmodule DidServerWeb.WebAuthnKeyController do
       login: handle,
       challenge: Base.encode64(challenge.bytes),
       rp_id: challenge.rp_id,
+      rp_name: DidServer.Application.name(),
       user: handle,
       user_id: user_id,
       attestation: challenge.attestation

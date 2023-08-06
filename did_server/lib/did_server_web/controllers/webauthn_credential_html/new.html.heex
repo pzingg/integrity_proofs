@@ -2,21 +2,12 @@
   <.header>
     Passkey Authentication
     <:subtitle>
-      <%= if @login do %>
-        <p>Hello <em><%= @login %></em>!</p>
-      <% else %>
-        <p>Hello!</p>
-      <% end %>
       <%= if @with_webauthn do %>
         <.button id="safari-button" style="display:none" onclick="triggerAuthenticate()">
           Authenticate
         </.button>
         <img id="auth-img" src={static_path(@conn, "/images/fingerprint-scanning.svg")} />
-        <%= if @login do %>
-          <p><em><%= String.capitalize(@login) %></em>, press your authenticator now!</p>
-        <% else %>
-          <p>Press your authenticator now!</p>
-        <% end %>
+        <p>Press your authenticator now!</p>
       <% end %>
     </:subtitle>
   </.header>
@@ -34,6 +25,10 @@
     <.input field={f[:authenticatorData]} type="hidden" />
     <.input field={f[:sig]} type="hidden" />
     <.input field={f[:userHandle]} type="hidden" />
+
+    <:actions :let={f}>
+      <.input field={f[:remember_me]} type="checkbox" label="Keep me logged in" />
+    </:actions>
   </.simple_form>
 
   <p style="font-size:0.6em; color: grey">
@@ -71,13 +66,13 @@
     }
 
     function _base64ToArrayBuffer(base64) {
-        var binary_string =  window.atob(base64);
-        var len = binary_string.length;
-        var bytes = new Uint8Array( len );
-        for (var i = 0; i < len; i++)        {
-            bytes[i] = binary_string.charCodeAt(i);
-        }
-        return bytes.buffer;
+      var binary_string =  window.atob(base64);
+      var len = binary_string.length;
+      var bytes = new Uint8Array( len );
+      for (var i = 0; i < len; i++)        {
+          bytes[i] = binary_string.charCodeAt(i);
+      }
+      return bytes.buffer;
     }
 
     function triggerAuthenticate(){
@@ -87,7 +82,6 @@
       navigator.credentials.get({
         publicKey: {
           challenge: _base64ToArrayBuffer("<%= @challenge %>"),
-
           allowCredentials: [
           <%= for cred_id <- @cred_ids do %>
             {
@@ -97,7 +91,7 @@
           <% end %>
           ]
         }
-      }).then(function (newCredential) {
+      }).then((newCredential) => {
         // .simple_form prefixes input id with the form id
         document.getElementById('waf_rawID').value = _arrayBufferToBase64(newCredential.rawId);
         document.getElementById('waf_type').value = newCredential.type;
@@ -107,20 +101,19 @@
           _arrayBufferToBase64(newCredential.response.authenticatorData)
         document.getElementById('waf_sig').value =
           _arrayBufferToBase64(newCredential.response.signature)
-        if(newCredential.response.userHandle){
+        if (newCredential.response.userHandle) {
           document.getElementById('waf_userHandle').value =
             _arrayBufferToBase64(newCredential.response.userHandle)
-          }
+        }
 
         document.getElementById('waf').submit();
       }).catch((err) => {
-        if(err.name == 'NotAllowedError') {
-            document.getElementById('safari-button').style.display = 'inline-block';
-            document.getElementById('auth-img').style.display = 'none';
-          }
-        else {
-            console.log(err);
-          }
+        if (err.name == 'NotAllowedError') {
+          document.getElementById('safari-button').style.display = 'inline-block';
+          document.getElementById('auth-img').style.display = 'none';
+        } else {
+          console.log(err);
+        }
       });
     }
 

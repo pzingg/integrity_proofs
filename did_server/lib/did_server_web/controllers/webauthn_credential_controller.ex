@@ -12,16 +12,16 @@ defmodule DidServerWeb.WebAuthnCredentialController do
   end
 
   def create(conn, %{
-        "webauthn" => %{
-          "clientDataJSON" => client_data_json,
-          "authenticatorData" => authenticator_data_b64,
-          "sig" => sig_b64,
-          "rawID" => credential_id,
-          "type" => "public-key",
-          "userHandle" => maybe_user_handle_b64
-        }
+        "webauthn" =>
+          %{
+            "clientDataJSON" => client_data_json,
+            "authenticatorData" => authenticator_data_b64,
+            "sig" => sig_b64,
+            "rawID" => credential_id,
+            "type" => "public-key",
+            "userHandle" => maybe_user_handle_b64
+          } = webauthn_params
       }) do
-    user_params = %{"remember_me" => true}
     maybe_user_handle = if maybe_user_handle_b64 <> "", do: Base.decode64!(maybe_user_handle_b64)
     user_key = Identities.get_user_key(maybe_user_handle)
 
@@ -48,7 +48,7 @@ defmodule DidServerWeb.WebAuthnCredentialController do
 
         conn
         |> put_flash(:info, "Welcome back!")
-        |> UserAuth.log_in_user(user_key, user_params)
+        |> UserAuth.log_in_user(user_key, webauthn_params)
       else
         {:error, e} ->
           authentication_failed(conn, Exception.message(e))
