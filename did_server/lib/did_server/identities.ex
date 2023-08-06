@@ -37,10 +37,7 @@ defmodule DidServer.Identities do
   def list_keys_by_username(username, domain, return_structs? \\ false) do
     keys =
       from(key in Key,
-        join: user in User,
-        on: user.key_id == key.did,
-        join: account in Account,
-        on: account.id == user.user_id,
+        join: account in assoc(key, :accounts),
         where: account.username == ^username,
         where: account.domain == ^domain
       )
@@ -109,14 +106,14 @@ defmodule DidServer.Identities do
   """
   def get_did_document(%Account{} = account) do
     case get_account_did(account) do
-      nil -> nil
-      did -> format_did_document(did)
+      %{did: did} -> format_did_document(did)
+      _ -> nil
     end
   end
 
   def get_did_document(%{username: username, domain: domain}) do
     case list_keys_by_username(username, domain) do
-      [did] ->
+      [%{did: did}] ->
         format_did_document(did)
 
       [] ->
@@ -215,7 +212,7 @@ defmodule DidServer.Identities do
 
   ## Documents
 
-  def format_did_document(did) do
+  def format_did_document(did) when is_binary(did) do
     op_data = DidServer.Log.get_last_op(did, :did_data)
 
     %URI{scheme: scheme, host: host, port: port} =
