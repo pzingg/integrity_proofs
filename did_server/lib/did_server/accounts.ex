@@ -13,8 +13,12 @@ defmodule DidServer.Accounts do
   ## Database getters
 
   def list_accounts_by_did(did) when is_binary(did) do
-    did = DidServer.Identities.get_key!(did)
-    did.accounts
+    from(account in Account,
+      join: key in assoc(account, :keys),
+      where: key.did == ^did,
+      preload: [:users, :keys]
+    )
+    |> Repo.all()
   end
 
   def list_also_known_as_accounts(%Account{} = account) do

@@ -24,20 +24,24 @@ defmodule DidServer.Identities do
     Repo.all(Key)
   end
 
-  def list_keys_by_account(%Account{id: account_id}, return_structs? \\ false) do
-    keys =
-      from(key in Key,
-        join: account in assoc(key, :accounts),
-        where: account.id == ^account_id,
-        preload: [:users]
-      )
-      |> Repo.all()
+  def list_keys_by_account(account, return_structs? \\ false)
 
-    if return_structs? do
-      keys
-    else
-      Enum.map(keys, fn %{did: did} -> did end)
-    end
+  def list_keys_by_account(%Account{id: account_id}, true) do
+    from(key in Key,
+      join: account in assoc(key, :accounts),
+      where: account.id == ^account_id,
+      preload: :users
+    )
+    |> Repo.all()
+  end
+
+  def list_keys_by_account(%Account{id: account_id}, false) do
+    from(key in Key,
+      select: key.did,
+      join: account in assoc(key, :accounts),
+      where: account.id == ^account_id
+    )
+    |> Repo.all()
   end
 
   def list_keys_by_username(username, domain, return_structs? \\ false) do
