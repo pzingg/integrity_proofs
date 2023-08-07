@@ -3,12 +3,12 @@ defmodule DidServerWeb.AccountsControllerTest do
 
   import DidServer.AccountsFixtures
 
-  alias DidServer.Accounts.User
+  alias DidServer.Accounts.Account
 
   test "gets actor JSON data", %{conn: conn} do
-    user = user_fixture()
-    ap_id = User.ap_id(user)
-    handle = User.domain_handle(user)
+    user = account_fixture()
+    ap_id = Account.ap_id(user)
+    handle = Account.domain_handle(user)
 
     conn =
       conn
@@ -19,28 +19,28 @@ defmodule DidServerWeb.AccountsControllerTest do
   end
 
   test "gets actor HTML data", %{conn: conn} do
-    user = user_fixture()
-    handle = User.domain_handle(user)
+    user = account_fixture()
+    handle = Account.domain_handle(user)
 
     conn =
       conn
       |> put_req_header("accept", "text/html")
       |> get(~p"/users/#{handle}")
 
-    ap_id = User.ap_id(user)
+    ap_id = Account.ap_id(user)
     assert html_response(conn, 200) =~ ap_id
   end
 
   test "gets profile HTML data", %{conn: conn} do
-    user = user_fixture()
-    handle = User.domain_handle(user)
+    user = account_fixture()
+    handle = Account.domain_handle(user)
 
     conn =
       conn
       |> put_req_header("accept", "text/html")
       |> get(~p"/users/#{handle}/profile")
 
-    ap_id = User.ap_id(user)
+    ap_id = Account.ap_id(user)
     assert html_response(conn, 200) =~ ap_id
   end
 

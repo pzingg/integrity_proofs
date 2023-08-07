@@ -147,11 +147,11 @@ defmodule CryptoUtils.Plc.CreateOperation do
 
     if is_nil(prev) do
       validate_inclusion(changeset, :type, ["create", "plc_operation"],
-        message: "must be create or plc_operation for did creation"
+        message: "must be create or plc_operation for DID creation"
       )
     else
       validate_inclusion(changeset, :type, ["plc_operation", "plc_tombstone"],
-        message: "must be plc_operation or plc_tombstone for did updates"
+        message: "must be plc_operation or plc_tombstone for DID updates"
       )
     end
   end

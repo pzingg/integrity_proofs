@@ -5,7 +5,7 @@ config :did_server, DidServer.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "did_log",
+  database: "did_server",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
@@ -24,7 +24,15 @@ config :did_server, DidServerWeb.Endpoint,
   code_reloader: true,
   debug_errors: true,
   secret_key_base: "XSIJUjzie0dBqOk1aqIIfsBIuHKcdrUz92K9k+gh6rq29Qv5mIaEOH7caWlU5auF",
-  watchers: []
+  watchers: [
+    esbuild: {Esbuild, :install_and_run, [:default, ~w(--sourcemap=inline --watch)]},
+    tailwind: {Tailwind, :install_and_run, [:default, ~w(--watch)]}
+  ]
+
+# WebAuthn configuration.
+# Because we are not checking origin in the endpoint, we set it here.
+config :wax_,
+  origin: "http://localhost:4000"
 
 # ## SSL Support
 #

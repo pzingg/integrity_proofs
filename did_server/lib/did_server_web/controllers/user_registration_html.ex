@@ -1,0 +1,5 @@
+defmodule DidServerWeb.UserRegistrationHTML do
+  use DidServerWeb, :html
+
+  embed_templates "user_registration_html/*"
+end

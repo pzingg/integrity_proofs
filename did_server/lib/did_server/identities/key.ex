@@ -1,24 +1,31 @@
-defmodule DidServer.Log.Key do
+defmodule DidServer.Identities.Key do
   use Ecto.Schema
   import Ecto.Changeset
 
+  require Logger
+
+  alias __MODULE__
+
   @primary_key false
   schema "keys" do
-    field(:did, :string, primary_key: true)
-    field(:method, :string)
-    field(:password, :string, virtual: true, redact: true)
-    field(:hashed_password, :string, redact: true)
+    field :did, :string, primary_key: true
+    field :method, :string
+    field :current_user_id, :integer, virtual: true
+    # Password authentication
+    field :password, :string, virtual: true, redact: true
+    field :password_confirmation, :string, virtual: true, redact: true
+    field :hashed_password, :string, redact: true
 
-    has_many(:users_keys, DidServer.Accounts.UserKey, references: :did, foreign_key: :key_id)
-    has_many(:users, through: [:users_keys, :user])
+    has_many :users, DidServer.Accounts.User, references: :did, foreign_key: :key_id
+    has_many :accounts, through: [:users, :account]
 
     timestamps()
   end
 
   @doc """
-  A changeset for creating a new did key.
+  A changeset for creating a new DID key.
 
-  The password can be omitted for transient dids, not associated
+  The password can be omitted for transient DIDs, not associated
   with user accounts.
 
   It is important to validate the length of the password.
@@ -36,9 +43,9 @@ defmodule DidServer.Log.Key do
       Defaults to `true`.
 
   """
-  def changeset(%__MODULE__{} = key, attrs, opts \\ []) do
+  def changeset(%Key{} = key, attrs, opts \\ []) do
     key
-    |> cast(attrs, [:did, :method, :password])
+    |> cast(attrs, [:did, :method, :password, :password_confirmation])
     |> validate_required([:did])
     |> unique_constraint(:did, name: "keys_pkey")
     |> maybe_set_method()
@@ -59,7 +66,8 @@ defmodule DidServer.Log.Key do
   """
   def password_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:password])
+    |> cast(attrs, [:current_user_id, :password, :password_confirmation])
+    |> validate_required(:current_user_id)
     |> validate_confirmation(:password, message: "does not match password")
     |> validate_password(opts)
   end
@@ -70,13 +78,13 @@ defmodule DidServer.Log.Key do
   If there is no user or the user doesn't have a password, we call
   `Bcrypt.no_user_verify/0` to avoid timing attacks.
   """
-  def valid_password?(%__MODULE__{hashed_password: hashed_password}, password)
+  def valid_password?(%Key{hashed_password: hashed_password}, password)
       when is_binary(hashed_password) and byte_size(password) > 0 do
     Bcrypt.verify_pass(password, hashed_password)
   end
 
-  def valid_password?(key, _) do
-    IO.puts("Did.valid_password? without hashed_password: #{inspect(key)}")
+  def valid_password?(%Key{did: did}, _) do
+    Logger.error("Did.valid_password? without hashed_password: #{did}")
     Bcrypt.no_user_verify()
     false
   end

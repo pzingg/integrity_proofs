@@ -34,7 +34,7 @@ defmodule DidServer.Application do
     :ok
   end
 
-  def name() do
+  def name do
     Application.get_env(:did_server, :server_name, "DID Server")
   end
 
@@ -42,12 +42,16 @@ defmodule DidServer.Application do
     Application.get_env(:did_server, :server_domain, "example.com")
   end
 
-  def version() do
+  def email_from do
+    Application.get_env(:did_server, :email_from, "support@example.com")
+  end
+
+  def version do
     {:ok, vsn} = :application.get_key(:did_server, :vsn)
     List.to_string(vsn)
   end
 
-  def services() do
+  def services do
     Application.get_env(
       :did_server,
       :supported_services,

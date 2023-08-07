@@ -1,8 +1,8 @@
-defmodule DidServer.Repo.Migrations.AddUserProfileFields do
+defmodule DidServer.Repo.Migrations.AddAccountProfileFields do
   use Ecto.Migration
 
   def change do
-    alter table(:users) do
+    alter table(:accounts) do
       add :display_name, :string
       add :description, :text
       add :avatar, :binary

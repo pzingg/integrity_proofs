@@ -1,6 +1,6 @@
 <ul>
   <li><strong>Name: </strong><%= @user.display_name %></li>
   <li><strong>Description: </strong><%= @user.description %></li>
-  <li><strong>ActivityPub: </strong><%= User.ap_id(@user) %></li>
-  <li><strong>ATProto: </strong><%= User.domain_handle(@user) %></li>
+  <li><strong>ActivityPub: </strong><%= Account.ap_id(@user) %></li>
+  <li><strong>ATProto: </strong><%= Account.domain_handle(@user) %></li>
 </ul>
