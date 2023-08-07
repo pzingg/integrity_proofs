@@ -30,11 +30,11 @@ defmodule DidServer.Log do
   end
 
   @doc """
-  Returns the list of did:plc operations for a given did.
+  Returns the list of did:plc operations for a given DID.
 
   If `include_nullified?` is `true`, nullified operations
   will be returned in the list, otherwise only the currently
-  active fork of the did operations will be returned.
+  active fork of the DID operations will be returned.
 
   ## Examples
 
@@ -70,7 +70,7 @@ defmodule DidServer.Log do
   end
 
   @doc """
-  Returns the most recent active operation for a given did.
+  Returns the most recent active operation for a given DID.
 
   ## Examples
 
@@ -118,8 +118,8 @@ defmodule DidServer.Log do
          {:tombstone, false} <- {:tombstone, Operation.tombstone?(op)} do
       {:ok, op}
     else
-      {:tombstone, _} -> {:error, "did #{did} is tombstoned"}
-      {:last_op, _} -> {:error, "no operations with did #{did}"}
+      {:tombstone, _} -> {:error, "DID #{did} is tombstoned"}
+      {:last_op, _} -> {:error, "no operations with DID #{did}"}
       error -> error
     end
   end

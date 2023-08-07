@@ -102,7 +102,7 @@ defmodule DidServer.Identities do
   end
 
   @doc """
-  Builds a did document.
+  Builds a DID document.
   """
   def get_did_document(%Account{} = account) do
     case get_account_did(account) do
@@ -124,7 +124,7 @@ defmodule DidServer.Identities do
   def get_public_key(account, fmt, purpose \\ "assertionMethod") do
     case get_did_document(account) do
       nil ->
-        {:error, "could not locate did for account"}
+        {:error, "could not locate DID for account"}
 
       doc ->
         CryptoUtils.Did.get_public_key(doc, fmt, purpose)
@@ -132,7 +132,7 @@ defmodule DidServer.Identities do
   end
 
   @doc """
-  Creates a did key.
+  Creates a DID key.
 
   ## Examples
 
@@ -150,7 +150,7 @@ defmodule DidServer.Identities do
   end
 
   @doc """
-  Returns an `%Ecto.Changeset{}` for tracking did changes.
+  Returns an `%Ecto.Changeset{}` for tracking DID changes.
 
   ## Examples
 

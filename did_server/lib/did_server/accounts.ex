@@ -290,9 +290,9 @@ defmodule DidServer.Accounts do
 
         message =
           if is_nil(existing_did) do
-            "could not create did"
+            "could not create DID"
           else
-            "could not link to did #{existing_did}"
+            "could not link to DID #{existing_did}"
           end
 
         {:error, Ecto.Changeset.add_error(account_changeset, :did, message)}

@@ -32,7 +32,7 @@ defmodule DidServer.IdentitiesTest do
       {:error, _} = Identities.create_key(@invalid_attrs)
     end
 
-    test "create_key/1 fails for an existing did" do
+    test "create_key/1 fails for an existing DID" do
       %{did: did} = key_fixture()
       {:error, _} = Identities.create_key(%{did: did})
     end

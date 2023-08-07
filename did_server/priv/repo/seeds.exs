@@ -40,5 +40,5 @@ if Mix.env() == :dev do
     })
 
   also_known_as = DidServer.Accounts.list_also_known_as_accounts(bob_example_com)
-  IO.puts("#{Enum.count(also_known_as)} user(s) in did #{did}")
+  IO.puts("#{Enum.count(also_known_as)} user(s) in DID #{did}")
 end

@@ -42,7 +42,7 @@ defmodule DidServerWeb.DjdPlcControllerTest do
       # assert %{"status" => "failed"} = json_response(conn, 503)
     end
 
-    test "retrieves the did doc", %{conn: conn} do
+    test "retrieves the DID document", %{conn: conn} do
       assert %{did: did} = operation_fixture()
 
       conn = get(conn, ~p"/plc/#{did}")
@@ -55,7 +55,7 @@ defmodule DidServerWeb.DjdPlcControllerTest do
       assert document_did == did
     end
 
-    test "retrieves did doc data", %{conn: conn} do
+    test "retrieves DID document data", %{conn: conn} do
       assert %{did: did} = operation_fixture()
 
       conn = get(conn, ~p"/plc/#{did}/data")
@@ -113,15 +113,15 @@ defmodule DidServerWeb.DjdPlcControllerTest do
       assert verify_doc(conn, did, rotation_keys: [Map.get(params, "recoveryKey")])
     end
 
-    test "fails if same did attempted twice", %{conn: conn} do
+    test "fails if same DID attempted twice", %{conn: conn} do
       {conn, _} = post_genesis_op(conn)
       {conn, _} = post_genesis_op(conn)
 
       assert %{"errors" => %{"detail" => message}} = json_response(conn, 400)
-      assert String.starts_with?(message, "create operation not allowed for an existing did")
+      assert String.starts_with?(message, "create operation not allowed for an existing DID")
     end
 
-    test "tombstones the did", %{conn: conn} do
+    test "tombstones the DID", %{conn: conn} do
       {conn, did} = post_genesis_op(conn)
       conn = get(conn, ~p"/plc/#{did}/log/last")
       %{"cid" => prev} = json_response(conn, 200)

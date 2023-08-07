@@ -21,7 +21,7 @@ defmodule CryptoUtils.Did do
     @impl true
     def exception(expected_did) do
       %__MODULE__{
-        message: "expected did #{CryptoUtils.display_did(expected_did)} for genesis operation"
+        message: "expected DID #{CryptoUtils.display_did(expected_did)} for genesis operation"
       }
     end
   end
@@ -528,7 +528,7 @@ defmodule CryptoUtils.Did do
     Enum.find(svcs, fn %{"type" => type} -> type == service_type end)
     |> case do
       %{"serviceEndpoint" => endpoint} -> {:ok, endpoint}
-      _ -> {:error, "service type #{service_type} not found in did document"}
+      _ -> {:error, "service type #{service_type} not found in DID document"}
     end
   end
 
@@ -551,11 +551,11 @@ defmodule CryptoUtils.Did do
         CryptoUtils.Keys.extract_multikey(vm, fmt)
 
       _ ->
-        {:error, "multibase method #{vm_id} not found in did document"}
+        {:error, "multibase method #{vm_id} not found in DID document"}
     end
   end
 
-  def get_public_key(_doc, _fmt, _relationship), do: {:error, "not a valid did document"}
+  def get_public_key(_doc, _fmt, _relationship), do: {:error, "not a valid DID document"}
 
   ## DID document support
 
@@ -909,7 +909,7 @@ defmodule CryptoUtils.Did do
         if did != op_did do
           raise ImproperOperationError,
             op: unsigned_op,
-            message: "cannot apply update to a different did"
+            message: "cannot apply update to a different DID"
         end
 
         updated_op =
@@ -1196,14 +1196,14 @@ defmodule CryptoUtils.Did do
   defp assure_valid_op_order_and_sig(_ops, %{"type" => "create"} = proposed) do
     raise ImproperOperationError,
       op: proposed,
-      message: "create type not allowed for an existing did"
+      message: "create type not allowed for an existing DID"
   end
 
   defp assure_valid_op_order_and_sig(ops, %{"prev" => prev} = proposed) do
     if is_nil(prev) do
       raise MisorderedOperationError,
         op: proposed,
-        message: "create operation not allowed for an existing did"
+        message: "create operation not allowed for an existing DID"
     end
 
     index_of_prev = Enum.find_index(ops, fn %{cid: cid} -> prev == cid end)
