@@ -24,13 +24,19 @@ defmodule DidServer.Identities do
     Repo.all(Key)
   end
 
-  def list_keys_by_account(account, return_structs? \\ false) do
-    account = Repo.preload(account, :keys)
+  def list_keys_by_account(%Account{id: account_id}, return_structs? \\ false) do
+    keys =
+      from(key in Key,
+        join: account in assoc(key, :accounts),
+        where: account.id == ^account_id,
+        preload: [:users]
+      )
+      |> Repo.all()
 
     if return_structs? do
-      account.keys
+      keys
     else
-      Enum.map(account.keys, fn %{did: did} -> did end)
+      Enum.map(keys, fn %{did: did} -> did end)
     end
   end
 
@@ -77,24 +83,14 @@ defmodule DidServer.Identities do
     end
   end
 
-  def get_user_key(user_id) when is_binary(user_id) do
-    Repo.get(User, user_id) |> Repo.preload(:account)
-  end
-
-  def get_user_key(%Account{} = account) do
-    account = Repo.preload(account, :users)
-
-    case account.users do
-      [] -> nil
-      [user] -> %User{user | account: account}
-      _ -> raise RuntimeError, "multiple DIDs for account"
-    end
-  end
-
-  def get_account_did(%Account{} = account) do
-    account = Repo.preload(account, :keys)
-
-    case account.keys do
+  def get_account_did(%Account{id: account_id}) do
+    from(key in Key,
+      join: account in assoc(key, :accounts),
+      where: account.id == ^account_id,
+      preload: :users
+    )
+    |> Repo.all()
+    |> case do
       [] -> nil
       [key] -> key
       _ -> raise RuntimeError, "multiple DIDs for account"
@@ -113,7 +109,7 @@ defmodule DidServer.Identities do
 
   def get_did_document(%{username: username, domain: domain}) do
     case list_keys_by_username(username, domain) do
-      [%{did: did}] ->
+      [did] ->
         format_did_document(did)
 
       [] ->
@@ -182,7 +178,7 @@ defmodule DidServer.Identities do
   end
 
   def add_also_known_as(did, %Account{} = account) when is_binary(did) do
-    User.build_link(did, account)
+    User.build_user(did, account)
     |> Repo.insert()
     |> case do
       {:ok, _} -> {:ok, account}
@@ -341,35 +337,27 @@ defmodule DidServer.Identities do
   ## WebAuthn credentials
 
   @doc """
-  `user_or_id` is either a `Account` struct or a `User` struct,
+  `user_or_id` is either a `User` struct,
   or the UUID for a `User` record.
   """
   def get_credentials(user_or_id)
 
   def get_credentials(user_id) when is_binary(user_id) do
-    case Repo.get(User, user_id) do
-      nil ->
-        []
-
-      user ->
-        get_credentials(user)
-    end
+    from(credential in Credential,
+      join: user in assoc(credential, :user),
+      where: user.id == ^user_id
+    )
+    |> Repo.all()
   end
 
-  def get_credentials(%User{} = user) do
-    user = Repo.preload(user, :credentials)
-    user.credentials
-  end
-
-  def get_credentials(%Account{} = account) do
-    account = Repo.preload(account, :credentials)
-    account.credentials
+  def get_credentials(%User{id: user_id}) do
+    get_credentials(user_id)
   end
 
   def get_credentials(_), do: []
 
   @doc """
-  `user_or_id` is either a `Account` struct or a `User` struct,
+  `user_or_id` is either a `User` struct,
   or the UUID for a `User` record.
   """
   def get_wax_params(user_or_id) do

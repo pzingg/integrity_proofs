@@ -1,4 +1,4 @@
-defmodule DidServerWeb.WebControllerTest do
+defmodule DidServerWeb.DidWebControllerTest do
   use DidServerWeb.ConnCase
 
   import DidServer.AccountsFixtures

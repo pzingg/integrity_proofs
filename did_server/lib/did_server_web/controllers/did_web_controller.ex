@@ -1,4 +1,4 @@
-defmodule DidServerWeb.WebController do
+defmodule DidServerWeb.DidWebController do
   use DidServerWeb, :controller
 
   alias DidServerWeb.ErrorJSON

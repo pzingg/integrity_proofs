@@ -3,7 +3,7 @@ defmodule DidServerWeb.WebAuthnCredentialController do
 
   require Logger
 
-  alias DidServer.Identities
+  alias DidServer.{Accounts, Identities}
   alias DidServerWeb.UserAuth
 
   def new(conn, _params) do
@@ -23,7 +23,7 @@ defmodule DidServerWeb.WebAuthnCredentialController do
           } = webauthn_params
       }) do
     maybe_user_handle = if maybe_user_handle_b64 <> "", do: Base.decode64!(maybe_user_handle_b64)
-    user = Identities.get_user_key(maybe_user_handle)
+    user = Accounts.get_user(maybe_user_handle)
 
     if is_nil(user) do
       authentication_failed(conn, "No user found for handle")

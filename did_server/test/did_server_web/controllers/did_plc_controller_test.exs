@@ -1,4 +1,4 @@
-defmodule DidServerWeb.PlcControllerTest do
+defmodule DidServerWeb.DjdPlcControllerTest do
   use DidServerWeb.ConnCase
 
   import DidServer.LogFixtures

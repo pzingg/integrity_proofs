@@ -3,33 +3,34 @@ defmodule DidServer.Accounts.Account do
   import Ecto.Changeset
 
   alias DidServer.{Accounts, Identities}
+  alias DidServer.Accounts.User
   alias DidServer.Identities.Key
   alias __MODULE__
 
   @primary_key {:id, :binary_id, autogenerate: true}
   schema "accounts" do
-    field :email, :string
-    field :username, :string
-    field :domain, :string
-    field :display_name, :string
-    field :description, :string
-    field :avatar, :binary
-    field :avatar_mime_type, :string
-    field :banner, :binary
-    field :banner_mime_type, :string
+    field(:email, :string)
+    field(:username, :string)
+    field(:domain, :string)
+    field(:display_name, :string)
+    field(:description, :string)
+    field(:avatar, :binary)
+    field(:avatar_mime_type, :string)
+    field(:banner, :binary)
+    field(:banner_mime_type, :string)
     # field :hashed_password, :string, redact: true
-    field :confirmed_at, :naive_datetime
+    field(:confirmed_at, :naive_datetime)
     # used when linking to existing DID
-    field :did, :string, virtual: true
+    field(:did, :string, virtual: true)
     # used when creating a new DID
-    field :signer, {:array, :binary}, virtual: true
-    field :signing_key, :string, virtual: true
-    field :recovery_key, :string, virtual: true
-    field :password, :string, virtual: true, redact: true
+    field(:signer, {:array, :binary}, virtual: true)
+    field(:signing_key, :string, virtual: true)
+    field(:recovery_key, :string, virtual: true)
+    field(:password, :string, virtual: true, redact: true)
 
-    has_many :users, DidServer.Accounts.User
-    has_many :keys, through: [:users, :key]
-    has_many :credentials, through: [:users, :credentials]
+    has_many(:users, DidServer.Accounts.User)
+    has_many(:keys, through: [:users, :key])
+    has_many(:credentials, through: [:users, :credentials])
 
     timestamps()
   end
@@ -150,24 +151,24 @@ defmodule DidServer.Accounts.Account do
   @doc """
   Verifies the password by trying the passwords of linked DIDs.
   """
-  def valid_password?(%Account{} = account, password) when byte_size(password) > 0 do
-    did_that_validated =
-      Identities.list_keys_by_account(account, true)
-      |> Enum.find(fn did -> Key.valid_password?(did, password) end)
+  def valid_password_user(account, password)
 
-    !is_nil(did_that_validated)
+  def valid_password_user(%Account{} = account, password) when byte_size(password) > 0 do
+    account
+    |> Accounts.list_users_by_account()
+    |> Enum.find(&User.valid_password?(&1, password))
   end
 
-  def valid_password?(_, _) do
+  def valid_password_user(_, _) do
     Bcrypt.no_user_verify()
-    false
+    nil
   end
 
   @doc """
   Validates the current password otherwise adds an error to the changeset.
   """
   def validate_current_password(changeset, password) do
-    if valid_password?(changeset.data, password) do
+    if valid_password_user(changeset.data, password) do
       changeset
     else
       add_error(changeset, :current_password, "is not valid")

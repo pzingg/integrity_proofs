@@ -24,6 +24,24 @@ defmodule DidServer.Accounts do
   end
 
   @doc """
+  Gets a single account.
+
+  Raises `Ecto.NoResultsError` if the Account does not exist.
+
+  ## Examples
+
+      iex> get_account!("404f8b73-b59d-45d4-8bcd-f20a7bfe852c")
+      %Account{}
+
+      iex> get_account!("404f8b73-beef-45d4-8bcd-f20a7bfe852c")
+      ** (Ecto.NoResultsError)
+
+  """
+  def get_account!(id) do
+    Repo.get!(Account, id) |> Repo.preload([:users, :keys])
+  end
+
+  @doc """
   Gets an account by email.
 
   ## Examples
@@ -36,40 +54,20 @@ defmodule DidServer.Accounts do
 
   """
   def get_account_by_email(email) when is_binary(email) do
-    Repo.get_by(Account, email: email) |> Repo.preload(:keys)
-  end
-
-  @doc """
-  Gets an account by email and password.
-
-  ## Examples
-
-      iex> get_account_by_email_and_password("foo@example.com", "correct_password")
-      %Account{}
-
-      iex> get_account_by_email_and_password("foo@example.com", "invalid_password")
-      nil
-
-  """
-  def get_account_by_email_and_password(email, password)
-      when is_binary(email) and is_binary(password) do
-    account = Repo.get_by(Account, email: email) |> Repo.preload(:keys)
-    if Account.valid_password?(account, password), do: account
+    from(account in Account,
+      where: account.email == ^email,
+      preload: [:users, :keys]
+    )
+    |> Repo.one()
   end
 
   def get_account_by_username(username, domain) when is_binary(username) and is_binary(domain) do
     from(account in Account,
       where: account.username == ^username,
-      where: account.domain == ^domain
+      where: account.domain == ^domain,
+      preload: [:users, :keys]
     )
     |> Repo.one()
-    |> Repo.preload(:keys)
-  end
-
-  def get_account_by_username_and_password(username, domain, password)
-      when is_binary(username) and is_binary(domain) and is_binary(password) do
-    account = get_account_by_username(username, domain)
-    if Account.valid_password?(account, password), do: account
   end
 
   def get_account_by_identifier(handle) when is_binary(handle) do
@@ -221,22 +219,6 @@ defmodule DidServer.Accounts do
     !String.ends_with?(s, "-") && Regex.match?(~r/^[a-z0-9]([-a-z0-9]*)$/, s)
   end
 
-  @doc """
-  Gets a single account.
-
-  Raises `Ecto.NoResultsError` if the Account does not exist.
-
-  ## Examples
-
-      iex> get_account!("abcde-ghkchie")
-      %Account{}
-
-      iex> get_account!("not-a-uuid")
-      ** (Ecto.NoResultsError)
-
-  """
-  def get_account!(id), do: Repo.get!(Account, id) |> Repo.preload(:keys)
-
   ## Account registration
 
   @doc """
@@ -294,7 +276,7 @@ defmodule DidServer.Accounts do
 
     case Repo.transaction(multi) do
       {:ok, %{account: %Account{} = account, did: did}} ->
-        {:ok, %Account{account | did: did, password: nil} |> Repo.preload(:keys)}
+        {:ok, %Account{account | did: did, password: nil} |> Repo.preload([:users, :keys])}
 
       {:error, :account, %Ecto.Changeset{} = changeset, _} ->
         {:error, changeset}
@@ -333,35 +315,6 @@ defmodule DidServer.Accounts do
     Account.registration_changeset(account, attrs, validate_email: false)
   end
 
-  ## Server statistics
-
-  @doc """
-  Usage for nodeinfo requests.
-  """
-  def usage() do
-    %{
-      users: count_users(),
-      localPosts: 0
-    }
-  end
-
-  def count_users() do
-    now = NaiveDateTime.utc_now()
-    one_month = DateTime.add(now, -(31 * 24 * 3600), :second)
-    half_year = DateTime.add(now, -(184 * 24 * 3600), :second)
-    total = Repo.aggregate(Account, :count)
-
-    active_month =
-      from(account in Account, where: account.updated_at >= ^one_month)
-      |> Repo.aggregate(:count)
-
-    active_half_year =
-      from(account in Account, where: account.updated_at >= ^half_year)
-      |> Repo.aggregate(:count)
-
-    %{total: total, activeMonth: active_month, activeHalfYear: active_half_year}
-  end
-
   ## Settings
 
   @doc """
@@ -395,6 +348,158 @@ defmodule DidServer.Accounts do
     |> Account.email_changeset(attrs)
     |> Account.validate_current_password(password)
     |> Ecto.Changeset.apply_action(:update)
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for changing the account username and domain.
+
+  ## Examples
+
+      iex> change_account_username(account)
+      %Ecto.Changeset{data: %Account{}}
+
+  """
+  def change_account_username(account, attrs \\ %{}) do
+    Account.username_changeset(account, attrs, validate_username: true)
+  end
+
+  @doc """
+  Updates the account username and domain.
+
+  ## Examples
+
+      iex> update_account_username(account, "valid password", %{username: ..., domain: ...})
+      {:ok, %Account{}}
+
+      iex> update_account_username(account, "invalid password", %{username: ..., domain: ...})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def update_account_username(account, password, attrs) do
+    changeset =
+      account
+      |> Account.username_changeset(attrs)
+      |> Account.validate_current_password(password)
+
+    Ecto.Multi.new()
+    |> Ecto.Multi.update(:account, changeset)
+    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(account, :all))
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{account: account}} -> {:ok, account}
+      {:error, :account, changeset, _} -> {:error, changeset}
+    end
+  end
+
+  ## Users
+
+  @doc """
+  Returns the list of all users.
+
+  ## Examples
+
+      iex> list_users()
+      [%User{}, ...]
+
+  """
+  def list_users do
+    from(user in User, preload: [:account, :key])
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns the list of users associated with an account.
+  Each `User` for the account has its own password-protected DID.
+
+  ## Examples
+
+      iex> list_users_by_account(%Account{})
+      [%User{}, ...]
+
+  """
+  def list_users_by_account(%Account{id: account_id}) do
+    from(user in User,
+      join: account in assoc(user, :account),
+      where: account.id == ^account_id,
+      preload: [:account, :key]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Gets a single user.
+
+  ## Examples
+
+      iex> get_user("404f8b73-b59d-45d4-8bcd-f20a7bfe852c")
+      %User{}
+
+      iex> get_user("404f8b73-beef-45d4-8bcd-f20a7bfe852c")
+      nil
+
+  """
+  def get_user(user_id) when is_binary(user_id) do
+    from(user in User,
+      where: user.id == ^user_id,
+      preload: [:account, :key]
+    )
+    |> Repo.one()
+  end
+
+  @doc """
+  If the account has exactly one password-protected DID,
+  returns the associated `User`.
+
+  ## Examples
+
+      iex> get_user_by_account(%Account{})
+      %User{}
+
+  """
+  def get_user_by_account(%Account{} = account) do
+    case list_users_by_account(account) do
+      [] -> nil
+      [user] -> user
+      users -> raise RuntimeError, "#{Enum.count(users)} DIDs for account"
+    end
+  end
+
+  @doc """
+  Gets a user by email and password.
+
+  ## Examples
+
+      iex> get_user_by_email_and_password("foo@example.com", "correct_password")
+      %User{}
+
+      iex> get_user_by_email_and_password("foo@example.com", "invalid_password")
+      nil
+
+  """
+  def get_user_by_email_and_password(email, password)
+      when is_binary(email) and is_binary(password) do
+    get_account_by_email(email)
+    |> Account.valid_password_user(password)
+    |> Repo.preload([:account, :key])
+  end
+
+  @doc """
+  Gets a user by username, domain and password.
+
+  ## Examples
+
+      iex> get_user_by_username_and_password("foo", "example.com", "correct_password")
+      %User{}
+
+      iex> get_user_by_username_and_password("foo", "example.com", "invalid_password")
+      nil
+
+  """
+  def get_user_by_username_and_password(username, domain, password)
+      when is_binary(username) and is_binary(domain) and is_binary(password) do
+    get_account_by_username(username, domain)
+    |> Account.valid_password_user(password)
+    |> Repo.preload([:account, :key])
   end
 
   @doc """
@@ -445,47 +550,6 @@ defmodule DidServer.Accounts do
 
     Repo.insert!(user_token)
     UserNotifier.deliver_update_email_instructions(account, update_email_url_fun.(encoded_token))
-  end
-
-  @doc """
-  Returns an `%Ecto.Changeset{}` for changing the account username and domain.
-
-  ## Examples
-
-      iex> change_account_username(account)
-      %Ecto.Changeset{data: %Account{}}
-
-  """
-  def change_account_username(account, attrs \\ %{}) do
-    Account.username_changeset(account, attrs, validate_username: true)
-  end
-
-  @doc """
-  Updates the account username and domain.
-
-  ## Examples
-
-      iex> update_account_username(account, "valid password", %{username: ..., domain: ...})
-      {:ok, %Account{}}
-
-      iex> update_account_username(account, "invalid password", %{username: ..., domain: ...})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def update_account_username(account, password, attrs) do
-    changeset =
-      account
-      |> Account.username_changeset(attrs)
-      |> Account.validate_current_password(password)
-
-    Ecto.Multi.new()
-    |> Ecto.Multi.update(:account, changeset)
-    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(account, :all))
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{account: account}} -> {:ok, account}
-      {:error, :account, changeset, _} -> {:error, changeset}
-    end
   end
 
   ## Session
@@ -554,7 +618,7 @@ defmodule DidServer.Accounts do
     with {:ok, query} <- UserToken.verify_email_token_query(token, "confirm"),
          %User{} = user <- Repo.one(query) |> Repo.preload(:account),
          {:ok, %{account: account}} <- Repo.transaction(confirm_user_multi(user)) do
-      {:ok, account}
+      {:ok, account |> Repo.preload([:users, :keys])}
     else
       _ -> :error
     end
@@ -605,10 +669,39 @@ defmodule DidServer.Accounts do
   """
   def get_user_by_reset_password_token(token) do
     with {:ok, query} <- UserToken.verify_email_token_query(token, "reset_password"),
-         %User{} = user <- Repo.one(query) |> Repo.preload(:account) do
+         %User{} = user <- Repo.one(query) |> Repo.preload([:account, :key]) do
       user
     else
       _ -> nil
     end
+  end
+
+  ## Server statistics
+
+  @doc """
+  Usage for nodeinfo requests.
+  """
+  def usage() do
+    %{
+      users: count_users(),
+      localPosts: 0
+    }
+  end
+
+  def count_users() do
+    now = NaiveDateTime.utc_now()
+    one_month = DateTime.add(now, -(31 * 24 * 3600), :second)
+    half_year = DateTime.add(now, -(184 * 24 * 3600), :second)
+    total = Repo.aggregate(Account, :count)
+
+    active_month =
+      from(account in Account, where: account.updated_at >= ^one_month)
+      |> Repo.aggregate(:count)
+
+    active_half_year =
+      from(account in Account, where: account.updated_at >= ^half_year)
+      |> Repo.aggregate(:count)
+
+    %{total: total, activeMonth: active_month, activeHalfYear: active_half_year}
   end
 end

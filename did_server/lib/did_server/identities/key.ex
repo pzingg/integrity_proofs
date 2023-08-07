@@ -4,6 +4,8 @@ defmodule DidServer.Identities.Key do
 
   require Logger
 
+  alias __MODULE__
+
   @primary_key false
   schema "keys" do
     field :did, :string, primary_key: true
@@ -41,7 +43,7 @@ defmodule DidServer.Identities.Key do
       Defaults to `true`.
 
   """
-  def changeset(%__MODULE__{} = key, attrs, opts \\ []) do
+  def changeset(%Key{} = key, attrs, opts \\ []) do
     key
     |> cast(attrs, [:did, :method, :password, :password_confirmation])
     |> validate_required([:did])
@@ -76,13 +78,13 @@ defmodule DidServer.Identities.Key do
   If there is no user or the user doesn't have a password, we call
   `Bcrypt.no_user_verify/0` to avoid timing attacks.
   """
-  def valid_password?(%__MODULE__{hashed_password: hashed_password}, password)
+  def valid_password?(%Key{hashed_password: hashed_password}, password)
       when is_binary(hashed_password) and byte_size(password) > 0 do
     Bcrypt.verify_pass(password, hashed_password)
   end
 
-  def valid_password?(key, _) do
-    Logger.error("Did.valid_password? without hashed_password: #{inspect(key)}")
+  def valid_password?(%Key{did: did}, _) do
+    Logger.error("Did.valid_password? without hashed_password: #{did}")
     Bcrypt.no_user_verify()
     false
   end

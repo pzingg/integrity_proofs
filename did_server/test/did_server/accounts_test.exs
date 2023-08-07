@@ -21,21 +21,39 @@ defmodule DidServer.AccountsTest do
     end
   end
 
-  describe "get_account_by_email_and_password/2" do
+  describe "users" do
+    test "lists users" do
+      user = user_fixture()
+      assert Accounts.list_users() == [user]
+    end
+
+    test "lists users for an account" do
+      %{account: account} = user = user_fixture()
+      assert Accounts.list_users_by_account(account) == [user]
+    end
+
+    test "gets user for an account" do
+      %{account: account} = user = user_fixture()
+      assert Accounts.get_user_by_account(account) == user
+    end
+  end
+
+  describe "get_user_by_email_and_password/2" do
     test "does not return the account if the email does not exist" do
-      refute Accounts.get_account_by_email_and_password("unknown@example.com", "hello world!")
+      refute Accounts.get_user_by_email_and_password("unknown@example.com", "hello world!")
     end
 
     test "does not return the account if the password is not valid" do
-      account = account_fixture()
-      refute Accounts.get_account_by_email_and_password(account.email, "invalid")
+      %{account: %{email: email}} = user_fixture()
+
+      refute Accounts.get_user_by_email_and_password(email, "invalid")
     end
 
     test "returns the account if the email and password are valid" do
-      %{id: id, email: email} = account_fixture()
+      %{id: id, account: %{email: email}} = user_fixture()
 
-      assert %Account{id: ^id} =
-               Accounts.get_account_by_email_and_password(email, valid_account_password())
+      assert %User{id: ^id} =
+               Accounts.get_user_by_email_and_password(email, valid_account_password())
     end
   end
 

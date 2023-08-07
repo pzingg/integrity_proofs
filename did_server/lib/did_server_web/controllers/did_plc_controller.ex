@@ -1,4 +1,4 @@
-defmodule DidServerWeb.PlcController do
+defmodule DidServerWeb.DidPlcController do
   use DidServerWeb, :controller
 
   alias DidServer.Log.Operation
