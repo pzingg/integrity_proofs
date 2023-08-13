@@ -3,6 +3,24 @@ defmodule DidServerWeb.WebAuthnKeyController do
 
   require Logger
 
+  # Notes from https://developers.google.com/codelabs/passkey-form-autofill
+  #
+  # Caution: On a device that doesn't support a biometric sensor, such
+  # as an iMac, setting the authenticatorSelection.userVerification
+  # parameter to a "preferred" value results in no user verification
+  # requested to the user, which immediately returns a credential that
+  # contains the UV (user verification) flag with a false value.
+  # This is an expected behavior for this codelab because the server
+  # doesn't require the UV flag as you can see in the libs/auth.mjs file.
+  # If you want to always require a user verification, set the
+  # authenticatorSelection.userVerification property to a "required"
+  # value and replace the line in the libs/auth.mjs file with a
+  # requireUserVerification property set to a true value.
+  #
+  # Caution: Some browsers don't require any parameters on the
+  # authenticatorSelection dictionary to create a passkey, but others
+  # might. We recommend that you specify these parameters explicitly.
+
   def new(conn, params) do
     # require_authenticated_user
     %{id: user_id, account: account} = conn.assigns.current_user
@@ -36,7 +54,8 @@ defmodule DidServerWeb.WebAuthnKeyController do
       rp_name: DidServer.Application.name(),
       user: handle,
       user_id: user_id,
-      attestation: challenge.attestation
+      attestation: challenge.attestation,
+      cred_algs: supported_cred_algs()
     )
   end
 
@@ -95,5 +114,20 @@ defmodule DidServerWeb.WebAuthnKeyController do
     conn
     |> put_flash(:error, "Key registration failed: #{message}")
     |> redirect(to: ~p"/wauth/register")
+  end
+
+  # Note: if you add :ed25519 to the list,
+  # Chrome will not pop-up the passkey dialog. Apparently
+  # only :p256 curves are supported for cross-platform keys.
+  #
+  # Google's tutorial specifies support for ECDSA with P-256 (:p256) and
+  # RSA PKCS#1 (curve :rs256, COSE alg -257), and says that supporting
+  # these "gives complete coverage".
+  defp supported_cred_algs do
+    [:p256]
+    |> Enum.map(fn curve ->
+      %{alg: alg} = CryptoUtils.Curves.cose(curve)
+      alg
+    end)
   end
 end

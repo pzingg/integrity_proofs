@@ -7,7 +7,6 @@ defmodule DidServerWeb.WebAuthnCredentialController do
   alias DidServerWeb.UserAuth
 
   def new(conn, _params) do
-    # redirect_if_user_is_authenticated
     login_with_resident_key(conn)
   end
 
@@ -69,37 +68,10 @@ defmodule DidServerWeb.WebAuthnCredentialController do
     |> put_session(:authentication_challenge, challenge)
     |> render(:new,
       login: nil,
-      with_webauthn: true,
       challenge: Base.encode64(challenge.bytes),
       rp_id: challenge.rp_id,
       cred_ids: []
     )
-  end
-
-  defp login_with_handle(conn, %{user: user, credentials: credentials} = _user_key) do
-    handle = DidServer.Accounts.Account.domain_handle(user)
-
-    case credentials do
-      [] ->
-        render(conn, :new, login: handle, with_webauthn: false)
-
-      _ ->
-        {allow_credentials, aaguid_mapping} = Identities.to_wax_params(credentials)
-        challenge = Wax.new_authentication_challenge(allow_credentials: allow_credentials)
-
-        Logger.debug("Wax: generated authentication challenge #{inspect(challenge)}")
-
-        conn
-        |> put_session(:authentication_challenge, challenge)
-        |> put_session(:aaguid_mapping, aaguid_mapping)
-        |> render(:new,
-          login: handle,
-          with_webauthn: true,
-          challenge: Base.encode64(challenge.bytes),
-          rp_id: challenge.rp_id,
-          cred_ids: Enum.map(credentials, fn %{raw_id: cred_id} -> cred_id end)
-        )
-    end
   end
 
   defp check_authenticator_status(credential_id, aaguid_mapping, challenge) do

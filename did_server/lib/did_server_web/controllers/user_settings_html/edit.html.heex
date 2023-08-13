@@ -1,93 +1,99 @@
-<.header class="text-center">
-  Account Settings
-  <:subtitle>Manage your account email, username, domain and password settings</:subtitle>
-</.header>
+<div class="max-w-md mx-auto">
+  <.header class="text-center">
+    Account Settings for <%= @user %>
+    <:subtitle>Manage your account email, username, domain and password settings</:subtitle>
+  </.header>
 
-<div class="space-y-12 divide-y">
-  <div>
-    <.simple_form :let={f} for={@email_changeset} action={~p"/users/settings"} id="update_email">
-      <.error :if={@email_changeset.action}>
-        Oops, something went wrong! Please check the errors below.
-      </.error>
+  <div class="space-y-12 divide-y">
+    <div class="pt-4">
+      <h2 class="font-semibold">Change email address</h2>
+      <.simple_form :let={f} for={@email_changeset} action={~p"/users/settings"} id="update_email">
+        <.error :if={@email_changeset.action}>
+          Oops, something went wrong! Please check the errors below.
+        </.error>
 
-      <.input field={f[:action]} type="hidden" name="action" value="update_email" />
+        <.input field={f[:action]} type="hidden" name="action" value="update_email" />
 
-      <.input field={f[:email]} type="email" label="Email" required />
-      <.input
-        field={f[:current_password]}
-        name="current_password"
-        type="password"
-        label="Current Password"
-        required
-        id="current_password_for_email"
-      />
-      <:actions>
-        <.button phx-disable-with="Changing...">Change Email</.button>
-      </:actions>
-    </.simple_form>
-  </div>
-  <div>
-    <.simple_form
-      :let={f}
-      for={@username_changeset}
-      action={~p"/users/settings"}
-      id="update_username"
-    >
-      <.error :if={@username_changeset.action}>
-        Oops, something went wrong! Please check the errors below.
-      </.error>
+        <.input field={f[:email]} type="email" label="Email" required />
+        <.input
+          field={f[:current_password]}
+          name="current_password"
+          type="password"
+          label="Current Password"
+          required
+          id="current_password_for_email"
+        />
+        <:actions>
+          <.button phx-disable-with="Changing...">Change Email</.button>
+        </:actions>
+      </.simple_form>
+    </div>
 
-      <.input field={f[:action]} type="hidden" name="action" value="update_username" />
+    <div class="pt-4">
+      <h2 class="font-semibold">Change username</h2>
+      <.simple_form
+        :let={f}
+        for={@username_changeset}
+        action={~p"/users/settings"}
+        id="update_username"
+      >
+        <.error :if={@username_changeset.action}>
+          Oops, something went wrong! Please check the errors below.
+        </.error>
 
-      <.input field={f[:username]} type="text" label="Username" required />
-      <.input field={f[:domain]} type="text" label="Domain" required />
-      <.input
-        field={f[:current_password]}
-        name="current_password"
-        type="password"
-        label="Current Password"
-        required
-        id="current_password_for_username"
-      />
-      <:actions>
-        <.button phx-disable-with="Changing...">Change Username</.button>
-      </:actions>
-    </.simple_form>
-  </div>
-  <div>
-    <h2>Changing password for DID <%= @password_did %></h2>
-    <.simple_form
-      :let={f}
-      for={@password_changeset}
-      action={~p"/users/settings"}
-      id="update_password"
-    >
-      <.error :if={@password_changeset.action}>
-        Oops, something went wrong! Please check the errors below.
-      </.error>
+        <.input field={f[:action]} type="hidden" name="action" value="update_username" />
 
-      <.input field={f[:action]} type="hidden" name="action" value="update_password" />
-      <.input field={f[:current_user_id]} type="hidden" />
+        <.input field={f[:username]} type="text" label="Username" required />
+        <.input field={f[:domain]} type="text" label="Domain" required />
+        <.input
+          field={f[:current_password]}
+          name="current_password"
+          type="password"
+          label="Current Password"
+          required
+          id="current_password_for_username"
+        />
+        <:actions>
+          <.button phx-disable-with="Changing...">Change Username</.button>
+        </:actions>
+      </.simple_form>
+    </div>
 
-      <.input field={f[:password]} type="password" label="New password" required />
-      <.input
-        field={f[:password_confirmation]}
-        type="password"
-        label="Confirm new password"
-        required
-      />
+    <div class="pt-4">
+      <h2 class="font-semibold">Change password (for DID <%= @password_did %>)</h2>
+      <.simple_form
+        :let={f}
+        for={@password_changeset}
+        action={~p"/users/settings"}
+        id="update_password"
+      >
+        <.error :if={@password_changeset.action}>
+          Oops, something went wrong! Please check the errors below.
+        </.error>
 
-      <.input
-        field={f[:current_password]}
-        name="current_password"
-        type="password"
-        label="Current password"
-        id="current_password_for_password"
-        required
-      />
-      <:actions>
-        <.button phx-disable-with="Changing...">Change Password</.button>
-      </:actions>
-    </.simple_form>
+        <.input field={f[:action]} type="hidden" name="action" value="update_password" />
+        <.input field={f[:current_user_id]} type="hidden" />
+
+        <.input field={f[:password]} type="password" label="New password" required />
+        <.input
+          field={f[:password_confirmation]}
+          type="password"
+          label="Confirm new password"
+          required
+        />
+
+        <.input
+          field={f[:current_password]}
+          name="current_password"
+          type="password"
+          label="Current password"
+          id="current_password_for_password"
+          required
+        />
+        <:actions>
+          <.button phx-disable-with="Changing...">Change Password</.button>
+        </:actions>
+      </.simple_form>
+    </div>
   </div>
 </div>

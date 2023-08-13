@@ -51,6 +51,7 @@ config :phoenix, :json_library, Jason
 
 # WebAuthn configuration
 config :wax_,
+  # If set to :auto, rp_id is automatically determined from the origin (set to the host)
   rp_id: :auto,
   update_metadata: true,
   allowed_attestation_types: [:basic, :uncertain, :attca, :self],

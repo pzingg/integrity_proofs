@@ -7,7 +7,11 @@ defmodule DidServerWeb.UserSettingsController do
   plug(:assign_email_and_password_changesets)
 
   def edit(conn, _params) do
-    render(conn, :edit)
+    # require_authenticated_user
+    %{account: account} = conn.assigns.current_user
+    handle = DidServer.Accounts.Account.domain_handle(account)
+
+    render(conn, :edit, user: handle)
   end
 
   def update(conn, %{"action" => "update_email"} = params) do
@@ -15,6 +19,7 @@ defmodule DidServerWeb.UserSettingsController do
 
     # require_authenticated_user
     %{account: account} = conn.assigns.current_user
+    handle = DidServer.Accounts.Account.domain_handle(account)
 
     case Accounts.apply_account_email(account, password, user_params) do
       {:ok, applied_account} ->
@@ -32,7 +37,7 @@ defmodule DidServerWeb.UserSettingsController do
         |> redirect(to: ~p"/users/settings")
 
       {:error, changeset} ->
-        render(conn, :edit, email_changeset: changeset)
+        render(conn, :edit, user: handle, email_changeset: changeset)
     end
   end
 
@@ -41,6 +46,7 @@ defmodule DidServerWeb.UserSettingsController do
 
     # require_authenticated_user
     %{account: account} = user = conn.assigns.current_user
+    handle = DidServer.Accounts.Account.domain_handle(account)
 
     case Accounts.update_account_username(account, password, user_params) do
       {:ok, _account} ->
@@ -50,7 +56,7 @@ defmodule DidServerWeb.UserSettingsController do
         |> UserAuth.log_in_user(user)
 
       {:error, changeset} ->
-        render(conn, :edit, username_changeset: changeset)
+        render(conn, :edit, user: handle, username_changeset: changeset)
     end
   end
 
@@ -60,6 +66,7 @@ defmodule DidServerWeb.UserSettingsController do
 
     # require_authenticated_user
     %{account: account, key: key} = user = conn.assigns.current_user
+    handle = DidServer.Accounts.Account.domain_handle(account)
 
     if is_nil(key) || account.id != user_id do
       conn
@@ -75,7 +82,7 @@ defmodule DidServerWeb.UserSettingsController do
           |> UserAuth.log_in_user(user)
 
         {:error, changeset} ->
-          render(conn, :edit, password_changeset: changeset)
+          render(conn, :edit, user: handle, password_changeset: changeset)
       end
     end
   end

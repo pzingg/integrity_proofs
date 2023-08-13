@@ -1,21 +1,6 @@
-<div class="mx-auto max-w-lg">
-  <.header class="border-t-4 border-t-indigo-500 mt-8">
-    Log in with an existing passkey credential
-    <:subtitle>
-      <.link navigate={~p"/wauth/log_in"} class="font-semibold text-brand hover:underline">
-        <div class="bg-gray-500 max-w-[30] h-30">
-          <img
-            style="height:30px; vertical-align:middle"
-            id="auth-img"
-            src={static_path(@conn, "/images/fingerprint-white.png")}
-          />
-        </div>
-      </.link>
-    </:subtitle>
-  </.header>
-
-  <.header class="border-t-4 border-t-indigo-500 mt-8">
-    Log in with email and password
+<div class="max-w-md mx-auto">
+  <.header class="text-center">
+    Log in with ID and password
     <:subtitle>
       Don't have an account?
       <.link navigate={~p"/users/register"} class="font-semibold text-brand hover:underline">
@@ -24,39 +9,67 @@
       for an account now.
     </:subtitle>
   </.header>
-  <.simple_form :let={f} for={@conn.params["user"]} as={:user} action={~p"/users/log_in"}>
-    <.error :if={@error_message}><%= @error_message %></.error>
+  <p class="mt-4">For the ID, you can enter either an email address, or a username and a domain.
+    Use the appropriate form below.</p>
+  <p class="mt-4">Check the "Keep me logged in" box to stay logged in between browser
+    sessions.</p>
 
-    <.input field={f[:email]} type="email" label="Email" required />
-    <.input field={f[:password]} type="password" label="Password" required />
+  <div class="mt-4 space-y-12 divide-y">
+    <div class="pt-4">
+      <h2 class="font-semibold">Log in with email address</h2>
+      <.simple_form :let={f} for={@conn.params["user"]} as={:user} action={~p"/users/log_in"}>
+        <.error :if={@error_message}><%= @error_message %></.error>
 
-    <:actions :let={f}>
-      <.input field={f[:remember_me]} type="checkbox" label="Keep me logged in" />
-    </:actions>
-    <:actions>
-      <.button phx-disable-with="Signing in..." class="w-full">
-        Sign in <span aria-hidden="true">&rarr;</span>
-      </.button>
-    </:actions>
-  </.simple_form>
+        <.input
+          field={f[:email]}
+          type="email"
+          label="Email"
+          placeholder="example: bob@bsky.social"
+          required
+        />
+        <.input field={f[:password]} type="password" label="Password" required />
 
-  <.header class="border-t-4 border-t-indigo-500 mt-8">
-    Log in with username, domain and password
-  </.header>
-  <.simple_form :let={f} for={@conn.params["user"]} as={:user} action={~p"/users/log_in"}>
-    <.error :if={@error_message}><%= @error_message %></.error>
+        <:actions :let={f}>
+          <.input field={f[:remember_me]} type="checkbox" label="Keep me logged in" />
+        </:actions>
+        <:actions>
+          <.button phx-disable-with="Signing in..." class="w-full">
+            Sign in <span aria-hidden="true">&rarr;</span>
+          </.button>
+        </:actions>
+      </.simple_form>
+    </div>
 
-    <.input field={f[:username]} type="text" label="Username" required />
-    <.input field={f[:domain]} type="text" label="Domain" required />
-    <.input field={f[:password]} type="password" label="Password" required />
+    <div class="pt-4">
+      <h2 class="font-semibold">Log in with username and domain</h2>
+      <.simple_form :let={f} for={@conn.params["user"]} as={:user} action={~p"/users/log_in"}>
+        <.error :if={@error_message}><%= @error_message %></.error>
 
-    <:actions :let={f}>
-      <.input field={f[:remember_me]} type="checkbox" label="Keep me logged in" />
-    </:actions>
-    <:actions>
-      <.button phx-disable-with="Signing in..." class="w-full">
-        Sign in <span aria-hidden="true">&rarr;</span>
-      </.button>
-    </:actions>
-  </.simple_form>
+        <.input
+          field={f[:username]}
+          type="text"
+          label="Username"
+          placeholder="example: bob"
+          required
+        />
+        <.input
+          field={f[:domain]}
+          type="text"
+          label="Domain"
+          placeholder="example: bsky.social"
+          required
+        />
+        <.input field={f[:password]} type="password" label="Password" required />
+
+        <:actions :let={f}>
+          <.input field={f[:remember_me]} type="checkbox" label="Keep me logged in" />
+        </:actions>
+        <:actions>
+          <.button phx-disable-with="Signing in..." class="w-full">
+            Sign in <span aria-hidden="true">&rarr;</span>
+          </.button>
+        </:actions>
+      </.simple_form>
+    </div>
+  </div>
 </div>

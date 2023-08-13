@@ -1,92 +1,129 @@
-<div class="mx-auto max-w-sm">
-  <.header>
+<div class="max-w-md mx-auto">
+  <.header class="text-center">
     Register a new security key
-    <:subtitle>
-      <.button id="safari-button" style="display:none" onclick="triggerAttestation()">
+    <:subtitle>Create a new passkey on a hardware authentication device or a smartphone,
+      so you won't have to use a password to log in next time</:subtitle>
+  </.header>
+  <p>You are currently logged in as <em><%= @login %></em>.</p>
+
+  <div id="waf_container" class="mb-4">
+    <.simple_form
+      :let={f}
+      for={@conn.params["user"]}
+      as={:key}
+      id="waf"
+      action={~p"/wauth/register"}
+    >
+      <.input field={f[:rawID]} type="hidden" />
+      <.input field={f[:type]} type="hidden" />
+      <.input field={f[:clientDataJSON]} type="hidden" />
+      <.input field={f[:attestationObject]} type="hidden" />
+    </.simple_form>
+  </div>
+
+  <div id="auth_actions" class="flex flex-wrap gap-10">
+    <div class="flex-auto">
+      <.button id="auth_button_register" style="display:none" onclick="triggerAttestation()">
         Register
       </.button>
-      <img id="auth-img" src={static_path(@conn, "/images/fingerprint-scanning.svg")} />
-      <br />
+      <div id="auth_img">
+        <img src={static_path(@conn, "/images/fingerprint-scanning.svg")} />
+        <p class="mb-4">To create and register a new security key
+          for the site "<%= @rp_id %>":</p>
 
-      <p><em><%= @login %></em>, press your authenticator now!</p>
+        <ol class="list-decimal list-inside">
+          <li class="mt-4">Press the button on your hardware authenticator now, <em>or</em></li>
+          <li class="mt-4">
+            Follow the instructions in the "Create a passkey" popup window to
+            choose a device such as a nearby smartphone that can store your passkeys securely.
+          </li>
+        </ol>
 
-      <p style="text-align:right">
-        <.link navigate={~p"/home"} class="font-semibold text-brand hover:underline">
-          Cancel
+        <p class="mt-4 text-sm text-zinc-500">
+          Image from
+          <a
+            class="text-zinc-700"
+            href="https://www.flaticon.com/free-icon/fingerprint-scanning_25930"
+          >
+            https://www.flaticon.com/free-icon/fingerprint-scanning_25930
+          </a>
+        </p>
+      </div>
+    </div>
+    <div class="place-self-end">
+      <.button_cancel>
+        <.link
+          id="auth_link_cancel"
+          navigate={~p"/users/settings"}
+          class="font-semibold bg-transparent text-brand"
+        >
+          Skip
         </.link>
-      </p>
-    </:subtitle>
-  </.header>
+      </.button_cancel>
+    </div>
+  </div>
 
-  <.simple_form
-    :let={f}
-    for={@conn.params["user"]}
-    as={:key}
-    id="waf"
-    action={~p"/wauth/register"}
-  >
-    <.input field={f[:rawID]} type="hidden" />
-    <.input field={f[:type]} type="hidden" />
-    <.input field={f[:clientDataJSON]} type="hidden" />
-    <.input field={f[:attestationObject]} type="hidden" />
-
-    <:actions>
-      <.button phx-disable-with="Skipping..." class="w-full" style="visibility:hidden">
-        Skip
-      </.button>
-    </:actions>
-  </.simple_form>
-
-  <p style="font-size:0.6em; color: grey">
-    Image from
-    <a style="color: grey" href="https://www.flaticon.com/free-icon/fingerprint-scanning_25930">
-      https://www.flaticon.com/free-icon/fingerprint-scanning_25930
-    </a>
-  </p>
+  <div id="no_webauthn" style="display:none">
+    <p>Sorry, this browser doesn't support WebAuthn</p>
+  </div>
 </div>
 
 <script>
-  var challenge_b64 = "<%= @challenge %>";
-  var rp_id = "<%= @rp_id %>";
-  var user = "<%= @user %>";
-  var user_id_b64 = "<%= @user_id %>";
+  const webauthn_defined = typeof(PublicKeyCredential) != 'undefined';
+  if (!webauthn_defined) {
+    document.getElementById('auth_actions').style.display = 'none';
+    document.getElementById('no_webauthn').style.display = 'block';
+    document.getElementById('waf_container').style.display = 'none';
+  }
 
-  function _arrayBufferToString( buffer ) {
+  const challenge = _base64ToArrayBuffer("<%= @challenge %>");
+  const userId = _base64ToArrayBuffer("<%= @user_id %>");
+  const pubKeyCredParams = [
+    <%= for alg <- @cred_algs do %>
+    {
+      type: 'public-key',
+      alg: <%= alg %>
+    }
+    <% end %>
+  ];
+
+  function _arrayBufferToString(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
     var binary = '';
-    var bytes = new Uint8Array( buffer );
-    var len = bytes.byteLength;
     for (var i = 0; i < len; i++) {
-      binary += String.fromCharCode( bytes[ i ] );
+      binary += String.fromCharCode(bytes[i]);
     }
     return binary;
   }
 
-  function _arrayBufferToBase64( buffer ) {
+  function _arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
     var binary = '';
-    var bytes = new Uint8Array( buffer );
-    var len = bytes.byteLength;
     for (var i = 0; i < len; i++) {
-      binary += String.fromCharCode( bytes[ i ] );
+      binary += String.fromCharCode(bytes[i]);
     }
-    return window.btoa( binary );
+    return window.btoa(binary);
   }
 
   function _base64ToArrayBuffer(base64) {
-    var binary_string =  window.atob(base64);
-    var len = binary_string.length;
+    const binaryString =  window.atob(base64);
+    const len = binaryString.length;
     var bytes = new Uint8Array( len );
     for (var i = 0; i < len; i++)        {
-        bytes[i] = binary_string.charCodeAt(i);
+        bytes[i] = binaryString.charCodeAt(i);
     }
     return bytes.buffer;
   }
 
   function triggerAttestation() {
-    document.getElementById('safari-button').style.display = 'none';
-    document.getElementById('auth-img').style.display = 'inline';
+    if (!webauthn_defined) {
+      return;
+    }
 
-    challenge = _base64ToArrayBuffer(challenge_b64);
-    user_id = _base64ToArrayBuffer(user_id_b64);
+    document.getElementById('auth_button_register').style.display = 'none';
+    document.getElementById('auth_img').style.display = 'inline';
 
     navigator.credentials.create({
       publicKey: {
@@ -94,22 +131,16 @@
         challenge: challenge,
         // relying party
         rp: {
-          id: rp_id,
+          id: "<%= @rp_id %>",
           name: "<%= @rp_name %>"
         },
         user: {
-          id: user_id,
-          name: user,
-          displayName: user
+          id: userId,
+          name: "<%= @user %>",
+          displayName: "<%= @user %>"
         },
-        pubKeyCredParams: [
-          // "ES256" IANA COSE Algorithms registry
-          {
-            type: 'public-key',
-            alg: -7
-          }
-        ],
-       attestation: "<%= @attestation %>",
+        pubKeyCredParams: pubKeyCredParams,
+        attestation: "<%= @attestation %>",
         authenticatorSelection: {
           residentKey: 'preferred'
         }
@@ -126,8 +157,8 @@
       document.getElementById('waf').submit();
     }).catch((err) => {
       if (err.name == 'NotAllowedError') {
-        document.getElementById('safari-button').style.display = 'inline-block';
-        document.getElementById('auth-img').style.display = 'none';
+        document.getElementById('auth_button_register').style.display = 'inline-block';
+        document.getElementById('auth_img').style.display = 'none';
       } else {
         console.log(err);
       }
