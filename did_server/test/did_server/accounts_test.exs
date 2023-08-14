@@ -77,7 +77,8 @@ defmodule DidServer.AccountsTest do
       assert %{
                email: ["can't be blank"],
                username: ["can't be blank"],
-               domain: ["can't be blank"]
+               domain: ["can't be blank"],
+               signing_key: ["can't be blank"]
                # password: ["can't be blank"],
              } = errors_on(changeset)
     end
@@ -151,6 +152,10 @@ defmodule DidServer.AccountsTest do
             domain: "example.com"
           )
         )
+
+      if !changeset.valid? do
+        IO.inspect(changeset.errors)
+      end
 
       assert changeset.valid?
       assert get_change(changeset, :email) == email
