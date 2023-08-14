@@ -7,9 +7,9 @@ defmodule DidServer.Accounts.User do
 
   @primary_key {:id, :binary_id, autogenerate: true}
   schema "users" do
-    belongs_to(:account, Account, type: Ecto.UUID)
-    belongs_to(:key, Key, type: :string, references: :did)
-    has_many(:credentials, Credential, foreign_key: :user_id)
+    belongs_to :account, Account, type: Ecto.UUID
+    belongs_to :key, Key, type: :string, references: :did
+    has_many :credentials, Credential, foreign_key: :user_id
 
     timestamps()
   end

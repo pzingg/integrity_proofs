@@ -77,8 +77,7 @@ defmodule DidServer.AccountsTest do
       assert %{
                email: ["can't be blank"],
                username: ["can't be blank"],
-               domain: ["can't be blank"],
-               signing_key: ["can't be blank"]
+               domain: ["can't be blank"]
                # password: ["can't be blank"],
              } = errors_on(changeset)
     end

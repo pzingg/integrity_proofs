@@ -18,10 +18,10 @@ defmodule DidServer.Accounts.UserToken do
 
   @primary_key false
   schema "users_tokens" do
-    field(:context, :string, primary_key: true)
-    field(:token, :binary, primary_key: true)
-    field(:sent_to, :string)
-    belongs_to(:user, DidServer.Accounts.User, type: Ecto.UUID)
+    field :context, :string, primary_key: true
+    field :token, :binary, primary_key: true
+    field :sent_to, :string
+    belongs_to :user, DidServer.Accounts.User, type: Ecto.UUID
 
     timestamps(updated_at: false)
   end

@@ -9,28 +9,28 @@ defmodule DidServer.Accounts.Account do
 
   @primary_key {:id, :binary_id, autogenerate: true}
   schema "accounts" do
-    field(:email, :string)
-    field(:username, :string)
-    field(:domain, :string)
-    field(:display_name, :string)
-    field(:description, :string)
-    field(:avatar, :binary)
-    field(:avatar_mime_type, :string)
-    field(:banner, :binary)
-    field(:banner_mime_type, :string)
+    field :email, :string
+    field :username, :string
+    field :domain, :string
+    field :display_name, :string
+    field :description, :string
+    field :avatar, :binary
+    field :avatar_mime_type, :string
+    field :banner, :binary
+    field :banner_mime_type, :string
     # field :hashed_password, :string, redact: true
-    field(:confirmed_at, :naive_datetime)
+    field :confirmed_at, :naive_datetime
     # used when linking to existing DID
-    field(:did, :string, virtual: true)
+    field :did, :string, virtual: true
     # used when creating a new DID
-    field(:signer, {:array, :binary}, virtual: true)
-    field(:signing_key, :string, virtual: true)
-    field(:recovery_key, :string, virtual: true)
-    field(:password, :string, virtual: true, redact: true)
+    field :signer, {:array, :binary}, virtual: true
+    field :signing_key, :string, virtual: true
+    field :recovery_key, :string, virtual: true
+    field :password, :string, virtual: true, redact: true
 
-    has_many(:users, DidServer.Accounts.User)
-    has_many(:keys, through: [:users, :key])
-    has_many(:credentials, through: [:users, :credentials])
+    has_many :users, DidServer.Accounts.User
+    has_many :keys, through: [:users, :key]
+    has_many :credentials, through: [:users, :credentials]
 
     timestamps()
   end
