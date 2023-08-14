@@ -12,7 +12,7 @@ config :did_server, DidServer.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "did_log_test#{System.get_env("MIX_TEST_PARTITION")}",
+  database: "did_server_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: 10
 

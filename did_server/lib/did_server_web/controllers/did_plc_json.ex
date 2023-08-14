@@ -1,4 +1,4 @@
-defmodule DidServerWeb.PlcJSON do
+defmodule DidServerWeb.DidPlcJSON do
   def info(%{info: info}) when is_map(info) do
     info
   end

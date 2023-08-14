@@ -32,8 +32,12 @@ defmodule DidServerWeb.XMLBuilder do
     |> Enum.join()
   end
 
-  def to_xml(%NaiveDateTime{} = time) do
-    NaiveDateTime.to_iso8601(time)
+  def to_xml(%NaiveDateTime{} = dt) do
+    CryptoUtils.format_datetime(dt)
+  end
+
+  def to_xml(%DateTime{} = dt) do
+    CryptoUtils.format_datetime(dt)
   end
 
   def to_doc(content), do: ~s(<?xml version="1.0" encoding="UTF-8"?>) <> to_xml(content)

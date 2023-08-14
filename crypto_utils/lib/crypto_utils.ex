@@ -25,6 +25,37 @@ defmodule CryptoUtils do
   end
 
   @doc """
+  Formats a DateTime or NaiveDateTime.
+  """
+  def format_datetime(dt) when is_binary(dt), do: dt
+
+  def format_datetime(%NaiveDateTime{} = dt) do
+    dt
+    |> NaiveDateTime.truncate(:second)
+    |> NaiveDateTime.to_iso8601(:extended)
+  end
+
+  def format_datetime(%DateTime{utc_offset: 0} = dt) do
+    dt
+    |> DateTime.truncate(:second)
+    |> DateTime.to_iso8601(:extended, 0)
+  end
+
+  @doc """
+  Verifies a DateTime or NaiveDateTime.
+  """
+  def valid_datetime?(dt) when is_binary(dt) do
+    case DateTime.from_iso8601(dt) do
+      {:ok, _, 0} -> true
+      _ -> false
+    end
+  end
+
+  def valid_datetime?(%NaiveDateTime{}), do: true
+  def valid_datetime?(%DateTime{utc_offset: 0}), do: true
+  def valid_datetime?(_), do: false
+
+  @doc """
   Parses an integer value from hexadecimal encoded string.
 
   ## Examples

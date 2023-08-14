@@ -1,0 +1,168 @@
+<div class="max-w-md mx-auto">
+  <.header class="text-center">
+    Log in with a passkey
+    <:subtitle>Log in with a hardware authentication device or a smartphone
+      where you have previously created passkeys</:subtitle>
+  </.header>
+  <p class="mt-4">Check the "Keep me logged in" checkbox to keep your account logged in
+    between browser sessions.</p>
+
+  <div id="waf_container" class="mb-4">
+    <.simple_form
+      :let={f}
+      for={@conn.params["user"]}
+      as={:webauthn}
+      id="waf"
+      action={~p"/wauth/log_in"}
+    >
+      <input type="hidden" id="webauthn_support" />
+      <.input field={f[:rawID]} type="hidden" />
+      <.input field={f[:type]} type="hidden" />
+      <.input field={f[:clientDataJSON]} type="hidden" />
+      <.input field={f[:authenticatorData]} type="hidden" />
+      <.input field={f[:sig]} type="hidden" />
+      <.input field={f[:userHandle]} type="hidden" />
+
+      <:actions :let={f}>
+        <.input field={f[:remember_me]} type="checkbox" label="Keep me logged in" />
+      </:actions>
+    </.simple_form>
+  </div>
+
+  <div id="auth_actions" class="flex flex-wrap gap-10">
+    <div class="flex-auto">
+      <.button id="auth_button_authenticate" style="display:none" onclick="triggerAuthenticate()">
+        Log In
+      </.button>
+      <div id="auth_img">
+        <img src={static_path(@conn, "/images/fingerprint-scanning.svg")} />
+        <p class="mb-4">To log in with a saved passkey for the site "<%= @rp_id %>":</p>
+
+        <ol class="list-decimal list-inside">
+          <li class="mt-4">
+            Scan the QR code on the "Use a passkey from another device?"
+            popup window, using the smartphone's camera. Then pick the passkey you saved on the phone,
+            <em>or</em>
+          </li>
+          <li class="mt-4">Press the "Use a different device" button on the popup window,
+            and then press the button on your hardware authenticator now.</li>
+        </ol>
+
+        <p class="mt-4 text-sm text-zinc-500">
+          Image from
+          <a
+            class="text-zinc-700"
+            href="https://www.flaticon.com/free-icon/fingerprint-scanning_25930"
+          >
+            https://www.flaticon.com/free-icon/fingerprint-scanning_25930
+          </a>
+        </p>
+      </div>
+    </div>
+    <div class="place-self-end">
+      <.button_cancel>
+        <.link
+          id="auth_link_cancel"
+          navigate={~p"/home"}
+          class="font-semibold bg-transparent text-brand"
+        >
+          Cancel
+        </.link>
+      </.button_cancel>
+    </div>
+  </div>
+
+  <div id="no_webauthn" style="display:none">
+    <p>Sorry, we're not using WebAuthn</p>
+  </div>
+</div>
+
+<script>
+  const webauthn_defined = typeof(PublicKeyCredential) != 'undefined';
+  if (!webauthn_defined) {
+    document.getElementById('auth_actions').style.display = 'none';
+    document.getElementById('no_webauthn').style.display = 'block';
+    document.getElementById('waf_container').style.display = 'none';
+  }
+
+  const challenge = _base64ToArrayBuffer("<%= @challenge %>");
+  const allowCredentials = [
+    <%= for cred_id <- @cred_ids do %>
+      {
+        id: _base64ToArrayBuffer("<%= cred_id %>"),
+        type: "public-key"
+      },
+    <% end %>
+  ];
+
+  function _arrayBufferToString(buffer) {
+    var binary = '';
+    var bytes = new Uint8Array(buffer);
+    var len = bytes.byteLength;
+    for (var i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return binary;
+  }
+
+  function _arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    var binary = '';
+    for (var i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  }
+
+  function _base64ToArrayBuffer(base64) {
+    const binaryString =  window.atob(base64);
+    const len = binaryString.length;
+    var bytes = new Uint8Array(len);
+    for (var i = 0; i < len; i++)        {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+
+  function triggerAuthenticate() {
+    if (!webauthn_defined) {
+      return;
+    }
+
+    document.getElementById('auth_button_authenticate').style.display = 'none';
+    document.getElementById('auth_img').style.display = 'inline';
+
+    navigator.credentials.get({
+      publicKey: {
+        challenge: challenge,
+        allowCredentials: allowCredentials
+      }
+    }).then((newCredential) => {
+      // .simple_form prefixes input id with the form id
+      document.getElementById('waf_rawID').value = _arrayBufferToBase64(newCredential.rawId);
+      document.getElementById('waf_type').value = newCredential.type;
+      document.getElementById('waf_clientDataJSON').value =
+        _arrayBufferToString(newCredential.response.clientDataJSON)
+      document.getElementById('waf_authenticatorData').value =
+        _arrayBufferToBase64(newCredential.response.authenticatorData)
+      document.getElementById('waf_sig').value =
+        _arrayBufferToBase64(newCredential.response.signature)
+      if (newCredential.response.userHandle) {
+        document.getElementById('waf_userHandle').value =
+          _arrayBufferToBase64(newCredential.response.userHandle)
+      }
+
+      document.getElementById('waf').submit();
+    }).catch((err) => {
+      if (err.name == 'NotAllowedError') {
+        document.getElementById('auth_button_authenticate').style.display = 'inline-block';
+        document.getElementById('auth_img').style.display = 'none';
+      } else {
+        console.log(err);
+      }
+    });
+  }
+
+  triggerAuthenticate();
+</script>

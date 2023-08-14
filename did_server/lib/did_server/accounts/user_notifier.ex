@@ -8,11 +8,14 @@ defmodule DidServer.Accounts.UserNotifier do
 
   # Delivers the email using the application mailer.
   defp deliver(recipient, subject, body) do
+    name = DidServer.Application.name()
+    from_address = DidServer.Application.email_from()
+
     _old_code = """
     email =
       new()
       |> to(recipient)
-      |> from({"DidServer", "contact@example.com"})
+      |> from({name, from_address})
       |> subject(subject)
       |> text_body(body)
 
@@ -23,19 +26,18 @@ defmodule DidServer.Accounts.UserNotifier do
 
     # IO.puts("To: #{recipient}\n\n#{body}")
 
-    {:ok,
-     %{to: recipient, from: "DidServer <contact@example.com>", subject: subject, text_body: body}}
+    {:ok, %{to: recipient, from: "#{name} <#{from_address}>", subject: subject, text_body: body}}
   end
 
   @doc """
   Deliver instructions to confirm account.
   """
-  def deliver_confirmation_instructions(user, url) do
-    deliver(user.email, "Confirmation instructions", """
+  def deliver_confirmation_instructions(account, url) do
+    deliver(account.email, "Confirmation instructions", """
 
     ==============================
 
-    Hi #{user.email},
+    Hi #{account.email},
 
     You can confirm your account by visiting the URL below:
 
@@ -48,14 +50,14 @@ defmodule DidServer.Accounts.UserNotifier do
   end
 
   @doc """
-  Deliver instructions to reset a user password.
+  Deliver instructions to reset an account password.
   """
-  def deliver_reset_password_instructions(user, url) do
-    deliver(user.email, "Reset password instructions", """
+  def deliver_reset_password_instructions(account, url) do
+    deliver(account.email, "Reset password instructions", """
 
     ==============================
 
-    Hi #{user.email},
+    Hi #{account.email},
 
     You can reset your password by visiting the URL below:
 
@@ -68,14 +70,14 @@ defmodule DidServer.Accounts.UserNotifier do
   end
 
   @doc """
-  Deliver instructions to update a user email.
+  Deliver instructions to update an account email.
   """
-  def deliver_update_email_instructions(user, url) do
-    deliver(user.email, "Update email instructions", """
+  def deliver_update_email_instructions(account, url) do
+    deliver(account.email, "Update email instructions", """
 
     ==============================
 
-    Hi #{user.email},
+    Hi #{account.email},
 
     You can change your email by visiting the URL below:
 

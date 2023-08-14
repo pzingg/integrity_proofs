@@ -5,6 +5,9 @@ defmodule DidServerWeb.UserAuth do
   import Phoenix.Controller
 
   alias DidServer.Accounts
+  alias DidServer.Accounts.Account
+  alias DidServer.Identities
+  alias DidServer.Accounts.User
 
   # Make the remember me cookie valid for 60 days.
   # If you want bump or reduce this value, also change
@@ -25,7 +28,7 @@ defmodule DidServerWeb.UserAuth do
   disconnected on log out. The line can be safely removed
   if you are not using LiveView.
   """
-  def log_in_user(conn, user, params \\ %{}) do
+  def log_in_user(conn, %User{} = user, params \\ %{}) do
     token = Accounts.generate_user_session_token(user)
     user_return_to = get_session(conn, :user_return_to)
 
@@ -81,7 +84,7 @@ defmodule DidServerWeb.UserAuth do
     conn
     |> renew_session()
     |> delete_resp_cookie(@remember_me_cookie)
-    |> redirect(to: ~p"/")
+    |> redirect(to: ~p"/home")
   end
 
   @doc """
@@ -223,5 +226,5 @@ defmodule DidServerWeb.UserAuth do
 
   defp maybe_store_return_to(conn), do: conn
 
-  defp signed_in_path(_conn), do: ~p"/"
+  defp signed_in_path(_conn), do: ~p"/users/settings"
 end

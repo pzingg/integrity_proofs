@@ -17,6 +17,7 @@ defmodule CryptoUtils.Curves do
     @id_secp256k1 => :secp256k1
   }
 
+  # Curve initial parameters needed to decompress points
   @p256_params {"p256",
                 "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
                 |> CryptoUtils.parse_hex(),
@@ -28,6 +29,14 @@ defmodule CryptoUtils.Curves do
   @secp256k1_params {"secp256k1",
                      "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f"
                      |> CryptoUtils.parse_hex(), 0, 7}
+
+  # COSE registry values for use with WebAuthn
+  @cose_algs %{
+    ed25519: %{name: "EdDSA", alg: -8, crv: 6, coord_type: "OKP"},
+    p256: %{name: "ES256", alg: -7, crv: 1, coord_type: "EC2"},
+    # Not sure if ES256K is supported in COSE
+    secp256k1: %{name: "ES256K", alg: -47, crv: nil, coord_type: "EC2"}
+  }
 
   @doc """
   Returns an atom identifying a named elliptic curve from an OID.
@@ -50,6 +59,8 @@ defmodule CryptoUtils.Curves do
   def erlang_algo(:ed25519), do: :eddsa
   def erlang_algo(:p256), do: :ecdh
   def erlang_algo(:secp256k1), do: :ecdh
+
+  def cose(curve) when is_atom(curve), do: Map.fetch!(@cose_algs, curve)
 
   def compress_public_key_point(<<mode::size(8), x_coord::binary-size(32), y_coord::binary>>) do
     test =

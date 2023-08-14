@@ -5,6 +5,8 @@ defmodule CryptoUtils.Resolver do
   """
   @behaviour CryptoUtils.Fetcher
 
+  require Logger
+
   alias CryptoUtils.Did
 
   @doc """
@@ -62,7 +64,7 @@ defmodule CryptoUtils.Resolver do
       end
     rescue
       error ->
-        IO.inspect(error)
+        Logger.error("parsing did failed: #{inspect(error)}")
         {:error, "invalid did #{did}"}
     end
   end
@@ -81,7 +83,7 @@ defmodule CryptoUtils.Resolver do
 
     # opts = Keyword.put(opts, :headers, [{"accept", "application/json"}])
 
-    case apply(fetcher, :fetch, [url, opts]) do
+    case fetcher.fetch(url, opts) do
       {:ok, body} -> Jason.decode(body)
       error -> error
     end
@@ -93,7 +95,7 @@ defmodule CryptoUtils.Resolver do
     url = %URI{uri | path: "/#{parsed_did.did_string}"} |> URI.to_string()
     # opts = Keyword.put(opts, :headers, [{"accept", "application/json"}])
 
-    case apply(fetcher, :fetch, [url, opts]) do
+    case fetcher.fetch(url, opts) do
       {:ok, body} -> Jason.decode(body)
       error -> error
     end

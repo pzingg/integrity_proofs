@@ -1,0 +1,1 @@
+# After running mix.gen.cert, self-signed cert files will be in the priv/cert directory

@@ -1,4 +1,4 @@
-defmodule DidServerWeb.WebJSON do
+defmodule DidServerWeb.DidWebJSON do
   def show(%{document: doc}) when is_map(doc) do
     doc
   end

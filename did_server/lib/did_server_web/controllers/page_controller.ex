@@ -2,8 +2,8 @@ defmodule DidServerWeb.PageController do
   use DidServerWeb, :controller
 
   def home(conn, _params) do
-    # The home page is often custom made,
-    # so skip the default app layout.
-    render(conn, :home, layout: false)
+    # If your home page is custom made, with special menus, etc.
+    # add the `layout: false` keyword to skip the default app layout.
+    render(conn, :home)
   end
 end

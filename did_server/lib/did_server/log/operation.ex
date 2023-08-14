@@ -5,15 +5,15 @@ defmodule DidServer.Log.Operation do
   @primary_key false
   @timestamps_opts [type: :naive_datetime_usec, updated_at: false]
   schema "operations" do
-    field(:did, :string, primary_key: true)
-    field(:cid, :string, primary_key: true)
-    field(:operation, :string)
-    field(:nullified, :boolean)
-    field(:op_data, :map, default: %{}, virtual: true)
-    field(:prev, :string, virtual: true)
-    field(:nullified_cids, {:array, :string}, default: [], virtual: true)
-    field(:password, :string, virtual: true)
-    field(:keys_pem, :string, virtual: true)
+    field :did, :string, primary_key: true
+    field :cid, :string, primary_key: true
+    field :operation, :string
+    field :nullified, :boolean
+    field :op_data, :map, default: %{}, virtual: true
+    field :prev, :string, virtual: true
+    field :nullified_cids, {:array, :string}, default: [], virtual: true
+    field :password, :string, virtual: true
+    field :keys_pem, :string, virtual: true
 
     timestamps()
   end
@@ -55,7 +55,7 @@ defmodule DidServer.Log.Operation do
       "cid" => op.cid,
       "nullified" => op.nullified,
       "operation" => Jason.decode!(op.operation),
-      "createdAt" => NaiveDateTime.to_iso8601(op.inserted_at)
+      "createdAt" => CryptoUtils.format_datetime(op.inserted_at)
     }
   end
 

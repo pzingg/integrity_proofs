@@ -5,7 +5,7 @@ defmodule DidServerWeb.AccountsController do
   alias DidServerWeb.{ErrorHTML, ErrorJSON}
 
   def actor(conn, %{"handle" => handle}) do
-    user = Accounts.get_user_by_identifier(handle)
+    user = Accounts.get_account_by_identifier(handle)
 
     if is_nil(user) do
       render_not_found(conn, get_format(conn))
@@ -15,7 +15,7 @@ defmodule DidServerWeb.AccountsController do
   end
 
   def profile(conn, %{"handle" => handle}) do
-    user = Accounts.get_user_by_identifier(handle)
+    user = Accounts.get_account_by_identifier(handle)
 
     if is_nil(user) do
       render_not_found(conn, get_format(conn))

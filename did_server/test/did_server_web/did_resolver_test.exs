@@ -44,9 +44,9 @@ defmodule DidServerWeb.ResolverTest do
 
   describe "resolves dids" do
     test "resolves a did:web", %{conn: conn} do
-      {:ok, user} =
-        DidServer.Accounts.register_user(
-          valid_user_attributes(username: "admin", domain: "example.com")
+      {:ok, _user} =
+        DidServer.Accounts.register_account(
+          valid_account_attributes(username: "admin", domain: "example.com")
         )
 
       opts = resolver_opts() |> Keyword.put(:test_conn, conn)

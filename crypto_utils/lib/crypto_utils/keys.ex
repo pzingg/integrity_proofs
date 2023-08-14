@@ -85,10 +85,10 @@ defmodule CryptoUtils.Keys do
   See `make_public_key/3` for details on the formats for the
   returned key.
   """
-  def extract_multikey(verification_method, fmt \\ :crypto_algo_key)
+  def extract_multikey(verification_method, fmt)
 
   def extract_multikey(
-        %{"type" => "Multikey", "publicKeyMultibase" => multibase_value},
+        %{"type" => _type, "publicKeyMultibase" => multibase_value},
         fmt
       )
       when is_binary(multibase_value) do

@@ -25,3 +25,5 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 did_server-*.tar
 
+# Certificate store for dev server
+/priv/cert/*.pem

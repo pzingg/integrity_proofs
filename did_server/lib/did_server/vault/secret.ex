@@ -6,11 +6,11 @@ defmodule DidServer.Vault.Secret do
 
   @primary_key {:id, :binary_id, autogenerate: true}
   schema "secrets" do
-    field(:name, :string)
-    field(:description, :string)
-    field(:secret, :string, redact: true)
-    field(:key_id, Ecto.UUID)
-    field(:nonce, :string)
+    field :name, :string
+    field :description, :string
+    field :secret, :string, redact: true
+    field :key_id, Ecto.UUID
+    field :nonce, :string
 
     timestamps()
   end
@@ -19,7 +19,7 @@ defmodule DidServer.Vault.Secret do
     secret
     |> cast(attrs, [:name, :description, :secret, :key_id, :nonce])
     |> validate_required([:secret])
-    |> unique_constraint([:name])
+    |> unique_constraint(:name)
     |> generate_key_id_and_nonce()
   end
 
