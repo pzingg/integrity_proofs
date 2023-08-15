@@ -98,6 +98,57 @@ the public key from the "#atproto" verification method.
 Thus no private key is ever stored in a database, but is it safe to use a
 single site-wide key this way?
 
+### More identifier / identity discussion
+
+See https://socialhub.activitypub.rocks/t/alsoknownas-and-acct/3132/20
+
+Argues for using an `xrd:aliases` property in an Actor to describe other 
+identifiers in an ordered list.
+
+The [bovine project](https://codeberg.org/helge/bovine) can store 
+multiple "keypairs", for a given user (the model class is 
+`BovineActorKeyPair`). There are three types of keypair:
+
+```python
+# Type 1 - RSA PCKS#8 PEM encoded keypair, name is always 'serverKey'.
+{
+  name: 'serverKey', 
+  public_key: '-----BEGIN PUBLIC KEY-----\n...',
+  private_key: '-----BEGIN PRIVATE KEY-----\n...'
+}
+
+# Type 2 - Account handle, name is always 'account'.
+{
+  name: 'account', 
+  public_key: 'acct:user@domain', 
+  private_key: None
+}
+
+# Type 3 - Ed25519 public key as a Multikey-encoded DID
+# User can supply key name for an existing DID, or the
+# bovine_tool can create new DID and name will be 'key-from-tool'.
+{
+  name: 'user-supplied-key-name', 
+  public_key: 'did:key:xxx', 
+  private_key: None
+}
+```
+
+One each of keypair types 1 and 2 are created when an account is registered. 
+Any number of key pair type 3 (DID) can be added after registration.
+The user must maintain and supply the secret (Ed25519 private key) for 
+each type 3 keypair. So an actor can have multiple DIDs associated with
+a single account.
+
+Bovine's WebFinger endpoint can look up both the type 2 and type 3
+resources and returns the actor's "rel=self" URL.
+
+### Discussion of DIDs and identity proofs
+
+https://socialhub.activitypub.rocks/t/fep-c390-identity-proofs/2726/49
+
+The next step is improving usability and security of account migration process based on FEP-c390. It would be also interesting to experiment with client-side activity signing (AP C2S + FEP-8b32 + FEP-c390).
+
 ## Implmentation: user model and authentication
 
 The "user" (`DidServer.Accounts.User`), which is able to log in with a password

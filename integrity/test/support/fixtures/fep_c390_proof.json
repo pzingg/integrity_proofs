@@ -20,7 +20,7 @@
       "alsoKnownAs": "https://server.example/users/alice",
       "proof": {
         "type": "DataIntegrityProof",
-        "cryptosuite": "jcs-eddsa-2022",
+        "cryptosuite": "eddsa-jcs-2022",
         "created": "2022-11-12T00:00:00Z",
         "verificationMethod": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
         "proofPurpose": "assertionMethod",

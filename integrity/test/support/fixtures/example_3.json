@@ -6,7 +6,7 @@
   "title": "Hello world!",
   "proof": {
     "type": "DataIntegrityProof",
-    "cryptosuite": "jcs-eddsa-2022",
+    "cryptosuite": "eddsa-jcs-2022",
     "created": "2020-11-05T19:23:24Z",
     "verificationMethod": "https://ldi.example/issuer#z6MkjLrk3gKS2nnkeWcmcxiZPGskmesDpuwRBorgHxUXfxnG",
     "proofPurpose": "assertionMethod",

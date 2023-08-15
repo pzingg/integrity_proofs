@@ -170,11 +170,11 @@ defmodule Integrity do
   end
 
   @doc """
-  Implements jcs-eddsa-2022 transformation of an untransformed
+  Implements eddsa-jcs-2022 transformation of an untransformed
   document. § 3.2.
 
   1. If `options.type` is not set to the string "DataIntegrityProof" and
-     options.cryptosuite is not set to the string "jcs-eddsa-2022" then
+     options.cryptosuite is not set to the string "eddsa-jcs-2022" then
      a `ProofTransformationError` MUST be raised.
   2. Let canonicalDocument be the result of applying the JSON
       Canonicalization Scheme [RFC8785] to the unsecuredDocument.
@@ -185,7 +185,7 @@ defmodule Integrity do
     type = Keyword.get(options, :type, "undefined")
     cryptosuite = Keyword.get(options, :cryptosuite, "undefined")
 
-    if type != "DataIntegrityProof" && cryptosuite != "jcs-eddsa-2022" do
+    if type != "DataIntegrityProof" && cryptosuite != "eddsa-jcs-2022" do
       raise Integrity.ProofTransformationError, type: type, cryptosuite: cryptosuite
     end
 
@@ -193,13 +193,13 @@ defmodule Integrity do
   end
 
   @doc """
-  Implements jcs-eddsa-2022 proof configuration. § 3.1.5 and § 3.2.
+  Implements eddsa-jcs-2022 proof configuration. § 3.1.5 and § 3.2.
 
   1. Let `proof_config` be an empty object.
   2. Set `proof_config.type` to `options.type`.
   3. If `options.cryptosuite` is set, set `proof_config.cryptosuite` to its value.
   4. If `options.type` is not set to  "DataIntegrityProof"  and
-     `proof_config.cryptosuite` is not set to "jcs-eddsa-2022", an
+     `proof_config.cryptosuite` is not set to "eddsa-jcs-2022", an
      `InvalidProofConfigurationError` MUST be raised.
   5. Set `proof_config.created` to `options.created`. If the value is not a
      valid [XMLSCHEMA11-2] datetime, an `InvalidProofDatetimeError`
@@ -217,7 +217,7 @@ defmodule Integrity do
     verification_method = Keyword.get(options, :verification_method, "undefined")
     proof_purpose = Keyword.get(options, :proof_purpose, "undefined")
 
-    if type != "DataIntegrityProof" || cryptosuite != "jcs-eddsa-2022" do
+    if type != "DataIntegrityProof" || cryptosuite != "eddsa-jcs-2022" do
       raise Integrity.InvalidProofConfigurationError, type: type, cryptosuite: cryptosuite
     end
 
@@ -242,7 +242,7 @@ defmodule Integrity do
   end
 
   @doc """
-  Implements jcs-eddsa-2022 hashing. § 3.1.4.
+  Implements eddsa-jcs-2022 hashing. § 3.1.4.
 
   1. Let `transformed_document_hash` be the result of applying the SHA-256
      (SHA-2 with 256-bit output) cryptographic hashing algorithm
@@ -264,7 +264,7 @@ defmodule Integrity do
   end
 
   @doc """
-  Builds a "DataIntegrityProof" document for the "jcs-eddsa-2022"
+  Builds a "DataIntegrityProof" document for the "eddsa-jcs-2022"
   cryptosuite with the purpose "assertionMethod", and with other specified options.
   """
   def build_assertion_proof!(document, options) do
@@ -274,13 +274,13 @@ defmodule Integrity do
     transformed_document =
       Integrity.transform_jcs_eddsa_2022!(document,
         type: "DataIntegrityProof",
-        cryptosuite: "jcs-eddsa-2022"
+        cryptosuite: "eddsa-jcs-2022"
       )
 
     options =
       Keyword.merge(options,
         type: "DataIntegrityProof",
-        cryptosuite: "jcs-eddsa-2022",
+        cryptosuite: "eddsa-jcs-2022",
         proof_purpose: "assertionMethod"
       )
 
@@ -291,7 +291,7 @@ defmodule Integrity do
 
     Map.put(document, "proof", %{
       "type" => "DataIntegrityProof",
-      "cryptosuite" => "jcs-eddsa-2022",
+      "cryptosuite" => "eddsa-jcs-2022",
       "created" => created,
       "verificationMethod" => verification_method,
       "proofPurpose" => "assertionMethod",
@@ -300,7 +300,7 @@ defmodule Integrity do
   end
 
   @doc """
-  Implements jcs-eddsa-2022 proof serialization. § 3.1.6.
+  Implements eddsa-jcs-2022 proof serialization. § 3.1.6.
 
   1. Let `private_key_bytes` be the result of retrieving the private key
      bytes associated with the `options.verification_method` value as
@@ -320,7 +320,7 @@ defmodule Integrity do
   end
 
   @doc """
-  Implements jcs-eddsa-2022 proof verification, § 3.1.7.
+  Implements eddsa-jcs-2022 proof verification, § 3.1.7.
 
   1. Let `public_key_bytes` be the result of retrieving the public key
      bytes associated with the `options.verification_method` value as
@@ -497,7 +497,7 @@ defmodule Integrity do
       transformed_document =
         transform_jcs_eddsa_2022!(document_to_verify,
           type: "DataIntegrityProof",
-          cryptosuite: "jcs-eddsa-2022"
+          cryptosuite: "eddsa-jcs-2022"
         )
 
       hash_data = hash(proof_config, transformed_document)

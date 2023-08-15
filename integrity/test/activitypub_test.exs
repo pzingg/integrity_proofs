@@ -22,7 +22,7 @@ defmodule Integrity.ActivityPubTest do
     person_with_identity_proof =
       Integrity.ActivityPub.build_identity_proof!(@test_person,
         type: "DataIntegrityProof",
-        cryptosuite: "jcs-eddsa-2022",
+        cryptosuite: "eddsa-jcs-2022",
         created: @proof_config_created,
         verification_method: @verification_method_url,
         proof_purpose: "assertionMethod",
@@ -39,10 +39,10 @@ defmodule Integrity.ActivityPubTest do
                "alsoKnownAs" => "https://server.example/users/alice",
                "proof" => %{
                  "created" => "2020-11-05T19:23:24Z",
-                 "cryptosuite" => "jcs-eddsa-2022",
+                 "cryptosuite" => "eddsa-jcs-2022",
                  "proofPurpose" => "assertionMethod",
                  "proofValue" =>
-                   "z5JnJU6aBzyG8gMBvGeYBnC2SVaKJX1zGgdqGbfWt9sGNn32mjmtHZd6WZUqdipH3cuvhc9BSnkXSFD8nNw2nLVfS",
+                   "z3gyEkT84x6x6M73qz1yLMev9wuXZa4mVUBLfCoukfJL2JD6opmBeuAfgSbCJUFyYMHRTVjRai7Vpeqkg8DEAxCtf",
                  "type" => "DataIntegrityProof",
                  "verificationMethod" => @verification_method_url
                }
@@ -54,7 +54,7 @@ defmodule Integrity.ActivityPubTest do
     person_with_identity_proof =
       Integrity.ActivityPub.build_identity_proof!(@test_person,
         type: "DataIntegrityProof",
-        cryptosuite: "jcs-eddsa-2022",
+        cryptosuite: "eddsa-jcs-2022",
         created: @proof_config_created,
         verification_method: @verification_method_url,
         proof_purpose: "assertionMethod",

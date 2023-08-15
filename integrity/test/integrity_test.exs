@@ -36,7 +36,7 @@ defmodule IntegrityTest do
       %{
         "id" => @verification_method_url,
         "type" => "Multikey",
-        "cryptosuite" => "jcs-eddsa-2022",
+        "cryptosuite" => "eddsa-jcs-2022",
         "controller" => @controller_url,
         "publicKeyMultibase" => @public_key_multibase
       }
@@ -61,7 +61,7 @@ defmodule IntegrityTest do
     transformed_document =
       Integrity.transform_jcs_eddsa_2022!(@test_document,
         type: "DataIntegrityProof",
-        cryptosuite: "jcs-eddsa-2022"
+        cryptosuite: "eddsa-jcs-2022"
       )
 
     assert transformed_document ==
@@ -70,23 +70,23 @@ defmodule IntegrityTest do
     proof_config =
       Integrity.proof_configuration!(@test_document,
         type: "DataIntegrityProof",
-        cryptosuite: "jcs-eddsa-2022",
+        cryptosuite: "eddsa-jcs-2022",
         created: @proof_config_created,
         verification_method: @verification_method_url,
         proof_purpose: "assertionMethod"
       )
 
     assert proof_config ==
-             "{\"@context\":[\"https://www.w3.org/ns/did/v1\",\"https://w3id.org/security/data-integrity/v1\"],\"created\":\"2020-11-05T19:23:24Z\",\"cryptosuite\":\"jcs-eddsa-2022\",\"proofPurpose\":\"assertionMethod\",\"type\":\"DataIntegrityProof\",\"verificationMethod\":\"did:example:123456789abcdefghi#keys-1\"}"
+             "{\"@context\":[\"https://www.w3.org/ns/did/v1\",\"https://w3id.org/security/data-integrity/v1\"],\"created\":\"2020-11-05T19:23:24Z\",\"cryptosuite\":\"eddsa-jcs-2022\",\"proofPurpose\":\"assertionMethod\",\"type\":\"DataIntegrityProof\",\"verificationMethod\":\"did:example:123456789abcdefghi#keys-1\"}"
 
     hash_data = Integrity.hash(proof_config, transformed_document)
-    # assert CryptoUtils.display_byteshash_data) == ""
+    # assert CryptoUtils.display_bytes(hash_data) == ""
 
     assert hash_data ==
-             <<238, 154, 157, 59, 112, 209, 224, 189, 75, 33, 108, 128, 166, 229, 99, 132, 111,
-               99, 172, 217, 74, 32, 157, 154, 192, 176, 194, 50, 78, 123, 134, 104, 137, 202,
-               252, 201, 116, 72, 95, 113, 101, 108, 231, 21, 70, 250, 142, 28, 30, 219, 184, 82,
-               71, 117, 126, 33, 1, 187, 102, 74, 32, 31, 194, 227>>
+             <<238, 21, 238, 66, 93, 235, 156, 213, 203, 246, 23, 225, 219, 193, 128, 128, 32,
+               173, 71, 76, 30, 8, 173, 167, 206, 83, 54, 247, 147, 55, 167, 18, 137, 202, 252,
+               201, 116, 72, 95, 113, 101, 108, 231, 21, 70, 250, 142, 28, 30, 219, 184, 82, 71,
+               117, 126, 33, 1, 187, 102, 74, 32, 31, 194, 227>>
 
     key_options = [
       public_key_bytes: @public_key_bytes,
@@ -94,13 +94,13 @@ defmodule IntegrityTest do
     ]
 
     proof_bytes = Integrity.serialize_proof!(hash_data, key_options)
-    # assert CryptoUtils.display_bytesproof_bytes) == ""
+    # assert CryptoUtils.display_bytes(proof_bytes) == ""
 
     assert proof_bytes ==
-             <<236, 12, 31, 81, 196, 198, 187, 38, 102, 51, 173, 50, 216, 57, 22, 104, 218, 94, 6,
-               9, 135, 139, 8, 193, 103, 117, 7, 109, 251, 20, 155, 179, 20, 60, 183, 7, 250, 216,
-               121, 128, 127, 100, 17, 129, 161, 157, 127, 143, 79, 16, 132, 102, 20, 107, 245,
-               183, 64, 223, 193, 194, 103, 1, 49, 0>>
+             <<11, 207, 227, 35, 205, 61, 191, 58, 123, 123, 92, 178, 20, 18, 42, 8, 93, 126, 99,
+               72, 254, 9, 35, 237, 196, 216, 183, 100, 125, 37, 142, 75, 170, 85, 204, 157, 88,
+               164, 111, 216, 210, 120, 105, 237, 241, 225, 94, 8, 199, 154, 105, 112, 53, 231,
+               190, 143, 25, 145, 191, 153, 119, 248, 147, 4>>
 
     assert Integrity.verify_proof!(hash_data, proof_bytes, key_options)
   end
@@ -109,7 +109,7 @@ defmodule IntegrityTest do
     proof_document =
       Integrity.build_assertion_proof!(@test_document,
         type: "DataIntegrityProof",
-        cryptosuite: "jcs-eddsa-2022",
+        cryptosuite: "eddsa-jcs-2022",
         created: @proof_config_created,
         verification_method: @verification_method_url,
         proof_purpose: "assertionMethod",
@@ -119,9 +119,9 @@ defmodule IntegrityTest do
 
     assert %{"proof" => proof} = proof_document
     assert %{"proofValue" => proof_value} = proof
-    # assert CryptoUtils.display_bytesproof_value) == ""
+
     assert proof_value ==
-             "z5iisP3L5JS7gby3WCEMTg1ghf9x77iujzJv7fho1SJQg99sQR6eHGhSS22s2U9JenDhBfzSrJviFnuwjnau2eH3u"
+             "zEhSpwfgbZuAYYbpqKC1z4qAkvQtJ36CLvYiaLaYA1DiMQomtUsmgP5iwAjd5e4sXcMQEijWLFhTdAKPUYURuHJj"
 
     assert String.starts_with?(@public_key_multibase, "z6")
 
@@ -140,7 +140,7 @@ defmodule IntegrityTest do
     proof_document =
       Integrity.build_assertion_proof!(@test_document,
         type: "DataIntegrityProof",
-        cryptosuite: "jcs-eddsa-2022",
+        cryptosuite: "eddsa-jcs-2022",
         created: @proof_config_created,
         verification_method: @verification_method_url,
         proof_purpose: "assertionMethod",
