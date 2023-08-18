@@ -25,7 +25,7 @@ defmodule DidServerWeb.WebAuthnKeyController do
     # require_authenticated_user
     %{id: user_id, account: account} = conn.assigns.current_user
     handle = DidServer.Accounts.Account.domain_handle(account)
-    user_id = Base.encode64(user_id)
+    user_id = Base.url_encode64(user_id, padding: false)
 
     opts =
       if Map.get(params, "direct", "false") == "true" do
@@ -49,7 +49,7 @@ defmodule DidServerWeb.WebAuthnKeyController do
     |> put_session(:wa_user_id, user_id)
     |> render(:new,
       login: handle,
-      challenge: Base.encode64(challenge.bytes),
+      challenge: Base.url_encode64(challenge.bytes, padding: false),
       rp_id: challenge.rp_id,
       rp_name: DidServer.Application.name(),
       user: handle,
@@ -75,10 +75,10 @@ defmodule DidServerWeb.WebAuthnKeyController do
       if is_nil(user_id_b64) do
         nil
       else
-        Base.decode64!(user_id_b64)
+        Base.url_decode64!(user_id_b64, padding: false)
       end
 
-    attestation_object = Base.decode64!(attestation_object_b64)
+    attestation_object = Base.url_decode64!(attestation_object_b64, padding: false)
 
     case Wax.register(attestation_object, client_data_json, challenge) do
       {:ok, {authenticator_data, result}} ->

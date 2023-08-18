@@ -69,6 +69,7 @@ defmodule CryptoUtils.Keys do
   def generate_keypair(curve, public_key_format) do
     private_key_format =
       case public_key_format do
+        :multikey -> :crypto_algo_key
         :did_key -> :crypto_algo_key
         _ -> public_key_format
       end

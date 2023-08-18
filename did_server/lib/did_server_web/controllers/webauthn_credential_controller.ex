@@ -21,14 +21,14 @@ defmodule DidServerWeb.WebAuthnCredentialController do
             "userHandle" => maybe_user_handle_b64
           } = webauthn_params
       }) do
-    maybe_user_handle = if maybe_user_handle_b64 <> "", do: Base.decode64!(maybe_user_handle_b64)
+    maybe_user_handle = if maybe_user_handle_b64 <> "", do: Base.url_decode64!(maybe_user_handle_b64, padding: false)
     user = Accounts.get_user(maybe_user_handle)
 
     if is_nil(user) do
       authentication_failed(conn, "No user found for handle")
     else
-      authenticator_data_raw = Base.decode64!(authenticator_data_b64)
-      sig_raw = Base.decode64!(sig_b64)
+      authenticator_data_raw = Base.url_decode64!(authenticator_data_b64, padding: false)
+      sig_raw = Base.url_decode64!(sig_b64, padding: false)
       challenge = get_session(conn, :authentication_challenge)
       {credentials, handle_mapping} = Identities.get_wax_params(maybe_user_handle)
       aaguid_mapping = get_session(conn, :aaguid_mapping) || handle_mapping
@@ -68,7 +68,7 @@ defmodule DidServerWeb.WebAuthnCredentialController do
     |> put_session(:authentication_challenge, challenge)
     |> render(:new,
       login: nil,
-      challenge: Base.encode64(challenge.bytes),
+      challenge: Base.url_encode64(challenge.bytes),
       rp_id: challenge.rp_id,
       cred_ids: []
     )

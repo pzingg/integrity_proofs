@@ -1180,7 +1180,7 @@ defmodule CryptoUtils.Did do
 
     {cbor, _unsigned_op} = cbor_encode(op)
     sig_bytes = :crypto.sign(algorithm, :sha256, cbor, [priv, curve], [])
-    Map.put(op, "sig", Base.encode64(sig_bytes))
+    Map.put(op, "sig", Base.url_encode64(sig_bytes, padding: false))
   end
 
   def verify_signature(did, cbor, sig_bytes) do
@@ -1346,7 +1346,7 @@ defmodule CryptoUtils.Did do
 
     {cbor, _unsigned_op} = cbor_encode(op)
 
-    with {:ok, sig_bytes} <- Base.decode64(sig),
+    with {:ok, sig_bytes} <- Base.url_decode64(sig, padding: false),
          {:found, valid} when is_binary(valid) <-
            {:found, Enum.find(allowed_did_keys, &verify_signature(&1, cbor, sig_bytes))} do
       valid
