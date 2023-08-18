@@ -47,6 +47,8 @@ defmodule DidServer.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.4"},
       {:plug_cowboy, "~> 2.5"},
+      {:jcs, git: "https://github.com/pzingg/jcs.git"},
+      {:jose, "~> 1.11"},
       {:wax_, "~> 0.6.0"},
       {:crypto_utils, path: "../crypto_utils"}
     ]

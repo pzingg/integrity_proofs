@@ -143,11 +143,168 @@ a single account.
 Bovine's WebFinger endpoint can look up both the type 2 and type 3
 resources and returns the actor's "rel=self" URL.
 
+### Reconciling different roots of identity
+
+https://socialhub.activitypub.rocks/t/reconciling-different-roots-of-identity/3399/7
+
+by_caballero:
+
+I would prefer to think of a keypair (whether expressed as a did:key, 
+a multikey, a did:pkh, and/or as any other form of did) as a property 
+of the account that can be updated over time–I don't believe this is 
+explicit enough in ActivityPub, but it seems implied, if nothing else, 
+by the nature of ids in Linked Data generally as roots of identity. 
+Keypairs being secondary properties that change over time is, I would 
+argue, the dominant model in most software today...
+
+Assuming an account can update keys periodically and that today's keys 
+can only be gotten by querying the server in its id feels a lot simpler 
+than any alternative, particularly given status quo implementation-wise.
+
+Thinking of the keypair as a property of the account also opens up 
+"byo authenticator" patterns, i.e. replacing the public key in the 
+profile without generating a new private key or importing an external 
+private key, by proving control of it (e.g. signing an arbitrary 
+confirmation-message payload and producing a verifiable receipt at 
+time of import/association). 
+
+For a fun example of "byo authenticator" see [this project](https://dostr-eth.github.io/resources/#private-key-derivation) 
+that uses an Ethereum wallet as an authenticator for a Nostr account!
+
+This delegation to an external authenticator (such as Authy or 
+Microsoft Authenticator, or other cryptographic wallets that can 
+sign arbitrary messages) could align quite well with the approach 
+in FEP-521a and FEP-c390.
+
+As for the alsoKnownAs chaos, I am convinced that the rel="me" system 
+makes the most sense for one logical human maintaining multiple accounts 
+over time, which is of course a major usability feature of modern social 
+media anyways independent of migration and tombstoning.
+
+What I would propose for the interrelated problems of migration and 
+tombstoning is something very different and more hierarchical, which is 
+closer to the DID semantic controller, i.e., that identifier HAS AUTHORITY 
+OVER this account/identifier. For example, it could mean:
+
+  * this authenticator/signer/private key has been authorized to sign for 
+    the subject anywhere its signatures are accepted,
+  * this external identifier/authN mechanism is authorized to authenticate 
+    migration requests,
+  * this external AuthN is authorized to tombstone this account, after 
+    migration, or keep it as a rel="me",
+  * if this server bans the user and freezes/closes their account, this 
+    authority has already been externalized and migration can still 
+    happen if records of the authorization can still be verified.
+
+If instances can get OK with that pre-authorization/authority-export which 
+overrides, say, a ban or a boot then maybe AP isn't locked into the 
+authority of the webserver forever.
+
+trwnh:
+
+However, we also need to establish "same controller", "external owner", 
+"same logical person" or at the very least "is permitted to send 
+activities partially or fully on my behalf, particularly the Move 
+activity". 
+
+Some proposals:
+
+  * check for alsoKnownAs (Mastodon usage, not DID definition)
+  * check for rel="me" or some other property making the same claim 
+    (unambiguous, but not currently supported by anyone since 
+    alsoKnownAs is historically used in a similar/same way)
+  * check for a cryptographic signature that can be verified with 
+    the same public key as was last known (requires careful handling 
+    for edge cases, plus agreement that keys are meaningful sources 
+    of identity)
+
+Note that in the immediate above statement, we must differentiate 
+between "same controller" and "permitted to send activities on my behalf"; 
+the former might imply the latter, but the latter does not necessarily 
+imply the former. We might grant or delegate or give escrow to some 
+other controller who can act "on behalf of" us. for example, an "instance 
+actor" representing a server or domain, which we are currently using. 
+
+With such a scheme, it becomes possible to eliminate the shell game 
+taking place within current http/ld signatures–rather than the server 
+generating keypairs for every actor and then puppeting those actors, 
+the server could send messages "on behalf of" the actors it "owns" or 
+"is responsible for". The exact nature of the relationship between 
+any actor and their server (or any other actor) should be possible to 
+clarify along these lines, and to place limits on what this relationship 
+does or does not allow them to do.
+
+by_caballero:
+
+I would just like to emphasize what I meant by "heirarchical" (controller) 
+as opposed to "horizontal" (rel="me" or alsoKnownAs) in case that didn't 
+make sense or answer the question as much as I thought it did. [Those diagrams](https://dostr-eth.github.io/resources/#private-key-derivation)
+I linked to above of a Nostr client based on Sign In With 
+Ethereum 2 is a good example of a delegation pattern that could be 
+relevant here: the client basically generates a deterministic Nostr 
+private key to use on behalf of the user after receiving a delegation 
+message signed by an EVM/secp key that the user controls elsewhere. 
+
+This means the Nostr key is downstream of that key "external" to it, 
+which is its controller in DID terms. Thus, a "custodial" (well, 
+technically deterministic/symmetrical, but at the very least 
+server-side-generated) Nostr private key is signing things on behalf 
+of a Nostr "actor" that has an external controller which outranks it 
+(the ethereum private key it doesn't own). This is not an alsoKnownAs 
+or rel="me" peer, but a greater authority.
+
+### Deterministic server-generated key pairs
+
+1. Matrix "recovery key". `Passphrase + user info + algorithm + salt + iterations + bits => {algorithm, salt, iterations, bits, private key}`.
+
+2. Dostr. `Ethereum keypair + username + message => HKDF => private key`.
+
 ### Discussion of DIDs and identity proofs
 
 https://socialhub.activitypub.rocks/t/fep-c390-identity-proofs/2726/49
 
 The next step is improving usability and security of account migration process based on FEP-c390. It would be also interesting to experiment with client-side activity signing (AP C2S + FEP-8b32 + FEP-c390).
+
+### Non-blockchain decentralized identifiers
+
+[did:github](https://docs.github-did.com/did-method-spec/) - Uses GitHub repositories.
+Potentially this could be expanded to include gitolite, gitea, codeberg, etc., systems 
+that expose URLs like `https://raw.githubusercontent.com/USERNAME/ghdid/master/index.jsonld`. 
+This method relies on trusting GitHub’s authentication when making updates 
+to a DID document, but a user MAY chose to use Linked Data Signatures via 
+the proof field of their DID document for a strong verifiable cryptographic proof.
+
+[did:ipid](https://did-ipid.github.io/ipid-did-method/) - Based on IPFS.
+
+[did:orb](https://trustbloc.github.io/did-method-orb/) - Uses Sidetree protocol
+content-addressable storage, IPFS, ActivityPub on a decentralized network of servers 
+and witnesses. The witnesses give signed timestamps to operations, to resolve
+[late publishing conflicts](https://identity.foundation/sidetree/spec/#late-publishing).
+
+AP object types are "AnchorCredential", "AnchorEvent", "AnchorLink", "AnchorReceipt", "Collection", "CollectionPage", "Link", "OrderedCollection", "OrderedCollectionPage", "Service", "VerifiableCredential".
+
+AP activities are  "Accept/Follow,Invite,Offer", "Announce/AnchorEvent", "Create/AnchorEvent", "Follow", "Invite/AnchorWitness",  "Like", "Offer", "Reject/Follow,Invite,Offer", "Undo/Follow,Invite,Like".
+
+Collections kept in DB are "Activities", "AnchorLinksets", "Followers", "Following", "Inbox", "Liked", "Likes", "Outbox", "PublicOutbox", "Shares", "Witness", "Witnessing".
+
+Link is 
+	Anchor   *vocab.URLProperty `json:"anchor"`
+	Profile  []*Reference       `json:"profile"`
+	Author   []*Reference       `json:"author,omitempty"`
+	Item     []*Item            `json:"item,omitempty"`
+	Original []*Reference       `json:"original,omitempty"`
+	Related  []*Reference       `json:"related,omitempty"`
+	Replies  []*Reference       `json:"replies,omitempty"`
+	Up       []*Reference       `json:"up,omitempty"`
+	Via      []*Reference       `json:"via,omitempty"`
+
+Reference is
+	HRef *vocab.URLProperty `json:"href"`
+	Type string             `json:"type,omitempty"`
+
+[did:peer]
+
+[did:schema](https://github.com/51nodes/schema-registry-did-method/blob/master/README.md) - Uses public IPFS (susceptible to attack) or evan.network IPFS (better security).
 
 ## Implmentation: user model and authentication
 
