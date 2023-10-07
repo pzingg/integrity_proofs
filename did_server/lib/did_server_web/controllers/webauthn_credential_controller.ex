@@ -21,7 +21,10 @@ defmodule DidServerWeb.WebAuthnCredentialController do
             "userHandle" => maybe_user_handle_b64
           } = webauthn_params
       }) do
-    maybe_user_handle = if maybe_user_handle_b64 <> "", do: Base.url_decode64!(maybe_user_handle_b64, padding: false)
+    maybe_user_handle =
+      if maybe_user_handle_b64 <> "",
+        do: Base.url_decode64!(maybe_user_handle_b64, padding: false)
+
     user = Accounts.get_user(maybe_user_handle)
 
     if is_nil(user) do

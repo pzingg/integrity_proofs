@@ -56,7 +56,7 @@ defmodule DidServer.DidOrbClient do
         doc,
         update_keypair,
         recovery_keypair,
-        anchor_origin \\ nil,
+        anchor_origin,
         patches \\ [],
         algo \\ @sha2_256_code
       ) do

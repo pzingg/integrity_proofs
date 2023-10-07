@@ -23,7 +23,7 @@ defmodule CryptoUtils.Resolver do
     httpc_http_opts = Keyword.get(opts, :http_opts, [])
     httpc_opts = Keyword.get(opts, :opts, [])
     headers = Keyword.get(opts, :headers, [])
-    content_type = Keyword.get(opts, :content_type, "plain/text")
+    content_type = Keyword.get(opts, :content_type, "plain/text") |> to_charlist()
     body = Keyword.get(opts, :body, "OK")
 
     url = maybe_rewrite(url, opts)
@@ -38,9 +38,18 @@ defmodule CryptoUtils.Resolver do
         :httpc.request(:get, {url, headers}, httpc_http_opts, httpc_opts)
     end
     |> case do
-      {:ok, {{_, 200, _}, _headers, body}} -> {:ok, to_string(body)}
-      {:ok, {{_, status_code, _}, _headers, body}} -> {:error, to_string(body), status_code}
-      {:error, error} -> {:error, error, 999}
+      {:ok, {{_, status_code, _}, _headers, body}} ->
+        if status_code >= 200 && status_code < 300 do
+          {:ok, to_string(body)}
+        else
+          {:error, to_string(body), status_code}
+        end
+
+      {:error, error} ->
+        {:error, error, 999}
+
+      result ->
+        {:error, "unhandled result #{inspect(result)}", 999}
     end
   end
 
