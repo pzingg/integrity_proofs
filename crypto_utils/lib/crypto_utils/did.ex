@@ -4,6 +4,7 @@ defmodule CryptoUtils.Did do
   """
 
   alias CryptoUtils.Cid
+  alias CryptoUtils.Did.Methods.DidKey
   alias CryptoUtils.Plc.{CreateOperation, CreateParams, UpdateOperation}
 
   defmodule EllipticCurveError do
@@ -131,18 +132,6 @@ defmodule CryptoUtils.Did do
     "EcdsaSecp256r1AgreementKey2019",
     "EcdsaSecp256k1AgreementKey2019"
   ]
-
-  # @ed25519_code 0xED
-  @ed25519_prefix <<0xED, 0x01>>
-  @ed25519_jwt_alg "ED25519"
-
-  # @p256_code 0x1200
-  @p256_prefix <<0x80, 0x24>>
-  @p256_jwt_alg "ES256"
-
-  # @secp256k1_code 0xE7
-  @secp256k1_prefix <<0xE7, 0x01>>
-  @secp256k1_jwt_alg "ES256K"
 
   @base_context [
     "https://www.w3.org/ns/did/v1",
@@ -714,7 +703,7 @@ defmodule CryptoUtils.Did do
   end
 
   def context_and_key_for_did!(did) do
-    %{curve: curve, key_bytes: key_bytes} = parse_did_key!(did)
+    %{curve: curve, key_bytes: key_bytes} = DidKey.parse!(did)
     {type, context} = type_and_context_for_curve(curve, :verification)
 
     %{
@@ -722,54 +711,6 @@ defmodule CryptoUtils.Did do
       type: type,
       public_key_multibase: Multibase.encode!(key_bytes, :base58_btc)
     }
-  end
-
-  def parse_did_key!(did) do
-    %{multibase_value: multibase_value} = parse_did!(did, expected_did_methods: :key)
-
-    prefixed_bytes = Multibase.decode!(multibase_value)
-    <<prefix::binary-size(2), key_bytes::binary>> = prefixed_bytes
-
-    case prefix do
-      @ed25519_prefix ->
-        %{
-          curve: :ed25519,
-          jwt_alg: @ed25519_jwt_alg,
-          key_bytes: prefixed_bytes,
-          algo_key: {:eddsa, [key_bytes, :ed25519]}
-        }
-
-      @p256_prefix ->
-        case CryptoUtils.Curves.decompress_public_key_point(key_bytes, :p256) do
-          {:ok, uncompressed} ->
-            %{
-              curve: :p256,
-              jwt_alg: @p256_jwt_alg,
-              key_bytes: prefixed_bytes,
-              algo_key: {:ecdsa, [uncompressed, :secp256r1]}
-            }
-
-          _ ->
-            raise EllipticCurveError, "p256"
-        end
-
-      @secp256k1_prefix ->
-        case CryptoUtils.Curves.decompress_public_key_point(key_bytes, :secp256k1) do
-          {:ok, uncompressed} ->
-            %{
-              curve: :secp256k1,
-              jwt_alg: @secp256k1_jwt_alg,
-              key_bytes: prefixed_bytes,
-              algo_key: {:ecdsa, [uncompressed, :secp256k1]}
-            }
-
-          _ ->
-            raise EllipticCurveError, "secp256k1"
-        end
-
-      _ ->
-        raise UnsupportedPublicKeyCodecError, prefix
-    end
   end
 
   def type_and_context_for_curve(:ed25519, purpose) do
@@ -1184,7 +1125,7 @@ defmodule CryptoUtils.Did do
   end
 
   def verify_signature(did, cbor, sig_bytes) do
-    %{algo_key: algo_key} = parse_did_key!(did)
+    %{algo_key: algo_key} = DidKey.parse!(did)
     # {:ecdsa, [<<binary-size(65)>>, :secp256k1]} = algo_key
 
     {algorithm, [pub, curve]} = algo_key
@@ -1323,7 +1264,7 @@ defmodule CryptoUtils.Did do
 
     Enum.each(keys, fn key ->
       try do
-        parse_did_key!(key)
+        DidKey.parse!(key)
       rescue
         _e ->
           raise UnsupportedKeyError, key

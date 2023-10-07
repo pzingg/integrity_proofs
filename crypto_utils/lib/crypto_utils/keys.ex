@@ -5,6 +5,7 @@ defmodule CryptoUtils.Keys do
   require Record
 
   alias CryptoUtils.Curves
+  alias CryptoUtils.Did.Methods.DidKey
 
   @typedoc """
   Tuple for ASN.1 curve OID.
@@ -343,7 +344,7 @@ defmodule CryptoUtils.Keys do
 
   def encode_pem_private_key({did_key, {:ecdsa, [priv, curve]}}) do
     # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
-    %{algo_key: {:ecdsa, [pub, _curve]}} = CryptoUtils.Did.parse_did_key!(did_key)
+    %{algo_key: {:ecdsa, [pub, _curve]}} = DidKey.parse!(did_key)
 
     ec_private_key(
       version: 1,
