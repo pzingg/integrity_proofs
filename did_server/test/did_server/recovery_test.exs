@@ -299,7 +299,6 @@ defmodule DidServer.RecoveryTest do
 
     {did, signed_op, password, keys_pem} =
       if is_nil(did) || is_nil(prev) do
-        # TODO keys_pem
         assert {:ok, keys_pem} = Keypair.encode_pem_private_key(signing_keypair)
 
         assert {:ok, {did, signed_op, password, _keys_pem}} =

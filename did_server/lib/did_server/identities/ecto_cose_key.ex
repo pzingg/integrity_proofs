@@ -29,8 +29,11 @@ defmodule DidServer.Identities.EctoCoseKey do
     decoded_data =
       data
       |> Enum.map(fn
-        {key, val} when is_binary(val) -> {to_integer_key(key), Base.url_decode64!(val, padding: false)}
-        {key, val} -> {to_integer_key(key), val}
+        {key, val} when is_binary(val) ->
+          {to_integer_key(key), Base.url_decode64!(val, padding: false)}
+
+        {key, val} ->
+          {to_integer_key(key), val}
       end)
       |> Map.new()
 

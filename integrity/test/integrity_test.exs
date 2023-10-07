@@ -52,7 +52,7 @@ defmodule IntegrityTest do
     private_key = Integrity.retrieve_private_key!(key_options, :public_key)
 
     assert {:ECPrivateKey, 1, @private_key_bytes, {:namedCurve, {1, 3, 101, 112}},
-            @public_key_bytes} = private_key
+            @public_key_bytes, _} = private_key
 
     assert {:eddsa, [@private_key_bytes, :ed25519]} = :dbg_public_key.format_sign_key(private_key)
   end

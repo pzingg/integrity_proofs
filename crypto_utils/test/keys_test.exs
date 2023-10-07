@@ -26,7 +26,7 @@ defmodule CryptoUtils.KeysTest do
 
       {:ok, _pub, private_key} = Keys.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
 
-      assert {:ECPrivateKey, 1, priv, {:namedCurve, _curve}, pub} = private_key
+      assert {:ECPrivateKey, 1, priv, {:namedCurve, _curve}, pub, _} = private_key
       assert byte_size(priv) == 32
       assert priv == @private_key_bytes
       assert byte_size(pub) == 32
@@ -44,7 +44,7 @@ defmodule CryptoUtils.KeysTest do
 
       {:ok, _pub, private_key} = Keys.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
 
-      assert {:ECPrivateKey, 1, priv, {:namedCurve, curve}, pub} = private_key
+      assert {:ECPrivateKey, 1, priv, {:namedCurve, curve}, pub, _} = private_key
       assert byte_size(priv) == 32
       assert byte_size(pub) == 65
       assert curve == {1, 2, 840, 10045, 3, 1, 7}
@@ -55,7 +55,7 @@ defmodule CryptoUtils.KeysTest do
 
       {:ok, _pub, private_key} = Keys.decode_pem_ssh_file(pem, :openssh_key_v1, :public_key)
 
-      assert {:ECPrivateKey, 1, priv, {:namedCurve, curve}, pub} = private_key
+      assert {:ECPrivateKey, 1, priv, {:namedCurve, curve}, pub, _} = private_key
       assert byte_size(priv) == 32
       assert byte_size(pub) == 65
       assert curve == {1, 3, 132, 0, 10}
@@ -80,11 +80,54 @@ defmodule CryptoUtils.KeysTest do
     test "decodes and compresses a pem-encoded p256 private key" do
       {:ok, pem} = File.read("./test/support/fixtures/p256.priv")
 
-      assert {:ok, _, {:ECPrivateKey, 1, priv, {:namedCurve, {1, 2, 840, 10045, 3, 1, 7}}, pub}} =
+      assert {:ok, _,
+              {:ECPrivateKey, 1, priv, {:namedCurve, {1, 2, 840, 10045, 3, 1, 7}}, pub, _}} =
                Keys.decode_pem_public_key(pem, :public_key)
 
       assert byte_size(priv) == 32
       assert byte_size(pub) == 65
+    end
+  end
+
+  describe "jwk" do
+    test "generates an :secp256k1 public key jwk" do
+      assert {jwk_pub, jwk_priv, :jwk, :jwk} = Keys.generate_keypair(:secp256k1, :jwk)
+      assert jwk_pub["kty"] == "EC"
+      assert jwk_pub["crv"] == "secp256k1"
+      assert jwk_pub["x"]
+      assert jwk_pub["y"]
+
+      assert jwk_priv["kty"] == "EC"
+      assert jwk_priv["crv"] == "secp256k1"
+      assert jwk_priv["d"]
+      assert jwk_priv["x"]
+      assert jwk_priv["y"]
+    end
+
+    test "generates an :p256 public key jwk" do
+      assert {jwk_pub, jwk_priv, :jwk, :jwk} = Keys.generate_keypair(:p256, :jwk)
+      assert jwk_pub["kty"] == "EC"
+      assert jwk_pub["crv"] == "P-256"
+      assert jwk_pub["x"]
+      assert jwk_pub["y"]
+
+      assert jwk_priv["kty"] == "EC"
+      assert jwk_priv["crv"] == "P-256"
+      assert jwk_priv["d"]
+      assert jwk_priv["x"]
+      assert jwk_priv["y"]
+    end
+
+    test "generates an :ed25519 public key jwk" do
+      assert {jwk_pub, jwk_priv, :jwk, :jwk} = Keys.generate_keypair(:ed25519, :jwk)
+      assert jwk_pub["kty"] == "OKP"
+      assert jwk_pub["crv"] == "Ed25519"
+      assert jwk_pub["x"]
+
+      assert jwk_priv["kty"] == "OKP"
+      assert jwk_priv["crv"] == "Ed25519"
+      assert jwk_priv["d"]
+      assert jwk_priv["x"]
     end
   end
 

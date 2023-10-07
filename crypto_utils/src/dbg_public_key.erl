@@ -19,7 +19,8 @@
     version,
     privateKey,
     parameters,
-    publicKey
+    publicKey,
+    attributes
     }).
 
 namedCurves({1, 3, 101, 112}) -> ed25519.

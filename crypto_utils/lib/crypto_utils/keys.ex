@@ -6,41 +6,75 @@ defmodule CryptoUtils.Keys do
 
   alias CryptoUtils.Curves
 
+  @typedoc """
+  Tuple for ASN.1 curve OID.
+  """
+  @type oid_tuple() ::
+          {
+            byte(),
+            byte(),
+            byte(),
+            byte()
+          }
+          | {
+              byte(),
+              byte(),
+              byte(),
+              byte(),
+              byte()
+            }
+
   @doc """
   Erlang record for public key.
+  Source: otp/lib/public_key/include/public_key.hrl
 
-  @type ec_point() :: {
-    ECPoint,
-    point: binary()
-  }
+  -record('ECPoint', {
+   point
+  }).
   """
+  @type ec_point_record() :: {
+          :ECPoint,
+          point: binary()
+        }
+
   Record.defrecord(:ec_point, :ECPoint, point: "")
 
-  @doc """
+  @typedoc """
   Erlang record for private key.
+  Source: otp/lib/public_key/asn1/ECPrivateKey.asn1:
 
-  @type oid_tuple() :: {
-    a: byte(),
-    b: byte(),
-    c: byte(),
-    d: byte()
+  ECPrivateKey ::= SEQUENCE {
+    version        INTEGER,
+    privateKey     CurvePrivateKey,
+    parameters [0] EcpkParameters OPTIONAL,
+    publicKey  [1] CurvePublicKey OPTIONAL,
+    -- Should be PKCS-8 Attributes but problem at the moment with PKCS-8 being part
+    -- of PCKS-FRAME and PKIX1Algorithms88 is part of OTP-PUB-KEY. Procrastinate
+    -- the solution as it mostly not used anyway
+    attributes     ANY OPTIONAL
   }
 
-  @type ec_private_key() :: {
-    ECPrivateKey,
-    version: integer(),
-   private_key: binary(),
-    parameters: {:ecParameters, {ECParameters, ...} |
-              {:namedCurve, oid_tuple()} |
-              {:implicitlyCA, 'NULL'},
-   public_key: bitstring()
-  }
+  CurvePrivateKey ::= OCTET STRING
+  CurvePublicKey ::= BIT STRING
   """
+  @type ec_private_key_record() :: {
+          :ECPrivateKey,
+          version: integer(),
+          private_key: binary(),
+          parameters:
+            {:ecParameters, tuple()}
+            | {:namedCurve, oid_tuple()}
+            | {:implicitlyCA, term()},
+          public_key: bitstring(),
+          attributes: term()
+        }
+
   Record.defrecord(:ec_private_key, :ECPrivateKey,
     version: 1,
     private_key: "",
     parameters: nil,
-    public_key: <<>>
+    public_key: <<>>,
+    attributes: :asn1_NOVALUE
   )
 
   # Extra mappings not in Multicodec v0.0.2
@@ -69,10 +103,14 @@ defmodule CryptoUtils.Keys do
   def generate_keypair(curve, public_key_format) do
     private_key_format =
       case public_key_format do
+        # :jwk -> :crypto_algo_key
         :multikey -> :crypto_algo_key
         :did_key -> :crypto_algo_key
         _ -> public_key_format
       end
+
+    # This will also work?
+    # priv = :public_key.generate_key(Curves.curve_params(curve))
 
     {pub, priv} = :crypto.generate_key(Curves.erlang_algo(curve), Curves.erlang_ec_curve(curve))
     public_key = make_public_key(pub, curve, public_key_format)
@@ -184,6 +222,16 @@ defmodule CryptoUtils.Keys do
     |> Multibase.encode!(:base58_btc)
   end
 
+  def make_public_key(pub, :ed25519, :jwk) do
+    :jose_jwk_kty_okp_ed25519.to_map(pub, %{})
+  end
+
+  def make_public_key(pub, curve, :jwk) do
+    ec_point_tuple = make_public_key(pub, curve, :public_key)
+    {kty_module, {key, fields}} = :jose_jwk_kty.from_key(ec_point_tuple)
+    kty_module.to_map(key, fields)
+  end
+
   def make_public_key(pub, :ed25519, :public_key_ed)
       when byte_size(pub) == 32 do
     {:ed_pub, :ed25519, pub}
@@ -203,14 +251,24 @@ defmodule CryptoUtils.Keys do
   """
   def make_private_key({pub, priv}, :ed25519, :public_key)
       when byte_size(pub) == 32 and byte_size(priv) == 32 do
-    ec_private_key(private_key: priv, public_key: pub, parameters: Curves.curve_params(:ed25519))
+    ec_private_key(
+      version: 1,
+      private_key: priv,
+      parameters: Curves.curve_params(:ed25519),
+      public_key: pub
+    )
   end
 
   def make_private_key({pub, priv}, :p256, :public_key) do
     # pub is <<4>> <> <<x::32 bytes>> <> <<y::32 bytes>>
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
-    ec_private_key(private_key: priv, public_key: pub, parameters: Curves.curve_params(:p256))
+    ec_private_key(
+      version: 1,
+      private_key: priv,
+      parameters: Curves.curve_params(:p256),
+      public_key: pub
+    )
   end
 
   def make_private_key({pub, priv}, :secp256k1, :public_key) do
@@ -218,9 +276,10 @@ defmodule CryptoUtils.Keys do
     # 4 means uncompressed format, x and y are curve coordinates
     # priv is 32 bytes
     ec_private_key(
+      version: 1,
       private_key: priv,
-      public_key: pub,
-      parameters: Curves.curve_params(:secp256k1)
+      parameters: Curves.curve_params(:secp256k1),
+      public_key: pub
     )
   end
 
@@ -245,6 +304,16 @@ defmodule CryptoUtils.Keys do
     {:ecdsa, [priv, :secp256k1]}
   end
 
+  def make_private_key({pub, priv}, :ed25519, :jwk) do
+    :jose_jwk_kty_okp_ed25519.to_map(<<priv::binary, pub::binary>>, %{})
+  end
+
+  def make_private_key({pub, priv}, curve, :jwk) do
+    ec_private_key_tuple = make_private_key({pub, priv}, curve, :public_key)
+    {kty_module, {key, fields}} = :jose_jwk_kty.from_key(ec_private_key_tuple)
+    kty_module.to_map(key, fields)
+  end
+
   def make_private_key({pub, priv}, :ed25519, :public_key_ed)
       when byte_size(pub) == 32 and byte_size(priv) == 32 do
     {:ed_pri, :ed25519, pub, priv}
@@ -265,10 +334,9 @@ defmodule CryptoUtils.Keys do
     {:error, "unkown key format #{inspect(key)}"}
   end
 
-  def encode_pem_private_key({:ECPrivateKey, 1, priv, curve_params, pub}) do
+  def encode_pem_private_key({:ECPrivateKey, 1, _priv, _curve_params, _pub, _} = priv) do
     # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
-    private_key_asn1 = {:ECPrivateKey, 1, priv, curve_params, pub, :asn1_NOVALUE}
-    entry = :public_key.pem_entry_encode(:ECPrivateKey, private_key_asn1)
+    entry = :public_key.pem_entry_encode(:ECPrivateKey, priv)
     pem = :public_key.pem_encode([entry])
     {:ok, pem}
   end
@@ -276,7 +344,14 @@ defmodule CryptoUtils.Keys do
   def encode_pem_private_key({did_key, {:ecdsa, [priv, curve]}}) do
     # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
     %{algo_key: {:ecdsa, [pub, _curve]}} = CryptoUtils.Did.parse_did_key!(did_key)
-    encode_pem_private_key({:ECPrivateKey, 1, priv, Curves.curve_params(curve), pub})
+
+    ec_private_key(
+      version: 1,
+      private_key: priv,
+      parameters: Curves.curve_params(curve),
+      public_key: pub
+    )
+    |> encode_pem_private_key()
   end
 
   def encode_pem_private_key(key) do
@@ -382,10 +457,10 @@ defmodule CryptoUtils.Keys do
 
     {public_key, private_key} =
       Enum.map(decoded, fn
-        {:ECPrivateKey, 1, _priv, {:namedCurve, _}, _pub, :asn1_NOVALUE} = key ->
+        {:ECPrivateKey, 1, _priv, {:namedCurve, _}, _pub, _attrs} = key ->
           key
 
-        {{:ECPrivateKey, 1, _priv, {:namedCurve, _}, _pub, :asn1_NOVALUE} = key, attrs}
+        {{:ECPrivateKey, 1, _priv, {:namedCurve, _}, _pub, _attrs} = key, attrs}
         when is_list(attrs) ->
           key
 
@@ -394,7 +469,7 @@ defmodule CryptoUtils.Keys do
       end)
       |> Enum.filter(&is_tuple/1)
       |> case do
-        [{:ECPrivateKey, 1, priv, {:namedCurve, curve_oid}, pub, :asn1_NOVALUE} | _] ->
+        [{:ECPrivateKey, 1, priv, {:namedCurve, curve_oid}, pub, _attrs} | _] ->
           curve = Curves.curve_from_oid(curve_oid)
 
           if is_nil(curve) do
