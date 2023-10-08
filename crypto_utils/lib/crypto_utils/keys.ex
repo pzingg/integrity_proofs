@@ -4,8 +4,7 @@ defmodule CryptoUtils.Keys do
   """
   require Record
 
-  alias CryptoUtils.Curves
-  alias CryptoUtils.Did.Methods.DidKey
+  alias CryptoUtils.{Curves, Did}
 
   @typedoc """
   Tuple for ASN.1 curve OID.
@@ -344,7 +343,7 @@ defmodule CryptoUtils.Keys do
 
   def encode_pem_private_key({did_key, {:ecdsa, [priv, curve]}}) do
     # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
-    %{algo_key: {:ecdsa, [pub, _curve]}} = DidKey.parse!(did_key)
+    %{algo_key: {:ecdsa, [pub, _curve]}} = Did.parse_did!(did_key, expected_did_methods: [:key])
 
     ec_private_key(
       version: 1,
@@ -503,7 +502,11 @@ defmodule CryptoUtils.Keys do
     :ed25519
   end
 
-  defp curve_from_mapping(%Multicodec.MulticodecMapping{codec: codec}) do
-    String.to_existing_atom(codec)
+  defp curve_from_mapping(%Multicodec.MulticodecMapping{codec: codec, prefix: prefix}) do
+    if codec in ["p256", "secp256k1"] do
+      String.to_atom(codec)
+    else
+      raise ArgumentError, "codec '#{codec}', prefix #{inspect(prefix)} is not a recognized curve"
+    end
   end
 end

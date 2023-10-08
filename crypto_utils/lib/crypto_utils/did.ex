@@ -4,7 +4,6 @@ defmodule CryptoUtils.Did do
   """
 
   alias CryptoUtils.Cid
-  alias CryptoUtils.Did.Methods.DidKey
   alias CryptoUtils.Plc.{CreateOperation, CreateParams, UpdateOperation}
 
   defmodule EllipticCurveError do
@@ -117,6 +116,105 @@ defmodule CryptoUtils.Did do
     end
   end
 
+  @type resolution_input_option() ::
+          {:client, module()}
+          | {:user_agent, String.t()}
+          | {:accept, String.t()}
+          | {:version_id, String.t()}
+          | {:version_time, String.t()}
+          | {:no_cache, bool()}
+          | {:property_set, map()}
+
+  @typedoc """
+  [DID Resolution Options](https://www.w3.org/TR/did-core/#did-resolution-options).
+
+  Used as input to `DIDResolver::resolve/2`.
+  """
+  @type resolution_input_metadata() :: [resolution_input_option()]
+
+  @type dereferencing_input_option() ::
+          {:accept, String.t()}
+          | {:service_type, String.t()}
+          | {:follow_redirect, bool()}
+          | {:property_set, map()}
+
+  @typedoc """
+  [DID URL Dereferencing Options](https://www.w3.org/TR/did-core/#did-url-dereferencing-options)
+
+  Used as input to [DID URL dereferencing][dereference].
+  """
+  @type dereferencing_input_metadata() :: [dereferencing_input_option()]
+
+  defmodule ResolutionMetadata do
+    @moduledoc """
+    [DID Resolution Metadata](https://www.w3.org/TR/did-core/#did-resolution-metadata)
+
+    Specified in [DID Resolution](https://w3c-ccg.github.io/did-resolution/#output-resolutionmetadata)
+    """
+
+    defstruct [
+      :error,
+      :content_type,
+      property_set: %{}
+    ]
+
+    @type t() :: %__MODULE__{
+            error: String.t() | nil,
+            content_type: String.t() | nil,
+            property_set: map()
+          }
+  end
+
+  defmodule DocumentMetadata do
+    @moduledoc """
+    Metadata structure describing a DID document in a DID Resolution Result.
+
+    Specified:
+    - in [DID Core](https://www.w3.org/TR/did-core/#dfn-diddocumentmetadata)
+    - in [DID Resolution](https://w3c-ccg.github.io/did-resolution/#output-documentmetadata)
+    - in [DID Specification Registries](https://www.w3.org/TR/did-spec-registries/#did-document-metadata)
+    """
+
+    defstruct [
+      :created,
+      :updated,
+      :deactivated,
+      property_set: %{}
+    ]
+
+    @type t() :: %__MODULE__{
+            created: NaiveDateTime.t() | nil,
+            updated: NaiveDateTime.t() | nil,
+            deactivated: boolean() | nil,
+            property_set: map()
+          }
+  end
+
+  defmodule DereferencingMetadata do
+    @moduledoc """
+    [DID URL dereferencing metadata](https://www.w3.org/TR/did-core/#did-url-dereferencing-metadata).
+
+    Returned from [DID URL dereferencing][dereference].
+    """
+    defstruct [
+      :error,
+      :content_type,
+      :property_set
+    ]
+
+    @type t() :: %__MODULE__{
+            error: String.t() | nil,
+            content_type: String.t() | nil,
+            property_set: map()
+          }
+  end
+
+  @type basic_parts() :: %{
+          did_string: String.t(),
+          method: String.t(),
+          method_specific_id: String.t()
+        }
+
   @valid_did_methods [:web, :key, :plc, :example]
   @known_signature_key_formats [
     "Multikey",
@@ -141,37 +239,9 @@ defmodule CryptoUtils.Did do
   # DIDs
 
   @doc """
-  Resolve the URL for a did:web identifier.
-
-  The method specific identifier MUST match the common name used in
-  the SSL/TLS certificate, and it MUST NOT include IP addresses.
-  A port MAY be included and the colon MUST be percent encoded to
-  prevent a conflict with paths. Directories and subdirectories MAY
-  optionally be included, delimited by colons rather than slashes.
-
-  web-did = "did:web:" domain-name
-  web-did = "did:web:" domain-name * (":" path)
+  Lookup parts and resolver method for a DID.
   """
-  def did_web_uri(identifier, options \\ []) do
-    if String.starts_with?(identifier, "did:web:") do
-      parsed_did = parse_did!(identifier, options)
-
-      {:ok,
-       %URI{
-         scheme: parsed_did.scheme,
-         host: parsed_did.host,
-         port: parsed_did.port,
-         path: parsed_did.path
-       }}
-    else
-      {:error, "not a did:web identifier"}
-    end
-  end
-
-  @doc """
-  Parse a did
-  """
-  def parse_did!(identifier, options \\ []) do
+  def parse_basic!(identifier, options \\ []) do
     parts = String.split(identifier, ":", parts: 3)
 
     if Enum.count(parts) != 3 || hd(parts) != "did" do
@@ -187,24 +257,26 @@ defmodule CryptoUtils.Did do
       raise UnexpectedDidMethodError, method
     end
 
-    parsed = %{
+    %{
       did_string: identifier,
       method: method,
-      method_specific_id: method_specific_id
+      method_specific_id: method_specific_id,
+      resolver: CryptoUtils.Did.Method.lookup!(method)
     }
+  end
+
+  @doc """
+  Parse a DID, optionally validating via the resolver.
+  """
+  def parse_did!(identifier, options \\ []) do
+    %{resolver: resolver} = parsed = parse_basic!(identifier, options)
 
     if Keyword.get(options, :method_only, false) do
       parsed
     else
-      case method do
-        :key ->
-          validate_did!(:key, parsed, String.split(method_specific_id, ":"), options)
-
-        :web ->
-          validate_did!(:web, parsed, String.split(method_specific_id, ":"), options)
-
-        :plc ->
-          validate_did!(:plc, parsed, [method_specific_id], options)
+      case resolver.validate(parsed, options) do
+        {:ok, parsed} ->
+          parsed
 
         _ ->
           raise InvalidDidError, identifier
@@ -212,97 +284,19 @@ defmodule CryptoUtils.Did do
     end
   end
 
-  defp validate_did!(:key, %{did_string: identifier} = parsed, [multibase_value], _) do
-    if String.starts_with?(multibase_value, "z") do
-      Map.merge(
-        parsed,
-        %{
-          version: "1",
-          multibase_value: multibase_value
-        }
-      )
-    else
-      raise InvalidDidError, identifier
-    end
-  end
+  @doc """
+  Resolve a DID, optionally validating via the resolver.
+  """
+  def resolve_did!(identifier, options \\ []) do
+    %{resolver: resolver} = parsed = parse_basic!(identifier, options)
 
-  defp validate_did!(:key, %{did_string: identifier} = parsed, [version, multibase_value], _) do
-    if String.starts_with?(multibase_value, "z") do
-      Map.merge(
-        parsed,
-        %{
-          version: version,
-          multibase_value: multibase_value
-        }
-      )
-    else
-      raise InvalidDidError, identifier
-    end
-  end
+    case resolver.validate(parsed, options) do
+      {:ok, parsed} ->
+        resolver.resolve(parsed, options)
 
-  defp validate_did!(:web, %{did_string: identifier} = parsed, [host_port | path_parts], options) do
-    path =
-      if Enum.all?(path_parts, fn part ->
-           part != "" && is_nil(Regex.run(~r/\s/, part))
-         end) do
-        case Enum.join(path_parts, "/") do
-          "" -> "/.well-known/did.json"
-          p -> "/" <> p <> "/did.json"
-        end
-      else
-        nil
-      end
-
-    {host, port, path} =
-      URI.decode(host_port)
-      |> String.split(":", parts: 2)
-      |> case do
-        [host] ->
-          {host, nil, path}
-
-        [host, port] ->
-          case Integer.parse(port) do
-            {p, ""} -> {host, p, path}
-            _ -> {host, 0, path}
-          end
-      end
-
-    cond do
-      is_nil(path) ->
+      _ ->
         raise InvalidDidError, identifier
-
-      is_integer(port) && (port == 0 || port > 65535) ->
-        raise InvalidDidError, identifier
-
-      true ->
-        scheme = Keyword.get(options, :scheme, "https")
-
-        port =
-          case {scheme, port} do
-            {"http", 80} -> nil
-            {"https", 443} -> nil
-            {_, p} -> p
-          end
-
-        Map.merge(parsed, %{scheme: scheme, host: host, port: port, path: path})
     end
-  end
-
-  defp validate_did!(
-         :plc,
-         %{did_string: identifier, method_specific_id: base32_cid} = parsed,
-         _,
-         _options
-       ) do
-    if byte_size(base32_cid) != 24 || Regex.match?(~r/[^a-z2-7]/, base32_cid) do
-      raise InvalidDidError, identifier
-    end
-
-    parsed
-  end
-
-  defp validate_did!(_, %{did_string: identifier}, _, _) do
-    raise InvalidDidError, identifier
   end
 
   ## Creating DID documents
@@ -703,14 +697,13 @@ defmodule CryptoUtils.Did do
   end
 
   def context_and_key_for_did!(did) do
-    %{curve: curve, key_bytes: key_bytes} = DidKey.parse!(did)
+    %{curve: curve} = parsed = parse_did!(did, expected_did_methods: [:key])
     {type, context} = type_and_context_for_curve(curve, :verification)
 
-    %{
+    Map.merge(parsed, %{
       context: context,
-      type: type,
-      public_key_multibase: Multibase.encode!(key_bytes, :base58_btc)
-    }
+      type: type
+    })
   end
 
   def type_and_context_for_curve(:ed25519, purpose) do
@@ -1125,7 +1118,7 @@ defmodule CryptoUtils.Did do
   end
 
   def verify_signature(did, cbor, sig_bytes) do
-    %{algo_key: algo_key} = DidKey.parse!(did)
+    %{algo_key: algo_key} = parse_did!(did, expected_did_methods: [:key])
     # {:ecdsa, [<<binary-size(65)>>, :secp256k1]} = algo_key
 
     {algorithm, [pub, curve]} = algo_key
@@ -1262,12 +1255,12 @@ defmodule CryptoUtils.Did do
   defp validate_keys(op, signing_keys, rotation_keys) do
     keys = signing_keys ++ rotation_keys
 
-    Enum.each(keys, fn key ->
+    Enum.each(keys, fn did ->
       try do
-        DidKey.parse!(key)
+        parse_did!(did, expected_did_methods: [:key])
       rescue
         _e ->
-          raise UnsupportedKeyError, key
+          raise UnsupportedKeyError, did
       end
     end)
 
