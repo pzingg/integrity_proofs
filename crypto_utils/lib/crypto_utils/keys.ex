@@ -6,6 +6,33 @@ defmodule CryptoUtils.Keys do
 
   alias CryptoUtils.{Curves, Did}
 
+  defmodule InvalidPublicKeyError do
+    defexception [:multibase, :reason]
+
+    @impl true
+    def message(%{multibase: multibase, reason: reason}) do
+      "Invalid public Multikey #{multibase}: #{reason}"
+    end
+  end
+
+  defmodule UnsupportedNamedCurveError do
+    defexception [:type, :curve, :format]
+
+    @impl true
+    def message(%__MODULE__{type: type, curve: curve, format: format}) do
+      "unsupported named curve #{curve} format #{format} for #{type} key"
+    end
+  end
+
+  defmodule EllipticCurveError do
+    defexception [:message]
+
+    @impl true
+    def exception(curve) do
+      %__MODULE__{message: "point not on elliptic curve #{curve}"}
+    end
+  end
+
   @typedoc """
   Tuple for ASN.1 curve OID.
   """
@@ -165,7 +192,7 @@ defmodule CryptoUtils.Keys do
         tuple
 
       {:error, reason} ->
-        raise CryptoUtils.InvalidPublicKeyError, multibase: multibase_value, reason: reason
+        raise InvalidPublicKeyError, multibase: multibase_value, reason: reason
     end
   end
 
@@ -238,7 +265,7 @@ defmodule CryptoUtils.Keys do
   end
 
   def make_public_key(_, curve, format) do
-    raise CryptoUtils.UnsupportedNamedCurveError, type: :public, curve: curve, format: format
+    raise UnsupportedNamedCurveError, type: :public, curve: curve, format: format
   end
 
   @doc """
@@ -320,7 +347,7 @@ defmodule CryptoUtils.Keys do
   end
 
   def make_private_key(_, curve, format) do
-    raise CryptoUtils.UnsupportedNamedCurveError, type: :private, curve: curve, format: format
+    raise UnsupportedNamedCurveError, type: :private, curve: curve, format: format
   end
 
   def encode_pem_public_key({{:ECPoint, _pub}, _curve_params} = public_key) do

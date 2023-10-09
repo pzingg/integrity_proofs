@@ -1,7 +1,6 @@
 defmodule DidServer.IdentitiesTest do
   use DidServer.DataCase
 
-  alias CryptoUtils.Keys.Keypair
   alias DidServer.Identities
 
   describe "keys" do

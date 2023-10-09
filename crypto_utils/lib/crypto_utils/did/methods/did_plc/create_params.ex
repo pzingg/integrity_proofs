@@ -1,4 +1,4 @@
-defmodule CryptoUtils.Plc.CreateParams do
+defmodule CryptoUtils.Did.Methods.DidPlc.CreateParams do
   defstruct [
     :did,
     :type,

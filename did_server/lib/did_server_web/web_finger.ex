@@ -151,7 +151,7 @@ defmodule DidServerWeb.WebFinger do
     meta_url = "https://#{domain}/.well-known/host-meta"
 
     with {:ok, body, _headers} <-
-           CryptoUtils.Resolver.fetch(meta_url, headers: [{"accept", "application/json"}]) do
+           CryptoUtils.HttpClient.fetch(meta_url, headers: [{"accept", "application/json"}]) do
       get_template_from_xml(body)
     else
       {:error, message, _status_code} ->
@@ -196,7 +196,7 @@ defmodule DidServerWeb.WebFinger do
     address = get_address_from_domain(domain, encoded_account)
 
     with {:ok, body, headers} <-
-           CryptoUtils.Resolver.fetch(address,
+           CryptoUtils.HttpClient.fetch(address,
              headers: [
                {"accept", @accept_header_value_xml},
                {"accept", @accept_header_value_json}

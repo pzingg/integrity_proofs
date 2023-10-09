@@ -193,3 +193,14 @@ is served at `http://localhost:4000/plc` in the development server,
 so URLs for fetching DID documents are, e.g.
 
 - http://localhost:4000/plc/did%3Aplc%3A4heftswx5xresjexdo4nnpmj
+
+# did:key prefixes used
+
+- "did:key:z6Mk..."
+- "did:key:z7r8..."
+- "did:key:zDna..."
+
+- "multibaseValue": "zMfe..."
+- "multibaseValue": "zRa2..."
+- "multibaseValue": "zRGP..."
+

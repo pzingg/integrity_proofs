@@ -9,13 +9,14 @@ defmodule CryptoUtils.Did.Methods.DidKey do
   alias CryptoUtils.Did.{
     DocumentMetadata,
     ResolutionMetadata,
-    EllipticCurveError,
     InvalidDidError
   }
 
-  @ed25519_prefix <<0xED, 0x01>>
-  @p256_prefix <<0x80, 0x24>>
-  @secp256k1_prefix <<0xE7, 0x01>>
+  alias CryptoUtils.Keys.KeyFormat
+
+  # @ed25519_prefix <<0xED, 0x01>>
+  # @p256_prefix <<0x80, 0x24>>
+  # @secp256k1_prefix <<0xE7, 0x01>>
 
   # @bls12381_g2_prefix <<0xEB, 0x01>>
   # @p384_prefix <<0x81, 0x24>>
@@ -50,7 +51,7 @@ defmodule CryptoUtils.Did.Methods.DidKey do
             raise InvalidDidError, identifier
         end
 
-      key_data = parse_key!(curve, pub)
+      key_data = KeyFormat.parse_public_key(curve, pub)
 
       {:ok,
        parsed
@@ -68,87 +69,43 @@ defmodule CryptoUtils.Did.Methods.DidKey do
   def resolve(
         %{
           did_string: identifier,
+          method: :key,
           method_specific_id: method_specific_id,
-          vm_type: vm_type,
-          vm_type_iri: vm_type_iri,
-          jwk: jwk
+          jwk: jwk,
+          multibase_value: multibase_value
         },
         _opts
       ) do
     context = [
       "https://www.w3.org/ns/did/v1",
-      %{
-        "publicKeyJwk" => %{
-          "@id" => "https://w3id.org/security#publicKeyJwk",
-          "@type" => "@json"
-        }
-      }
-      |> Map.put(vm_type, vm_type_iri)
+      "https://w3id.org/security/jwk/v1",
+      "https://w3id.org/security/multikey/v1"
     ]
 
-    vm_did_url = "#{identifier}##{method_specific_id}"
+    jwk_vm_did_url = identifier <> "#" <> method_specific_id
+    mk_vm_did_url = identifier <> "#keys-1"
 
     doc = %{
       "@context" => context,
       "id" => identifier,
-      "verificationMethod" => %{
-        "id" => vm_did_url,
-        "type" => vm_type,
-        "controller" => identifier,
-        "publicKeyJwk" => jwk
-      },
-      "authentication" => [vm_did_url],
-      "assertionMethod" => [vm_did_url]
+      "verificationMethod" => [
+        %{
+          "id" => jwk_vm_did_url,
+          "type" => "JasonWebKey2020",
+          "controller" => identifier,
+          "publicKeyJwk" => jwk
+        },
+        %{
+          "id" => mk_vm_did_url,
+          "type" => "Multikey",
+          "controller" => identifier,
+          "publicKeyMultibase" => multibase_value
+        }
+      ],
+      "authentication" => [jwk_vm_did_url, mk_vm_did_url],
+      "assertionMethod" => [jwk_vm_did_url, mk_vm_did_url]
     }
 
     {:ok, {%ResolutionMetadata{}, doc, %DocumentMetadata{}}}
-  end
-
-  defp parse_key!(:ed25519 = curve, key_bytes) do
-    %{
-      curve: curve,
-      key_bytes: key_bytes,
-      jwk: CryptoUtils.Keys.make_public_key(key_bytes, curve, :jwk),
-      jwt_alg: "ED25519",
-      vm_type: "Ed25519VerificationKey2018",
-      vm_type_iri: "https://w3id.org/security#Ed25519VerificationKey2018",
-      algo_key: {:eddsa, [key_bytes, curve]}
-    }
-  end
-
-  defp parse_key!(:p256 = curve, key_bytes) do
-    case CryptoUtils.Curves.decompress_public_key_point(key_bytes, curve) do
-      {:ok, uncompressed} ->
-        %{
-          curve: curve,
-          key_bytes: key_bytes,
-          jwk: CryptoUtils.Keys.make_public_key(uncompressed, curve, :jwk),
-          jwt_alg: "ES256",
-          vm_type: "EcdsaSecp256r1VerificationKey2019",
-          vm_type_iri: "https://w3id.org/security#EcdsaSecp256r1VerificationKey2019",
-          algo_key: {:ecdsa, [uncompressed, :secp256r1]}
-        }
-
-      _ ->
-        raise EllipticCurveError, "p256"
-    end
-  end
-
-  defp parse_key!(:secp256k1 = curve, key_bytes) do
-    case CryptoUtils.Curves.decompress_public_key_point(key_bytes, curve) do
-      {:ok, uncompressed} ->
-        %{
-          curve: curve,
-          key_bytes: key_bytes,
-          jwk: CryptoUtils.Keys.make_public_key(uncompressed, curve, :jwk),
-          jwt_alg: "ES256K",
-          vm_type: "EcdsaSecp256k1VerificationKey2019",
-          vm_type_iri: "https://w3id.org/security#EcdsaSecp256k1VerificationKey2019",
-          algo_key: {:ecdsa, [uncompressed, curve]}
-        }
-
-      _ ->
-        raise EllipticCurveError, "secp256k1"
-    end
   end
 end

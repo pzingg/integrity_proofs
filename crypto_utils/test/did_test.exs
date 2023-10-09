@@ -15,7 +15,8 @@ defmodule CryptoUtils.DidTest do
     "@context" => [
       "https://www.w3.org/ns/did/v1",
       "https://w3id.org/security/data-integrity/v1",
-      "https://w3id.org/security/suites/ed25519-2020/v1",
+      "https://w3id.org/security/jwk/v1",
+      "https://w3id.org/security/multikey/v1",
       "https://w3id.org/security/suites/secp256k1-2019/v1",
       "https://w3id.org/security/suites/ecdsa-2019/v1"
     ],
@@ -71,6 +72,7 @@ defmodule CryptoUtils.DidTest do
       to: fn conn ->
         body =
           CryptoUtils.Did.format_did_document!(@did_web_identifier,
+            public_key_format: "Multikey",
             multibase_value: @multibase_value,
             signature_method_fragment: "keys-1"
           )
@@ -96,6 +98,7 @@ defmodule CryptoUtils.DidTest do
   test "builds a DID document" do
     document =
       CryptoUtils.Did.format_did_document!(@did_key_identifier,
+        public_key_format: "Multikey",
         multibase_value: @multibase_value,
         also_known_as: [
           "at://alice.bsky.social",
@@ -147,8 +150,10 @@ defmodule CryptoUtils.DidTest do
                []
              )
 
-    assert doc["verificationMethod"]["publicKeyJwk"]["kty"] == "EC"
-    assert doc["verificationMethod"]["publicKeyJwk"]["crv"] == "P-256"
+    assert [vm_jwk, vm_mk] = doc["verificationMethod"]
+    jwk = vm_jwk["publicKeyJwk"]
+    assert jwk["kty"] == "EC"
+    assert jwk["crv"] == "P-256"
   end
 
   describe "did:web test server" do
@@ -168,7 +173,7 @@ defmodule CryptoUtils.DidTest do
     test "resolves using method module" do
       setup_test_server()
 
-      assert {:ok, {_, doc, _}} =
+      assert {:ok, {_res_meta, doc, _doc_meta}} =
                CryptoUtils.Did.resolve_did!(@did_web_identifier, client: __MODULE__)
 
       assert doc["id"] == @did_web_identifier

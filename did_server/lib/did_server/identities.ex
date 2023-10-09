@@ -5,6 +5,7 @@ defmodule DidServer.Identities do
 
   import Ecto.Query, warn: false
 
+  alias CryptoUtils.Did
   alias DidServer.{Accounts, Repo}
   alias DidServer.Accounts.{Account, User}
   alias DidServer.Identities.{Credential, Key}
@@ -246,15 +247,15 @@ defmodule DidServer.Identities do
         {sig_fragment, multibase_value, additional_vms} =
           case Map.to_list(vms) do
             [{key_id, key_value} | rest] ->
-              %{public_key_multibase: multibase_value} =
-                CryptoUtils.Did.context_and_key_for_did!(key_value)
+              %{multibase_value: multibase_value} =
+                Did.parse_did!(key_value, expected_did_methods: [:key])
 
               more =
                 Enum.map(rest, fn {key_id, key_value} ->
-                  %{context: context, public_key_multibase: multibase_value} =
-                    CryptoUtils.Did.context_and_key_for_did!(key_value)
+                  %{multibase_value: multibase_value} =
+                    Did.parse_did!(key_value, expected_did_methods: [:key])
 
-                  {key_id, %{context: context, type: "Multikey", value: multibase_value}}
+                  {key_id, %{type: "Multikey", value: multibase_value}}
                 end)
                 |> Map.new()
 

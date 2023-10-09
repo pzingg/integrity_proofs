@@ -6,24 +6,6 @@ defmodule CryptoUtils do
   and functions for decoding and encoding DIDs and CIDs.
   """
 
-  defmodule InvalidPublicKeyError do
-    defexception [:multibase, :reason]
-
-    @impl true
-    def message(%{multibase: multibase, reason: reason}) do
-      "Invalid public Multikey #{multibase}: #{reason}"
-    end
-  end
-
-  defmodule UnsupportedNamedCurveError do
-    defexception [:type, :curve, :format]
-
-    @impl true
-    def message(%__MODULE__{type: type, curve: curve, format: format}) do
-      "unsupported named curve #{curve} format #{format} for #{type} key"
-    end
-  end
-
   @doc """
   Formats a DateTime or NaiveDateTime.
   """
