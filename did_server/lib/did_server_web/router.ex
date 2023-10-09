@@ -104,16 +104,6 @@ defmodule DidServerWeb.Router do
     get("/did.json", DidWebController, :domain_did)
   end
 
-  # didkit style
-  scope "/", DidServerWeb do
-    pipe_through :api
-
-    get "/issue/credentials", CredentialController, :issue
-    get "/verify/credentials", CredentialController, :verify
-    get "/prove/presentations", PresentationController, :prove
-    get "/verify/presentations", PresentationController, :verify
-  end
-
   # Root wildcard - must be at the end of the search
   scope "/", DidServerWeb do
     pipe_through :api
