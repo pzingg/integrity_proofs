@@ -59,4 +59,34 @@ defmodule DidServer.Application do
     )
     |> String.split(",")
   end
+
+  def at_pds_server_url do
+    {scheme, host_port} = scheme_host_port()
+    "#{scheme}://pds.#{host_port}"
+  end
+
+  def ap_server_url do
+    {scheme, host_port} = scheme_host_port()
+    "#{scheme}://#{host_port}"
+  end
+
+  defp scheme_host_port do
+    %URI{scheme: scheme, host: host, port: port} =
+      Application.get_env(:did_server, :base_server_url, "https://example.com") |> URI.parse()
+
+    host =
+      if host == "127.0.0.1" do
+        "localhost"
+      else
+        host
+      end
+
+    {scheme,
+     case {scheme, port} do
+       {_, nil} -> host
+       {:https, 443} -> host
+       {:http, 80} -> host
+       _ -> "#{host}:#{port}"
+     end}
+  end
 end
