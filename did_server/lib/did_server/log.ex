@@ -5,6 +5,7 @@ defmodule DidServer.Log do
 
   import Ecto.Query, warn: false
 
+  alias CryptoUtils.Did.Methods.DidPlc
   alias DidServer.{PrevMismatchError, Repo, UpdateOperationError}
   alias DidServer.Identities.Key
   alias DidServer.Log.Operation
@@ -93,7 +94,7 @@ defmodule DidServer.Log do
 
     case {op, decoder} do
       {%Operation{}, :data} -> Operation.to_json_data(op)
-      {%Operation{}, :did_data} -> CryptoUtils.Did.to_plc_operation_data(op)
+      {%Operation{}, :did_data} -> DidPlc.to_plc_operation_data(op)
       _ -> op
     end
   end
@@ -225,7 +226,7 @@ defmodule DidServer.Log do
 
   """
   def create_operation(params) do
-    case CryptoUtils.Did.create_operation(params) do
+    case DidPlc.create_operation(params) do
       {:ok, {did, signed_op, password, keys_pem}} ->
         validate_and_insert_operation(did, signed_op, password, keys_pem)
 
@@ -247,7 +248,7 @@ defmodule DidServer.Log do
 
   """
   def update_operation(%{did: did, cid: cid, operation: op_json}, params) do
-    case CryptoUtils.Did.update_operation(
+    case DidPlc.update_operation(
            %{did: did, cid: cid, operation: Jason.decode!(op_json)},
            params
          ) do
@@ -279,7 +280,7 @@ defmodule DidServer.Log do
   """
   def multi_insert(did, %{"prev" => prev} = proposed, nullified_cids, password, keys_pem) do
     op_attrs = %{
-      cid: CryptoUtils.Did.cid_for_op(proposed),
+      cid: DidPlc.cid_for_op(proposed),
       did: did,
       operation: Jason.encode!(proposed),
       nullified: false,
@@ -396,7 +397,7 @@ defmodule DidServer.Log do
        when is_binary(did) and is_map(proposed) do
     ops = list_operations(did, true)
 
-    {proposed, nullified_cids} = CryptoUtils.Did.assure_valid_next_op(did, ops, proposed)
+    {proposed, nullified_cids} = DidPlc.assure_valid_next_op(did, ops, proposed)
 
     multi_insert(did, proposed, nullified_cids, password, keys_pem)
     |> Repo.transaction()
@@ -444,6 +445,6 @@ defmodule DidServer.Log do
         op_data
       end)
 
-    CryptoUtils.Did.validate_operation_log!(did, ops)
+    DidPlc.validate_operation_log!(did, ops)
   end
 end

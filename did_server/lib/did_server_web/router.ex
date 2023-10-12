@@ -29,13 +29,13 @@ defmodule DidServerWeb.Router do
   ## Authentication routes
 
   scope "/", DidServerWeb do
-    pipe_through([:browser])
+    pipe_through :browser
 
     delete("/users/log_out", UserSessionController, :delete)
   end
 
   scope "/", DidServerWeb do
-    pipe_through([:browser, :redirect_if_user_is_authenticated])
+    pipe_through [:browser, :redirect_if_user_is_authenticated]
 
     get("/users/register", UserRegistrationController, :new)
     post("/users/register", UserRegistrationController, :create)
@@ -48,7 +48,7 @@ defmodule DidServerWeb.Router do
   end
 
   scope "/", DidServerWeb do
-    pipe_through([:browser, :require_authenticated_user])
+    pipe_through [:browser, :require_authenticated_user]
 
     get("/wauth/register", WebAuthnKeyController, :new)
     post("/wauth/register", WebAuthnKeyController, :create)
@@ -58,25 +58,25 @@ defmodule DidServerWeb.Router do
   end
 
   scope "/users", DidServerWeb do
-    pipe_through(:dual)
+    pipe_through :dual
 
     get("/:handle", AccountsController, :actor)
   end
 
   scope "/users", DidServerWeb do
-    pipe_through(:plain)
+    pipe_through :plain
 
     get("/:handle/profile", AccountsController, :profile)
   end
 
   scope "/home", DidServerWeb do
-    pipe_through(:browser)
+    pipe_through :browser
 
     get("/", PageController, :home)
   end
 
   scope "/plc", DidServerWeb do
-    pipe_through(:api)
+    pipe_through :api
 
     get("/_health", DidPlcController, :health)
     # get "/export", DidPlcController, :index
@@ -93,20 +93,20 @@ defmodule DidServerWeb.Router do
   end
 
   scope "/.well-known", DidServerWeb do
-    pipe_through(:plain)
+    pipe_through :plain
 
     get("/atproto-did", DidPlcController, :domain_did)
   end
 
   scope "/.well-known", DidServerWeb do
-    pipe_through(:api)
+    pipe_through :api
 
     get("/did.json", DidWebController, :domain_did)
   end
 
   # Root wildcard - must be at the end of the search
   scope "/", DidServerWeb do
-    pipe_through(:api)
+    pipe_through :api
 
     get("/*path", DidWebController, :show)
   end

@@ -1,4 +1,4 @@
-defmodule CryptoUtils.Resolver do
+defmodule CryptoUtils.HttpClient do
   @moduledoc """
   Makes HTTP requests with optional rewriting, and
   resolves both "web" and "plc" dids.
@@ -6,8 +6,6 @@ defmodule CryptoUtils.Resolver do
   @behaviour CryptoUtils.Fetcher
 
   require Logger
-
-  alias CryptoUtils.Did
 
   @doc """
   Makes HTTP requests. The `:rewrite_patterns` option
@@ -22,8 +20,14 @@ defmodule CryptoUtils.Resolver do
   def fetch(url, opts) do
     httpc_http_opts = Keyword.get(opts, :http_opts, [])
     httpc_opts = Keyword.get(opts, :opts, [])
+    user_agent = Keyword.get(opts, :user_agent, "integrity-proofs.httpc")
     headers = Keyword.get(opts, :headers, [])
-    content_type = Keyword.get(opts, :content_type, "plain/text")
+
+    headers =
+      [{"user-agent", user_agent} | headers]
+      |> Enum.map(fn {key, value} -> {String.to_charlist(key), String.to_charlist(value)} end)
+
+    content_type = Keyword.get(opts, :content_type, "plain/text") |> String.to_charlist()
     body = Keyword.get(opts, :body, "OK")
 
     url = maybe_rewrite(url, opts)
@@ -51,53 +55,6 @@ defmodule CryptoUtils.Resolver do
     else
       _ ->
         url
-    end
-  end
-
-  def resolve_did(did, opts) do
-    try do
-      %{method: method} = parsed_did = Did.parse_did!(did, expected_did_methods: [:web, :plc])
-
-      case method do
-        :web -> resolve_did_web(parsed_did, opts)
-        :plc -> resolve_did_plc(parsed_did, opts)
-      end
-    rescue
-      error ->
-        Logger.error("parsing did failed: #{inspect(error)}")
-        {:error, "invalid did #{did}"}
-    end
-  end
-
-  def resolve_did_web(parsed_did, opts) do
-    fetcher = Keyword.get(opts, :fetcher, __MODULE__)
-
-    url =
-      %URI{
-        scheme: parsed_did.scheme,
-        host: parsed_did.host,
-        port: parsed_did.port,
-        path: parsed_did.path
-      }
-      |> URI.to_string()
-
-    # opts = Keyword.put(opts, :headers, [{"accept", "application/json"}])
-
-    case fetcher.fetch(url, opts) do
-      {:ok, body} -> Jason.decode(body)
-      error -> error
-    end
-  end
-
-  def resolve_did_plc(parsed_did, opts) do
-    fetcher = Keyword.get(opts, :fetcher, __MODULE__)
-    uri = Keyword.get(opts, :plc_server_url, "https://plc.directory") |> URI.parse()
-    url = %URI{uri | path: "/#{parsed_did.did_string}"} |> URI.to_string()
-    # opts = Keyword.put(opts, :headers, [{"accept", "application/json"}])
-
-    case fetcher.fetch(url, opts) do
-      {:ok, body} -> Jason.decode(body)
-      error -> error
     end
   end
 end

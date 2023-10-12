@@ -2,9 +2,8 @@ defmodule DidServer.Accounts.Account do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias DidServer.{Accounts, Identities}
+  alias DidServer.Accounts
   alias DidServer.Accounts.User
-  alias DidServer.Identities.Key
   alias __MODULE__
 
   @primary_key {:id, :binary_id, autogenerate: true}

@@ -1,6 +1,15 @@
 defmodule DidServer.LogTest do
   use DidServer.DataCase
 
+  alias CryptoUtils.Did.Methods.DidPlc
+
+  alias CryptoUtils.Did.Methods.DidPlc.{
+    GenesisHashError,
+    ImproperOperationError,
+    InvalidSignatureError,
+    MisorderedOperationError
+  }
+
   alias CryptoUtils.Keys.Keypair
   alias DidServer.Log
 
@@ -21,7 +30,7 @@ defmodule DidServer.LogTest do
     test "creates a valid create op" do
       assert {:ok, %{operation: %{did: did} = created_op}} = genesis_op()
 
-      created_op_data = CryptoUtils.Did.to_data(created_op)
+      created_op_data = DidPlc.to_data(created_op)
 
       assert %{"type" => "plc_operation", "alsoKnownAs" => ["at://bob.bsky.social"]} =
                created_op_data
@@ -48,7 +57,7 @@ defmodule DidServer.LogTest do
       assert {:ok, %{operation: updated_op}} =
                DidServer.Log.update_operation(created_op, update_params)
 
-      updated_op_data = CryptoUtils.Did.to_data(updated_op)
+      updated_op_data = DidPlc.to_data(updated_op)
 
       assert %{"type" => "plc_operation", "alsoKnownAs" => ["at://alice.bsky.social"]} =
                updated_op_data
@@ -69,7 +78,7 @@ defmodule DidServer.LogTest do
       assert {:ok, %{operation: updated_op}} =
                DidServer.Log.update_operation(created_op, update_params)
 
-      updated_op_data = CryptoUtils.Did.to_data(updated_op)
+      updated_op_data = DidPlc.to_data(updated_op)
 
       assert %{"type" => "plc_operation", "alsoKnownAs" => ["at://alice.bsky.social"]} =
                updated_op_data
@@ -131,7 +140,7 @@ defmodule DidServer.LogTest do
         signer: Keypair.to_json(@rotation_key_1)
       }
 
-      assert_raise(CryptoUtils.Did.InvalidSignatureError, fn ->
+      assert_raise(InvalidSignatureError, fn ->
         DidServer.Log.update_operation(updated_op, update_params)
       end)
     end
@@ -156,7 +165,7 @@ defmodule DidServer.LogTest do
         signer: Keypair.to_json(@signing_key)
       }
 
-      assert_raise(CryptoUtils.Did.InvalidSignatureError, fn ->
+      assert_raise(InvalidSignatureError, fn ->
         DidServer.Log.update_operation(created_op, update_params)
       end)
     end
@@ -206,7 +215,7 @@ defmodule DidServer.LogTest do
                Operation.insertion_order_changeset(updated_2_op, %{inserted_at: inserted_at_1})
                |> Repo.update()
 
-      assert_raise(CryptoUtils.Did.MisorderedOperationError, fn ->
+      assert_raise(MisorderedOperationError, fn ->
         DidServer.Log.validate_operation_log!(did)
       end)
     end
@@ -229,7 +238,7 @@ defmodule DidServer.LogTest do
         signer: Keypair.to_json(@rotation_key_1)
       }
 
-      assert_raise(CryptoUtils.Did.MisorderedOperationError, fn ->
+      assert_raise(MisorderedOperationError, fn ->
         DidServer.Log.update_operation(tombstone_op, update_params)
       end)
     end
@@ -248,7 +257,7 @@ defmodule DidServer.LogTest do
 
       assert {:ok, _} = DidServer.Repo.delete(created_op)
 
-      assert_raise(CryptoUtils.Did.GenesisHashError, fn ->
+      assert_raise(GenesisHashError, fn ->
         DidServer.Log.validate_operation_log!(did)
       end)
     end
@@ -267,9 +276,9 @@ defmodule DidServer.LogTest do
 
       assert {:ok, _} = DidServer.Repo.delete(created_op)
 
-      expected_did = CryptoUtils.Did.to_data(updated_op) |> CryptoUtils.Did.did_for_op()
+      expected_did = DidPlc.to_data(updated_op) |> DidPlc.did_for_op()
 
-      assert_raise(CryptoUtils.Did.ImproperOperationError, fn ->
+      assert_raise(ImproperOperationError, fn ->
         DidServer.Log.validate_operation_log!(expected_did)
       end)
     end

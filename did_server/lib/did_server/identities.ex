@@ -5,6 +5,7 @@ defmodule DidServer.Identities do
 
   import Ecto.Query, warn: false
 
+  alias CryptoUtils.Did
   alias DidServer.{Accounts, Repo}
   alias DidServer.Accounts.{Account, User}
   alias DidServer.Identities.{Credential, Key}
@@ -213,76 +214,67 @@ defmodule DidServer.Identities do
   ## Documents
 
   def format_did_document(did) when is_binary(did) do
-    op_data = DidServer.Log.get_last_op(did, :did_data)
+    %{"verificationMethods" => vms, "alsoKnownAs" => akas} =
+      op_data = DidServer.Log.get_last_op(did, :did_data)
 
-    %URI{scheme: scheme, host: host, port: port} =
-      Application.get_env(:did_server, :base_server, "https://example.com") |> URI.parse()
+    {{signature_method_id, signature_did}, additional_vms} = select_vms(vms)
 
-    host =
-      if host == "127.0.0.1" do
-        "localhost"
-      else
-        host
-      end
+    if is_nil(signature_method_id) do
+      nil
+    else
+      %{multibase_value: multibase_value} =
+        Did.parse_did!(signature_did, expected_did_methods: [:key])
 
-    host_port =
-      case {scheme, port} do
-        {_, nil} -> host
-        {:https, 443} -> host
-        {:http, 80} -> host
-        _ -> "#{host}:#{port}"
-      end
+      additional_vms =
+        Enum.map(additional_vms, fn {key_id, key_value} ->
+          %{multibase_value: multibase_value} =
+            Did.parse_did!(key_value, expected_did_methods: [:key])
 
-    case op_data do
-      %{"verificationMethods" => vms, "alsoKnownAs" => akas}
-      when is_map(vms) and map_size(vms) != 0 ->
-        linked_user_akas =
-          Accounts.list_accounts_by_did(did)
-          |> Enum.map(fn account -> [Account.ap_id(account), Account.domain_handle(account)] end)
-          |> List.flatten()
+          {key_id, %{type: "Multikey", value: multibase_value}}
+        end)
+        |> Map.new()
 
-        also_known_as = (akas ++ linked_user_akas) |> Enum.sort() |> Enum.uniq()
-
-        {sig_fragment, multibase_value, additional_vms} =
-          case Map.to_list(vms) do
-            [{key_id, key_value} | rest] ->
-              %{public_key_multibase: multibase_value} =
-                CryptoUtils.Did.context_and_key_for_did!(key_value)
-
-              more =
-                Enum.map(rest, fn {key_id, key_value} ->
-                  %{context: context, public_key_multibase: multibase_value} =
-                    CryptoUtils.Did.context_and_key_for_did!(key_value)
-
-                  {key_id, %{context: context, type: "Multikey", value: multibase_value}}
-                end)
-                |> Map.new()
-
-              {key_id, multibase_value, more}
-
-            _ ->
-              raise RuntimeError, "whoa"
-          end
-
-        CryptoUtils.Did.format_did_document!(did,
-          also_known_as: also_known_as,
-          signature_method_fragment: sig_fragment,
-          multibase_value: multibase_value,
-          additional_vms: additional_vms,
-          services: %{
-            "atproto_pds" => %{
-              type: "AtprotoPersonalDataServer",
-              endpoint: "#{scheme}://pds.#{host_port}"
-            },
-            "activitypub" => %{
-              type: "ActivityPubServer",
-              endpoint: "#{scheme}://#{host_port}"
-            }
+      CryptoUtils.Did.format_did_document!(did,
+        also_known_as: all_akas(did, akas),
+        signature_method_fragment: signature_method_id,
+        multibase_value: multibase_value,
+        additional_vms: additional_vms,
+        services: %{
+          "atproto_pds" => %{
+            type: "AtprotoPersonalDataServer",
+            endpoint: DidServer.Application.at_pds_server_url()
+          },
+          "activitypub" => %{
+            type: "ActivityPubServer",
+            endpoint: DidServer.Application.ap_server_url()
           }
-        )
+        }
+      )
+    end
+  end
 
-      _ ->
-        nil
+  def all_akas(did, akas) do
+    linked_user_akas =
+      Accounts.list_accounts_by_did(did)
+      |> Enum.map(fn account -> [Account.ap_id(account), Account.domain_handle(account)] end)
+      |> List.flatten()
+
+    (akas ++ linked_user_akas) |> Enum.sort() |> Enum.uniq()
+  end
+
+  def select_vms(vms) when is_map(vms) do
+    case Map.pop(vms, "atproto") do
+      {nil, _} ->
+        case Map.to_list(vms) do
+          [{signature_method_id, signature_did} | rest] ->
+            {{signature_method_id, signature_did}, rest}
+
+          _ ->
+            {nil, %{}}
+        end
+
+      {signature_did, rest} ->
+        {{"atproto", signature_did}, Map.to_list(rest)}
     end
   end
 

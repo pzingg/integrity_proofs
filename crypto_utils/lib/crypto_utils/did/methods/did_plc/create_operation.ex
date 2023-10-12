@@ -1,4 +1,4 @@
-defmodule CryptoUtils.Plc.CreateOperation do
+defmodule CryptoUtils.Did.Methods.DidPlc.CreateOperation do
   @moduledoc """
   Parsing and validating inputs for creating a did:plc operation.
 
@@ -8,7 +8,7 @@ defmodule CryptoUtils.Plc.CreateOperation do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias CryptoUtils.Plc.CreateParams
+  alias CryptoUtils.Did.Methods.DidPlc.CreateParams
 
   embedded_schema do
     field(:did, :string)

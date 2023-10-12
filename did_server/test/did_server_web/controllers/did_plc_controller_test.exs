@@ -1,8 +1,9 @@
-defmodule DidServerWeb.DjdPlcControllerTest do
+defmodule DidServerWeb.DidPlcControllerTest do
   use DidServerWeb.ConnCase
 
   import DidServer.LogFixtures
 
+  alias CryptoUtils.Did.Methods.DidPlc
   alias CryptoUtils.Keys.Keypair
 
   @signing_keypair Keypair.generate(:secp256k1, :did_key)
@@ -106,7 +107,7 @@ defmodule DidServerWeb.DjdPlcControllerTest do
     end
 
     test "still allows create v1s", %{conn: conn} do
-      {:ok, did} = CryptoUtils.Did.did_for_create_params(@create_v1_params)
+      {:ok, did} = DidPlc.did_for_create_params(@create_v1_params)
       params = Map.put(@create_v1_params, "signer", Keypair.to_json(@rotation_key_1))
       conn = post(conn, ~p"/plc/#{did}", params)
       assert "" = json_response(conn, 200)
@@ -277,7 +278,7 @@ defmodule DidServerWeb.DjdPlcControllerTest do
   end
 
   def post_genesis_op(conn) do
-    {:ok, did} = CryptoUtils.Did.did_for_create_params(@create_params)
+    {:ok, did} = DidPlc.did_for_create_params(@create_params)
 
     params = Map.put(@create_params, "signer", Keypair.to_json(@rotation_key_1))
     {post(conn, ~p"/plc/#{did}", params), did}

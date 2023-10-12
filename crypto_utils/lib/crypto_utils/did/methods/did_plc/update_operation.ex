@@ -1,4 +1,4 @@
-defmodule CryptoUtils.Plc.UpdateOperation do
+defmodule CryptoUtils.Did.Methods.DidPlc.UpdateOperation do
   @moduledoc """
   Parsing and validating inputs for updating a did:plc operation.
 

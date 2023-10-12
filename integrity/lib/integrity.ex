@@ -26,7 +26,6 @@ defmodule Integrity do
           | {:created, String.t()}
           | {:context, list()}
           | {:scheme, String.t()}
-          | {:web_resolver, module()}
           | {:private_key_bytes, binary()}
           | {:public_key_bytes, binary()}
           | {:private_key_pem, String.t()}

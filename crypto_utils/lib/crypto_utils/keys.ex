@@ -4,7 +4,34 @@ defmodule CryptoUtils.Keys do
   """
   require Record
 
-  alias CryptoUtils.Curves
+  alias CryptoUtils.{Curves, Did}
+
+  defmodule InvalidPublicKeyError do
+    defexception [:multibase, :reason]
+
+    @impl true
+    def message(%{multibase: multibase, reason: reason}) do
+      "Invalid public Multikey #{multibase}: #{reason}"
+    end
+  end
+
+  defmodule UnsupportedNamedCurveError do
+    defexception [:type, :curve, :format]
+
+    @impl true
+    def message(%__MODULE__{type: type, curve: curve, format: format}) do
+      "unsupported named curve #{curve} format #{format} for #{type} key"
+    end
+  end
+
+  defmodule EllipticCurveError do
+    defexception [:message]
+
+    @impl true
+    def exception(curve) do
+      %__MODULE__{message: "point not on elliptic curve #{curve}"}
+    end
+  end
 
   @typedoc """
   Tuple for ASN.1 curve OID.
@@ -165,7 +192,7 @@ defmodule CryptoUtils.Keys do
         tuple
 
       {:error, reason} ->
-        raise CryptoUtils.InvalidPublicKeyError, multibase: multibase_value, reason: reason
+        raise InvalidPublicKeyError, multibase: multibase_value, reason: reason
     end
   end
 
@@ -238,7 +265,7 @@ defmodule CryptoUtils.Keys do
   end
 
   def make_public_key(_, curve, format) do
-    raise CryptoUtils.UnsupportedNamedCurveError, type: :public, curve: curve, format: format
+    raise UnsupportedNamedCurveError, type: :public, curve: curve, format: format
   end
 
   @doc """
@@ -320,7 +347,7 @@ defmodule CryptoUtils.Keys do
   end
 
   def make_private_key(_, curve, format) do
-    raise CryptoUtils.UnsupportedNamedCurveError, type: :private, curve: curve, format: format
+    raise UnsupportedNamedCurveError, type: :private, curve: curve, format: format
   end
 
   def encode_pem_public_key({{:ECPoint, _pub}, _curve_params} = public_key) do
@@ -343,7 +370,7 @@ defmodule CryptoUtils.Keys do
 
   def encode_pem_private_key({did_key, {:ecdsa, [priv, curve]}}) do
     # openssl ecparam -genkey -name secp256r1 -noout -out <filename>
-    %{algo_key: {:ecdsa, [pub, _curve]}} = CryptoUtils.Did.parse_did_key!(did_key)
+    %{algo_key: {:ecdsa, [pub, _curve]}} = Did.parse_did!(did_key, expected_did_methods: [:key])
 
     ec_private_key(
       version: 1,
@@ -502,7 +529,11 @@ defmodule CryptoUtils.Keys do
     :ed25519
   end
 
-  defp curve_from_mapping(%Multicodec.MulticodecMapping{codec: codec}) do
-    String.to_existing_atom(codec)
+  defp curve_from_mapping(%Multicodec.MulticodecMapping{codec: codec, prefix: prefix}) do
+    if codec in ["p256", "secp256k1"] do
+      String.to_atom(codec)
+    else
+      raise ArgumentError, "codec '#{codec}', prefix #{inspect(prefix)} is not a recognized curve"
+    end
   end
 end

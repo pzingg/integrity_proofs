@@ -15,7 +15,7 @@ defmodule DidServerWeb.ResolverTest do
 
     %URI{path: path} =
       url
-      |> CryptoUtils.Resolver.maybe_rewrite(opts)
+      |> CryptoUtils.HttpClient.maybe_rewrite(opts)
       |> URI.parse()
 
     {_conn, resp} =
@@ -39,7 +39,7 @@ defmodule DidServerWeb.ResolverTest do
       {~r|^https?://plc.directory(/.*)$|, fn _, path -> "/plc/#{path}" end}
     ]
 
-    [rewrite_patterns: rewrite_patterns, fetcher: __MODULE__]
+    [rewrite_patterns: rewrite_patterns, client: __MODULE__]
   end
 
   describe "resolves dids" do
@@ -50,7 +50,10 @@ defmodule DidServerWeb.ResolverTest do
         )
 
       opts = resolver_opts() |> Keyword.put(:test_conn, conn)
-      assert {:ok, doc} = CryptoUtils.Resolver.resolve_did("did:web:example.com", opts)
+
+      assert {:ok, {_res_meta, doc, _doc_meta}} =
+               CryptoUtils.Did.resolve_did!("did:web:example.com", opts)
+
       assert "https://example.com/users/admin" in doc["alsoKnownAs"]
     end
 
@@ -71,7 +74,7 @@ defmodule DidServerWeb.ResolverTest do
       assert {:ok, %{operation: %{did: did}}} = DidServer.Log.create_operation(params)
 
       opts = resolver_opts() |> Keyword.put(:test_conn, conn)
-      assert {:ok, doc} = CryptoUtils.Resolver.resolve_did(did, opts)
+      assert {:ok, {_res_meta, doc, _doc_meta}} = CryptoUtils.Did.resolve_did!(did, opts)
       assert "at://bob.bsky.social" in doc["alsoKnownAs"]
     end
   end
