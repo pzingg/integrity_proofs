@@ -215,7 +215,7 @@ defmodule DidServer.Identities do
 
   def format_did_document(did) when is_binary(did) do
     %{"verificationMethods" => vms, "alsoKnownAs" => akas} =
-      op_data = DidServer.Log.get_last_op(did, :did_data)
+      DidServer.Log.get_last_op(did, :did_data)
 
     {{signature_method_id, signature_did}, additional_vms} = select_vms(vms)
 

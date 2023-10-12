@@ -7,20 +7,45 @@ defmodule CryptoUtils do
   """
 
   @doc """
+  Convert a camelCase string map into a snake_case keyword list.
+  """
+  def to_keyword_list(params, allowed_keys \\ nil) when is_map(params) do
+    Enum.reduce(params, [], fn {key, value}, acc ->
+      keywd = Macro.underscore(key) |> String.to_atom()
+
+      if is_nil(allowed_keys) || keywd in allowed_keys do
+        Keyword.put(acc, keywd, value)
+      else
+        acc
+      end
+    end)
+  end
+
+  @doc """
   Formats a DateTime or NaiveDateTime.
   """
+  def format_datetime(dt \\ nil)
+
   def format_datetime(dt) when is_binary(dt), do: dt
 
+  def format_datetime(nil), do: NativeDateTime.utc_now() |> format_datetime()
+
   def format_datetime(%NaiveDateTime{} = dt) do
-    dt
-    |> NaiveDateTime.truncate(:second)
-    |> NaiveDateTime.to_iso8601(:extended)
+    dtstr =
+      dt
+      |> NaiveDateTime.truncate(:second)
+      |> NaiveDateTime.to_iso8601(:extended)
+
+    dtstr <> "Z"
   end
 
   def format_datetime(%DateTime{utc_offset: 0} = dt) do
-    dt
-    |> DateTime.truncate(:second)
-    |> DateTime.to_iso8601(:extended, 0)
+    dtstr =
+      dt
+      |> DateTime.truncate(:second)
+      |> DateTime.to_iso8601(:extended, 0)
+
+    dtstr <> "Z"
   end
 
   @doc """

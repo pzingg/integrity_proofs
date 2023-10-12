@@ -156,6 +156,22 @@ defmodule CryptoUtils.DidTest do
     assert jwk["crv"] == "P-256"
   end
 
+  describe "dereferencing" do
+    test "select_object" do
+      vm = CryptoUtils.Did.select_object(@did_document, "#{@did_key_identifier}#keys-1")
+      assert is_map(vm)
+      assert vm["id"] == "#{@did_key_identifier}#keys-1"
+      assert vm["type"] == "Multikey"
+    end
+
+    test "select_service" do
+      service = CryptoUtils.Did.select_service(@did_document, "atproto_pds")
+      assert is_map(service)
+      assert service["id"] == "#atproto_pds"
+      assert service["type"] == "AtprotoPersonalDataServer"
+    end
+  end
+
   describe "did:web test server" do
     test "resolves manually" do
       setup_test_server()

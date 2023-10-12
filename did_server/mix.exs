@@ -48,7 +48,8 @@ defmodule DidServer.MixProject do
       {:jason, "~> 1.4"},
       {:plug_cowboy, "~> 2.5"},
       {:wax_, "~> 0.6.0"},
-      {:crypto_utils, path: "../crypto_utils"}
+      {:crypto_utils, path: "../crypto_utils"},
+      {:integrity, path: "../integrity"}
     ]
   end
 

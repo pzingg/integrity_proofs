@@ -21,7 +21,7 @@ defmodule Integrity do
   @type integrity_option() ::
           {:type, String.t()}
           | {:cryptosuite, String.t()}
-          | {:verfication_method, String.t()}
+          | {:verification_method, String.t()}
           | {:proof_purpose, String.t()}
           | {:created, String.t()}
           | {:context, list()}
@@ -179,13 +179,13 @@ defmodule Integrity do
       Canonicalization Scheme [RFC8785] to the unsecuredDocument.
   3. Return canonicalDocument as the transformed data document.
   """
-  def transform_jcs_eddsa_2022!(untransformed_document, options \\ [])
+  def transform_eddsa_jcs_2022!(untransformed_document, options \\ [])
       when is_map(untransformed_document) do
     type = Keyword.get(options, :type, "undefined")
     cryptosuite = Keyword.get(options, :cryptosuite, "undefined")
 
     if type != "DataIntegrityProof" && cryptosuite != "eddsa-jcs-2022" do
-      raise Integrity.ProofTransformationError, type: type, cryptosuite: cryptosuite
+      raise ProofTransformationError, type: type, cryptosuite: cryptosuite
     end
 
     Jcs.encode(untransformed_document)
@@ -217,13 +217,13 @@ defmodule Integrity do
     proof_purpose = Keyword.get(options, :proof_purpose, "undefined")
 
     if type != "DataIntegrityProof" || cryptosuite != "eddsa-jcs-2022" do
-      raise Integrity.InvalidProofConfigurationError, type: type, cryptosuite: cryptosuite
+      raise InvalidProofConfigurationError, type: type, cryptosuite: cryptosuite
     end
 
     created = Keyword.get(options, :created)
 
     if !CryptoUtils.valid_datetime?(created) do
-      raise Integrity.InvalidProofDatetimeError, created
+      raise InvalidProofDatetimeError, created
     end
 
     context = Keyword.get(options, :context) || Map.fetch!(unsecured_document, "@context")
@@ -269,28 +269,35 @@ defmodule Integrity do
   def build_assertion_proof!(document, options) do
     verification_method = Keyword.fetch!(options, :verification_method)
     created = Keyword.fetch!(options, :created)
+    cryptosuite = Keyword.fetch!(options, :cryptosuite)
 
     transformed_document =
-      Integrity.transform_jcs_eddsa_2022!(document,
-        type: "DataIntegrityProof",
-        cryptosuite: "eddsa-jcs-2022"
-      )
+      case cryptosuite do
+        "eddsa-jcs-2022" ->
+          transform_eddsa_jcs_2022!(document,
+            type: "DataIntegrityProof",
+            cryptosuite: cryptosuite
+          )
+
+        _ ->
+          raise ArgumentError, "Cryptosuite #{cryptosuite} not supported"
+      end
 
     options =
       Keyword.merge(options,
         type: "DataIntegrityProof",
-        cryptosuite: "eddsa-jcs-2022",
+        cryptosuite: cryptosuite,
         proof_purpose: "assertionMethod"
       )
 
-    proof_config = Integrity.proof_configuration!(document, options)
-    hash_data = Integrity.hash(proof_config, transformed_document)
+    proof_config = proof_configuration!(document, options)
+    hash_data = hash(proof_config, transformed_document)
     proof_bytes = serialize_proof!(hash_data, options)
     proof_value = Multibase.encode!(proof_bytes, :base58_btc)
 
     Map.put(document, "proof", %{
       "type" => "DataIntegrityProof",
-      "cryptosuite" => "eddsa-jcs-2022",
+      "cryptosuite" => cryptosuite,
       "created" => created,
       "verificationMethod" => verification_method,
       "proofPurpose" => "assertionMethod",
@@ -491,10 +498,10 @@ defmodule Integrity do
           proof_purpose: proof_purpose
         )
 
-      proof_config = Integrity.proof_configuration!(document_to_verify, options)
+      proof_config = proof_configuration!(document_to_verify, options)
 
       transformed_document =
-        transform_jcs_eddsa_2022!(document_to_verify,
+        transform_eddsa_jcs_2022!(document_to_verify,
           type: "DataIntegrityProof",
           cryptosuite: "eddsa-jcs-2022"
         )
@@ -529,12 +536,12 @@ defmodule Integrity do
   def retrieve_private_key!(options, fmt \\ :crypto_algo_key) do
     priv = Keyword.get(options, :private_key_bytes)
     pub = Keyword.get(options, :public_key_bytes)
+    curve = Keyword.get(options, :curve, :ed25519)
     private_key_pem = Keyword.get(options, :private_key_pem)
 
     cond do
       !is_nil(priv) && !is_nil(pub) ->
-        # TODO: Don't hard code the curve name
-        CryptoUtils.Keys.make_private_key({pub, priv}, :ed25519, fmt)
+        CryptoUtils.Keys.make_private_key({pub, priv}, curve, fmt)
 
       !is_nil(private_key_pem) ->
         case CryptoUtils.Keys.decode_pem_ssh_file(private_key_pem, :openssh_key_v1, fmt) do

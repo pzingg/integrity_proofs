@@ -3,7 +3,6 @@ defmodule CryptoUtils.Did do
   Basic DID handling.
   """
 
-  alias CryptoUtils.Cid
   alias CryptoUtils.Keys.KeyFormat
 
   defmodule InvalidDidError do
@@ -108,6 +107,9 @@ defmodule CryptoUtils.Did do
     - in [DID Core](https://www.w3.org/TR/did-core/#dfn-diddocumentmetadata)
     - in [DID Resolution](https://w3c-ccg.github.io/did-resolution/#output-documentmetadata)
     - in [DID Specification Registries](https://www.w3.org/TR/did-spec-registries/#did-document-metadata)
+
+    Also returned from
+    [DID URL dereferencing](https://www.w3.org/TR/did-core/#did-url-dereferencing) ([`dereference`]).
     """
 
     defstruct [
@@ -125,6 +127,16 @@ defmodule CryptoUtils.Did do
           }
   end
 
+  @typedoc """
+  Type of content returned by dereference.
+  """
+  @type content() ::
+          {:did_document, binary()}
+          | {:url, binary()}
+          | {:object, map()}
+          | {:data, binary()}
+          | nil
+
   defmodule DereferencingMetadata do
     @moduledoc """
     [DID URL dereferencing metadata](https://www.w3.org/TR/did-core/#did-url-dereferencing-metadata).
@@ -134,7 +146,7 @@ defmodule CryptoUtils.Did do
     defstruct [
       :error,
       :content_type,
-      :property_set
+      property_set: %{}
     ]
 
     @type t() :: %__MODULE__{
@@ -195,12 +207,21 @@ defmodule CryptoUtils.Did do
       raise UnexpectedDidMethodError, method
     end
 
+    method_module = CryptoUtils.Did.Method.lookup!(method)
+    resolver = method_module.to_resolver()
+
     %{
       did_string: identifier,
       method: method,
       method_specific_id: method_specific_id,
-      resolver: CryptoUtils.Did.Method.lookup!(method)
+      method_module: method_module,
+      resolver: resolver
     }
+  end
+
+  def get_method!(identifier) do
+    %{method_module: method_module} = parse_basic!(identifier)
+    method_module
   end
 
   @doc """
@@ -599,6 +620,67 @@ defmodule CryptoUtils.Did do
     else
       Map.put(vm, :context, %{public_key_format => context})
     end
+  end
+
+  @doc """
+  Select an object in the DID document.
+  `resource_id` should include the full DID id, "#" and fragment.
+
+  Used in [DID URL dereferencing - Dereferencing the Secondary Resource](https://w3c-ccg.github.io/did-resolution/#dereferencing-algorithm-secondary), Step 1.1 "... select the JSON-LD object whose id property matches the input DID URL ..."
+  """
+  def select_object(%{"id" => doc_id} = doc, resource_id) do
+    relative_id = String.replace_leading(resource_id, doc_id, "")
+
+    [
+      "verificationMethod",
+      "authentication",
+      "assertionMethod",
+      "keyAgreement",
+      "capabilityInvocation",
+      "capabilityDelegation",
+      "publicKey"
+    ]
+    |> Enum.map(fn key ->
+      case Map.get(doc, key) do
+        nil -> nil
+        object -> List.wrap(object)
+      end
+    end)
+    |> List.flatten()
+    |> Enum.filter(fn obj -> !is_nil(obj) end)
+    |> Enum.find(fn
+      %{"id" => object_id} = object ->
+        object_id in [resource_id, relative_id]
+
+      other ->
+        false
+    end)
+  end
+
+  @doc """
+  Select a service endpoint object in the DID document.
+  `fragment` does not start with a "#".
+
+  Used in [DID URL Dereferencing - Dereferencing the Primary Resource](https://w3c-ccg.github.io/did-resolution/#dereferencing-algorithm-primary), Step
+  1.1 "... select the service endpoint whose id property contains a fragment which matches
+  the value of the service DID parameter of the input DID URL"
+  """
+  def select_service(%{"service" => services} = did_doc, fragment) do
+    services
+    |> List.wrap()
+    |> Enum.find(fn
+      %{"id" => service_id} ->
+        case String.split(service_id, "#", parts: 2) do
+          [_, service_fragment] ->
+            service_fragment == fragment
+
+          _ ->
+            false
+        end
+
+      _ ->
+        false
+    end)
   end
 
   @doc """
