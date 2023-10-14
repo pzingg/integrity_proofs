@@ -9,7 +9,7 @@ defmodule DidServerWeb.ServiceController do
 
   require Logger
 
-  alias DidServerWeb.WebFinger
+  alias DidServerWeb.{ErrorJSON, WebFinger}
 
   def nodeinfo(conn, _params) do
     endpoint_uri = DidServerWeb.Endpoint.url() |> CryptoUtils.to_uri()

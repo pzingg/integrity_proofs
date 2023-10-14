@@ -4,7 +4,7 @@ defmodule DidServerWeb.CredentialController do
   """
   use DidServerWeb, :controller
 
-  require Logger
+  alias DidServerWeb.ErrorJSON
 
   def issue(conn, _params) do
     issue_credential(conn, conn.body_params)

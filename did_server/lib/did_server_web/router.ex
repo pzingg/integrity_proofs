@@ -98,7 +98,8 @@ defmodule DidServerWeb.Router do
 
     get "/keys/new", KeyStoreController, :new
     post "/keys/create", KeyStoreController, :create
-    get "/keys/show", KeyStoreController, :show
+    get "/keys/show/:public_key", KeyStoreController, :show
+    post "/keys/show", KeyStoreController, :show
 
     post "/issue/credentials", CredentialController, :issue
     post "/verify/credentials", CredentialController, :verify

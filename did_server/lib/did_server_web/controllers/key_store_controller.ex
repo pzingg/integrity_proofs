@@ -3,6 +3,8 @@ defmodule DidServerWeb.KeyStoreController do
 
   use DidServerWeb, :controller
 
+  alias DidServerWeb.ErrorJSON
+
   def new(conn, _params) do
     {did_key, private_key_pem, _, _} = CryptoUtils.Keys.generate_keypair(:ed25519, :did_key, :pem)
     _ = DidServer.AgentKeyStore.put(:user, did_key, private_key_pem)
