@@ -24,7 +24,7 @@ defmodule DidServerWeb.CredentialController do
         :verification_method
       ])
 
-    case Integrity.Credential.sign(credential, DidServer.KeyStore, nil, options) do
+    case Integrity.Credential.sign(credential, DidServer.AgentKeyStore, nil, options) do
       {:ok, signed_credential} ->
         conn
         |> json(signed_credential)

@@ -62,22 +62,13 @@ defmodule Integrity.Credential do
   end
 
   defp pick_key(keystore, issuer, did_resolver, options) do
-    case keystore.size() do
-      0 ->
-        {:error, "No server keys"}
-
-      1 ->
-        keystore.first()
-
-      _ ->
-        vm = Keyword.get(options, :verification_method)
-        match_key(keystore, issuer, did_resolver, vm)
-    end
+    vm = Keyword.get(options, :verification_method)
+    match_key(keystore, issuer, did_resolver, vm)
   end
 
   defp match_key(keystore, _, did_resolver, vm) when is_binary(vm) do
     with {:ok, public_key} <- resolve_key(vm, did_resolver) do
-      case keystore.get(public_key) do
+      case keystore.get(:any, public_key) do
         nil -> {:error, "Resolved key not found"}
         private_key -> {:ok, {public_key, private_key}}
       end
@@ -87,8 +78,14 @@ defmodule Integrity.Credential do
   defp match_key(keystore, issuer, _, _) when is_binary(issuer) do
     method = CryptoUtils.Did.get_method!(issuer)
 
-    keystore.list()
-    |> Enum.reduce_while({:error, "No matching key"}, fn {public_key, private_key}, acc ->
+    [:user, :system]
+    |> Enum.map(fn user_key ->
+      keystore.list(user_key)
+      |> Enum.map(fn {public_key, private_key} -> {user_key, public_key, private_key} end)
+    end)
+    |> List.flatten()
+    |> Enum.reduce_while({:error, "No matching key"}, fn {_user_key, public_key, private_key},
+                                                         acc ->
       case method.generate(public_key) do
         {:ok, did} ->
           if did == issuer do

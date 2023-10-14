@@ -96,8 +96,13 @@ defmodule DidServerWeb.Router do
   scope "/", DidServerWeb do
     pipe_through :api
 
+    get "/keys/new", KeyStoreController, :new
+    post "/keys/create", KeyStoreController, :create
+    get "/keys/show", KeyStoreController, :show
+
     post "/issue/credentials", CredentialController, :issue
     post "/verify/credentials", CredentialController, :verify
+
     post "/prove/presentations", PresentationController, :prove
     post "/verify/presentations", PresentationController, :verify
   end

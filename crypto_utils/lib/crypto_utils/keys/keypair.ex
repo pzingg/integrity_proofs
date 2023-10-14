@@ -24,8 +24,8 @@ defmodule CryptoUtils.Keys.Keypair do
   and `make_private_key/3` for details on the return
   formats.
   """
-  def generate(curve, public_key_format) do
-    CryptoUtils.Keys.generate_keypair(curve, public_key_format)
+  def generate(curve, public_key_format, private_key_format \\ nil) do
+    CryptoUtils.Keys.generate_keypair(curve, public_key_format, private_key_format)
     |> new()
   end
 

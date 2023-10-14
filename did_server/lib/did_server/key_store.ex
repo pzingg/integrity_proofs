@@ -1,48 +1,18 @@
 defmodule DidServer.KeyStore do
-  use Agent
-
-  @doc """
-  Starts a new bucket.
+  @moduledoc """
+  A behaviour for storing private keys.
   """
-  def start_link(_opts) do
-    Agent.start_link(fn -> %{} end, name: __MODULE__)
-  end
 
-  @doc """
-  Gets the number of entrie in the store.
-  """
-  def size() do
-    Agent.get(__MODULE__, &map_size(&1))
-  end
+  @type user_key() :: atom() | integer() | binary()
+  @type did() :: binary()
+  @type public_key() :: did()
+  @type private_key() :: binary()
+  @type entry() :: {public_key(), private_key()}
 
-  @doc """
-  Gets a `{public_key, private_key}` tuple from the store.
-  """
-  def first() do
-    case Agent.get(__MODULE__, fn state -> state |> Map.to_list() |> hd() end) do
-      nil -> {:error, "No keys"}
-      entry -> {:ok, entry}
-    end
-  end
-
-  @doc """
-  Gets a value from the store by `key`.
-  """
-  def get(key) do
-    Agent.get(__MODULE__, &Map.get(&1, key))
-  end
-
-  @doc """
-  Puts the `value` for the given `key` in the store.
-  """
-  def put(key, value) do
-    Agent.update(__MODULE__, &Map.put(&1, key, value))
-  end
-
-  @doc """
-  Removes the `value` for the given `key` in the store.
-  """
-  def delete(key) do
-    Agent.update(__MODULE__, &Map.delete(&1, key))
-  end
+  @callback size(user_key()) :: integer()
+  @callback list(user_key()) :: [entry()]
+  @callback first(user_key()) :: entry() | nil
+  @callback get(user_key(), public_key()) :: private_key() | nil
+  @callback put(user_key(), public_key(), private_key()) :: :ok
+  @callback delete(user_key(), public_key()) :: :ok
 end

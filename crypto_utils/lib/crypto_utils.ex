@@ -28,7 +28,7 @@ defmodule CryptoUtils do
 
   def format_datetime(dt) when is_binary(dt), do: dt
 
-  def format_datetime(nil), do: NativeDateTime.utc_now() |> format_datetime()
+  def format_datetime(nil), do: NaiveDateTime.utc_now() |> format_datetime()
 
   def format_datetime(%NaiveDateTime{} = dt) do
     dtstr =

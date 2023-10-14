@@ -127,13 +127,13 @@ defmodule CryptoUtils.Keys do
   and `make_private_key/3` for details on the return
   formats.
   """
-  def generate_keypair(curve, public_key_format) do
-    private_key_format =
-      case public_key_format do
-        # :jwk -> :crypto_algo_key
-        :multikey -> :crypto_algo_key
-        :did_key -> :crypto_algo_key
-        _ -> public_key_format
+  def generate_keypair(curve, public_key_format, private_key_format \\ nil) do
+    priv_key_format =
+      case {public_key_format, private_key_format} do
+        {:multikey, nil} -> :crypto_algo_key
+        {:did_key, nil} -> :crypto_algo_key
+        {public_key_format, nil} -> public_key_format
+        _ -> private_key_format
       end
 
     # This will also work?
@@ -141,8 +141,8 @@ defmodule CryptoUtils.Keys do
 
     {pub, priv} = :crypto.generate_key(Curves.erlang_algo(curve), Curves.erlang_ec_curve(curve))
     public_key = make_public_key(pub, curve, public_key_format)
-    private_key = make_private_key({pub, priv}, curve, private_key_format)
-    {public_key, private_key, public_key_format, private_key_format}
+    private_key = make_private_key({pub, priv}, curve, priv_key_format)
+    {public_key, private_key, public_key_format, priv_key_format}
   end
 
   @doc """
@@ -249,12 +249,20 @@ defmodule CryptoUtils.Keys do
     |> Multibase.encode!(:base58_btc)
   end
 
+  def make_public_key(pub, curve, :pem) do
+    case {ec_point(point: pub), Curves.curve_params(curve)}
+         |> encode_pem_public_key() do
+      {:ok, pem} -> pem
+      _ -> raise RuntimeError, "Could not generate pem"
+    end
+  end
+
   def make_public_key(pub, :ed25519, :jwk) do
     :jose_jwk_kty_okp_ed25519.to_map(pub, %{})
   end
 
   def make_public_key(pub, curve, :jwk) do
-    ec_point_tuple = make_public_key(pub, curve, :public_key)
+    ec_point_tuple = {ec_point(point: pub), Curves.curve_params(curve)}
     {kty_module, {key, fields}} = :jose_jwk_kty.from_key(ec_point_tuple)
     kty_module.to_map(key, fields)
   end
@@ -266,6 +274,17 @@ defmodule CryptoUtils.Keys do
 
   def make_public_key(_, curve, format) do
     raise UnsupportedNamedCurveError, type: :public, curve: curve, format: format
+  end
+
+  @doc """
+  Formats a public key parsed from a JWK map.
+  """
+  def public_key_from_jwk(%{"kty" => _} = jwk_map, fmt) do
+    case from_jwk(jwk_map) do
+      {:ok, {{pub, _priv}, curve}} -> {:ok, make_public_key(pub, curve, fmt)}
+      {:ok, {pub, curve}} -> {:ok, make_public_key(pub, curve, fmt)}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
@@ -331,12 +350,32 @@ defmodule CryptoUtils.Keys do
     {:ecdsa, [priv, :secp256k1]}
   end
 
+  def make_private_key({pub, priv}, curve, :pem) do
+    case ec_private_key(
+           version: 1,
+           private_key: priv,
+           parameters: Curves.curve_params(curve),
+           public_key: pub
+         )
+         |> encode_pem_private_key() do
+      {:ok, pem} -> pem
+      _ -> raise RuntimeError, "Could not generate pem"
+    end
+  end
+
   def make_private_key({pub, priv}, :ed25519, :jwk) do
     :jose_jwk_kty_okp_ed25519.to_map(<<priv::binary, pub::binary>>, %{})
   end
 
   def make_private_key({pub, priv}, curve, :jwk) do
-    ec_private_key_tuple = make_private_key({pub, priv}, curve, :public_key)
+    ec_private_key_tuple =
+      ec_private_key(
+        version: 1,
+        private_key: priv,
+        parameters: Curves.curve_params(curve),
+        public_key: pub
+      )
+
     {kty_module, {key, fields}} = :jose_jwk_kty.from_key(ec_private_key_tuple)
     kty_module.to_map(key, fields)
   end
@@ -348,6 +387,54 @@ defmodule CryptoUtils.Keys do
 
   def make_private_key(_, curve, format) do
     raise UnsupportedNamedCurveError, type: :private, curve: curve, format: format
+  end
+
+  @doc """
+  Formats a private key from a JWK map.
+  """
+  def private_key_from_jwk(%{"kty" => _} = jwk_map, fmt) do
+    case from_jwk(jwk_map) do
+      {:ok, {{pub, priv}, curve}} -> {:ok, make_private_key({pub, priv}, curve, fmt)}
+      {:ok, _} -> {:error, "Not a private key"}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp from_jwk(%{"kty" => _} = jwk_map) do
+    case JOSE.JWK.from(jwk_map) |> JOSE.JWK.to_key() do
+      {%{kty: :jose_jwk_kty_ec}, {:ECPrivateKey, _version, priv, {:namedCurve, oid}, pub, _attrs}} ->
+        case CryptoUtils.Curves.curve_from_oid(oid) do
+          nil ->
+            {:error, "Named curve #{inspect(oid)} not supported"}
+
+          curve ->
+            {:ok, {{pub, priv}, curve}}
+        end
+
+      {%{kty: :jose_jwk_kty_ec}, {{:ECPoint, pub}, {:namedCurve, oid}}} ->
+        case CryptoUtils.Curves.curve_from_oid(oid) do
+          nil ->
+            {:error, "Named curve #{inspect(oid)} not supported"}
+
+          curve ->
+            {:ok, {pub, curve}}
+        end
+
+      {%{kty: :jose_jwk_kty_ec}, _} = key ->
+        {:error, "Key structure not supported #{inspect(key)}"}
+
+      {%{kty: :jose_jwk_kty_okp_ed25519}, {_priv_key_type, {_pub_key_type, pub}, priv}} ->
+        {:ok, {{pub, priv}, :ed25519}}
+
+      {%{kty: :jose_jwk_kty_okp_ed25519}, {_pub_key_type, pub}} ->
+        {:ok, {pub, :ed25519}}
+
+      {%{kty: :jose_jwk_kty_okp_ed25519}, _} = key ->
+        {:error, "Key structure not supported #{inspect(key)}"}
+
+      key ->
+        {:error, "Key type not supported #{inspect(key)}"}
+    end
   end
 
   def encode_pem_public_key({{:ECPoint, _pub}, _curve_params} = public_key) do

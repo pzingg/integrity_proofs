@@ -17,7 +17,7 @@ defmodule DidServer.Application do
       # Start the Endpoint (http/https)
       DidServerWeb.Endpoint,
       # Start a worker by calling: DidServer.Worker.start_link(arg)
-      DidServer.KeyStore
+      DidServer.AgentKeyStore
       # {DidServer.Worker, arg}
     ]
 
