@@ -13,8 +13,8 @@ defmodule CryptoUtils.HttpClient do
 
     * `:method` - `:get` (default) or `:post`
     * `:body` - for `:post` requests, the body of the request.
-    * `:content_type` - the content type of the specified request body.
-    * `:headers` - a list of header tuples.
+    * `:content_type` - for `:post` requests, the mime type (default "text/plain")
+    * `:headers` - a map of request headers (keys must be lowercase strings)
     * `:rewrite_patterns` - for testing, rewrite rules
     * `:opts` - other options to pass to the `Req` request.
 
@@ -35,7 +35,6 @@ defmodule CryptoUtils.HttpClient do
     result =
       case method do
         :get ->
-          content_type = Keyword.get(opts, :content_type, "plain/text")
           headers = %{"user-agent" => user_agent}
           opts = Keyword.update(opts, :headers, headers, fn h -> Map.merge(headers, h) end)
           Req.get(req, opts)
@@ -63,7 +62,9 @@ defmodule CryptoUtils.HttpClient do
   def maybe_rewrite(url, [_ | _] = patterns) do
     case Enum.find(patterns, fn {re, _} -> Regex.match?(re, url) end) do
       {re, replacement} ->
-        Regex.replace(re, url, replacement)
+        location = Regex.replace(re, url, replacement)
+        Logger.debug("crypto_utils http client rewrite #{url} -> #{location}")
+        location
 
       _ ->
         url

@@ -102,12 +102,14 @@ defmodule CryptoUtils.Did.Methods.DidPlc do
   def resolve_representation(did, opts) do
     case did_plc_uri(did, opts) do
       {:ok, uri} ->
+        url = URI.to_string(uri)
         env_options = Elixir.Application.get_env(:crypto_utils, :did_plc_req_options, [])
         opts = Keyword.merge(env_options, opts)
         # TODO: https://w3c-ccg.github.io/did-method-web/#in-transit-security
         {accept, opts} = Keyword.pop(opts, :accept, "application/json")
-        opts = Keyword.put(opts, headers: %{"accept" => accept})
-        case CryptoUtils.HttpClient.fetch(URI.to_string(uri), opts) do
+        opts = Keyword.put(opts, :headers, %{"accept" => accept})
+
+        case CryptoUtils.HttpClient.fetch(url, opts) do
           {:ok, body} ->
             # TODO: set document created/updated metadata from HTTP headers?
             res_meta = %ResolutionMetadata{content_type: "application/did+ld+json"}
@@ -116,7 +118,7 @@ defmodule CryptoUtils.Did.Methods.DidPlc do
             {:ok, {res_meta, body, doc_meta}}
 
           {:error, _, status_code} ->
-            {:error, "Error sending HTTP request #{status_code}"}
+            {:error, "did:plc HTTP request to #{url} failed: #{status_code}"}
         end
 
       {:error, reason} ->
