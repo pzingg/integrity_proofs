@@ -2,7 +2,7 @@ import Config
 
 # Configure your database
 config :did_server, DidServer.Repo,
-  username: "postgres",
+  username: "postgres_super",
   password: "postgres",
   hostname: "localhost",
   database: "did_server",
@@ -33,7 +33,7 @@ config :did_server, DidServerWeb.Endpoint,
   http: [ip: ip, port: port],
   check_origin: false,
   code_reloader: true,
-  debug_errors: true,
+  debug_errors: false,
   secret_key_base: "XSIJUjzie0dBqOk1aqIIfsBIuHKcdrUz92K9k+gh6rq29Qv5mIaEOH7caWlU5auF",
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:default, ~w(--sourcemap=inline --watch)]},

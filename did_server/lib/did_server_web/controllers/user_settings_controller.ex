@@ -2,7 +2,7 @@ defmodule DidServerWeb.UserSettingsController do
   use DidServerWeb, :controller
 
   alias DidServer.{Accounts, Identities}
-  alias DidServerWeb.UserAuth
+  alias DidServerWeb.{ErrorJSON, UserAuth}
 
   plug(:assign_email_and_password_changesets)
 

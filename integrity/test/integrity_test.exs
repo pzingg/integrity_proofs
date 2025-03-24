@@ -59,7 +59,7 @@ defmodule IntegrityTest do
 
   test "signs a document" do
     transformed_document =
-      Integrity.transform_jcs_eddsa_2022!(@test_document,
+      Integrity.transform_eddsa_jcs_2022!(@test_document,
         type: "DataIntegrityProof",
         cryptosuite: "eddsa-jcs-2022"
       )

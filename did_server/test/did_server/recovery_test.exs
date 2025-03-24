@@ -73,7 +73,10 @@ defmodule DidServer.RecoveryTest do
     one_day_ago = DateTime.add(now, -(24 * 3600), :second)
 
     rotate_changeset =
-      sign_op_for_keys([@rotation_key_3], @rotation_key_3, one_day_ago, did: did, prev: create_cid)
+      sign_op_for_keys([@rotation_key_3], @rotation_key_3, one_day_ago,
+        did: did,
+        prev: create_cid
+      )
 
     assert {:ok, %{operation: %Operation{cid: rotate_cid}}} =
              rotate_changeset

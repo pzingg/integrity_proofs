@@ -28,6 +28,43 @@ defmodule CryptoUtils.Did.Methods.DidKey do
   end
 
   @impl CryptoUtils.Did.Method
+  def generate(public_key) when is_binary(public_key) do
+    cond do
+      String.starts_with?(public_key, "did:key:") ->
+        public_key
+
+      String.starts_with?(public_key, "z") ->
+        case CryptoUtils.Keys.decode_multikey(public_key) do
+          {:ok, {pub, curve}} ->
+            CryptoUtils.Keys.make_public_key(pub, curve, :did_key)
+
+          _ ->
+            nil
+        end
+
+      true ->
+        nil
+    end
+  end
+
+  def generate({:ecdsa, [pub, curve]}) do
+    CryptoUtils.Keys.make_public_key(pub, curve, :did_key)
+  end
+
+  def generate({:eddsa, [pub, curve]}) do
+    CryptoUtils.Keys.make_public_key(pub, curve, :did_key)
+  end
+
+  def generate(%{"kty" => _}) do
+    # TODO get pub bytes via jose_jwk
+    nil
+  end
+
+  def generate(_) do
+    nil
+  end
+
+  @impl CryptoUtils.Did.Method
   def to_resolver() do
     __MODULE__
   end

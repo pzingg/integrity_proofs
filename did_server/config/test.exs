@@ -9,7 +9,7 @@ config :bcrypt_elixir, :log_rounds, 1
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
 config :did_server, DidServer.Repo,
-  username: "postgres",
+  username: "postgres_super",
   password: "postgres",
   hostname: "localhost",
   database: "did_server_test#{System.get_env("MIX_TEST_PARTITION")}",
@@ -21,7 +21,7 @@ config :did_server, DidServer.Repo,
 config :did_server, DidServerWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "BmLP3IrVG7w0PsSkff96TA0nRb/nE2ocytbrIh/AeJyjV5frnUMvQG2eAwuzITZF",
-  server: false
+  server: true
 
 # Print only warnings and errors during test
 config :logger, level: :warning

@@ -1,42 +1,51 @@
 <div class="max-w-md mx-auto">
   <.header class="text-center">
-    Register a new security key
-    <:subtitle>Create a new passkey on a hardware authentication device or a smartphone,
-      so you won't have to use a password to log in next time</:subtitle>
+    Log in with a passkey
+    <:subtitle>Log in with a hardware authentication device or a smartphone
+      where you have previously created passkeys</:subtitle>
   </.header>
-  <p>You are currently logged in as <em><%= @login %></em>.</p>
+  <p class="mt-4">Check the "Keep me logged in" checkbox to keep your account logged in
+    between browser sessions.</p>
 
   <div id="waf_container" class="mb-4">
     <.simple_form
       :let={f}
       for={@conn.params["user"]}
-      as={:key}
+      as={:webauthn}
       id="waf"
-      action={~p"/wauth/register"}
+      action={~p"/wauth/log_in"}
     >
+      <input type="hidden" id="webauthn_support" />
       <.input field={f[:rawID]} type="hidden" />
       <.input field={f[:type]} type="hidden" />
       <.input field={f[:clientDataJSON]} type="hidden" />
-      <.input field={f[:attestationObject]} type="hidden" />
+      <.input field={f[:authenticatorData]} type="hidden" />
+      <.input field={f[:sig]} type="hidden" />
+      <.input field={f[:userHandle]} type="hidden" />
+
+      <:actions :let={f}>
+        <.input field={f[:remember_me]} type="checkbox" label="Keep me logged in" />
+      </:actions>
     </.simple_form>
   </div>
 
   <div id="auth_actions" class="flex flex-wrap gap-10">
     <div class="flex-auto">
-      <.button id="auth_button_register" style="display:none" onclick="triggerAttestation()">
-        Register
+      <.button id="auth_button_authenticate" style="display:none" onclick="triggerAuthenticate()">
+        Log In
       </.button>
       <div id="auth_img">
         <img src={static_path(@conn, "/images/fingerprint-scanning.svg")} />
-        <p class="mb-4">To create and register a new security key
-          for the site "<%= @rp_id %>":</p>
+        <p class="mb-4">To log in with a saved passkey for the site "{@rp_id}":</p>
 
         <ol class="list-decimal list-inside">
-          <li class="mt-4">Press the button on your hardware authenticator now, <em>or</em></li>
           <li class="mt-4">
-            Follow the instructions in the "Create a passkey" popup window to
-            choose a device such as a nearby smartphone that can store your passkeys securely.
+            Scan the QR code on the "Use a passkey from another device?"
+            popup window, using the smartphone's camera. Then pick the passkey you saved on the phone,
+            <em>or</em>
           </li>
+          <li class="mt-4">Press the "Use a different device" button on the popup window,
+            and then press the button on your hardware authenticator now.</li>
         </ol>
 
         <p class="mt-4 text-sm text-zinc-500">
@@ -54,17 +63,17 @@
       <.button_cancel>
         <.link
           id="auth_link_cancel"
-          navigate={~p"/users/settings"}
+          navigate={~p"/home"}
           class="font-semibold bg-transparent text-brand"
         >
-          Skip
+          Cancel
         </.link>
       </.button_cancel>
     </div>
   </div>
 
   <div id="no_webauthn" style="display:none">
-    <p>Sorry, this browser doesn't support WebAuthn</p>
+    <p>Sorry, we're not using WebAuthn</p>
   </div>
 </div>
 
@@ -77,20 +86,19 @@
   }
 
   const challenge = _base64ToArrayBuffer("<%= @challenge %>");
-  const userId = _base64ToArrayBuffer("<%= @user_id %>");
-  const pubKeyCredParams = [
-    <%= for alg <- @cred_algs do %>
-    {
-      type: 'public-key',
-      alg: <%= alg %>
-    }
+  const allowCredentials = [
+    <%= for cred_id <- @cred_ids do %>
+      {
+        id: _base64ToArrayBuffer("<%= cred_id %>"),
+        type: "public-key"
+      },
     <% end %>
   ];
 
   function _arrayBufferToString(buffer) {
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
     var binary = '';
+    var bytes = new Uint8Array(buffer);
+    var len = bytes.byteLength;
     for (var i = 0; i < len; i++) {
       binary += String.fromCharCode(bytes[i]);
     }
@@ -110,40 +118,25 @@
   function _base64ToArrayBuffer(base64) {
     const binaryString =  window.atob(base64);
     const len = binaryString.length;
-    var bytes = new Uint8Array( len );
+    var bytes = new Uint8Array(len);
     for (var i = 0; i < len; i++)        {
         bytes[i] = binaryString.charCodeAt(i);
     }
     return bytes.buffer;
   }
 
-  function triggerAttestation() {
+  function triggerAuthenticate() {
     if (!webauthn_defined) {
       return;
     }
 
-    document.getElementById('auth_button_register').style.display = 'none';
+    document.getElementById('auth_button_authenticate').style.display = 'none';
     document.getElementById('auth_img').style.display = 'inline';
 
-    navigator.credentials.create({
+    navigator.credentials.get({
       publicKey: {
-        // random, cryptographically secure, at least 16 bytes
         challenge: challenge,
-        // relying party
-        rp: {
-          id: "<%= @rp_id %>",
-          name: "<%= @rp_name %>"
-        },
-        user: {
-          id: userId,
-          name: "<%= @user %>",
-          displayName: "<%= @user %>"
-        },
-        pubKeyCredParams: pubKeyCredParams,
-        attestation: "<%= @attestation %>",
-        authenticatorSelection: {
-          residentKey: 'preferred'
-        }
+        allowCredentials: allowCredentials
       }
     }).then((newCredential) => {
       // .simple_form prefixes input id with the form id
@@ -151,13 +144,19 @@
       document.getElementById('waf_type').value = newCredential.type;
       document.getElementById('waf_clientDataJSON').value =
         _arrayBufferToString(newCredential.response.clientDataJSON)
-      document.getElementById('waf_attestationObject').value =
-        _arrayBufferToBase64(newCredential.response.attestationObject)
+      document.getElementById('waf_authenticatorData').value =
+        _arrayBufferToBase64(newCredential.response.authenticatorData)
+      document.getElementById('waf_sig').value =
+        _arrayBufferToBase64(newCredential.response.signature)
+      if (newCredential.response.userHandle) {
+        document.getElementById('waf_userHandle').value =
+          _arrayBufferToBase64(newCredential.response.userHandle)
+      }
 
       document.getElementById('waf').submit();
     }).catch((err) => {
       if (err.name == 'NotAllowedError') {
-        document.getElementById('auth_button_register').style.display = 'inline-block';
+        document.getElementById('auth_button_authenticate').style.display = 'inline-block';
         document.getElementById('auth_img').style.display = 'none';
       } else {
         console.log(err);
@@ -165,5 +164,5 @@
     });
   }
 
-  triggerAttestation();
+  triggerAuthenticate();
 </script>

@@ -1,6 +1,6 @@
 <div class="max-w-md mx-auto">
   <.header class="text-center">
-    Account Settings for <%= @user %>
+    Account Settings for {@user}
     <:subtitle>Manage your account email, username, domain and password settings</:subtitle>
   </.header>
 
@@ -60,7 +60,7 @@
     </div>
 
     <div class="pt-4">
-      <h2 class="font-semibold">Change password (for DID <%= @password_did %>)</h2>
+      <h2 class="font-semibold">Change password (for DID {@password_did})</h2>
       <.simple_form
         :let={f}
         for={@password_changeset}

@@ -15,8 +15,9 @@ defmodule DidServer.Application do
       # Start the PubSub system
       {Phoenix.PubSub, name: DidServer.PubSub},
       # Start the Endpoint (http/https)
-      DidServerWeb.Endpoint
+      DidServerWeb.Endpoint,
       # Start a worker by calling: DidServer.Worker.start_link(arg)
+      DidServer.AgentKeyStore
       # {DidServer.Worker, arg}
     ]
 

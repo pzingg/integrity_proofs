@@ -13,6 +13,7 @@ config :did_server,
 # Configures the endpoint
 config :did_server, DidServerWeb.Endpoint,
   url: [host: "localhost"],
+  adapter: Bandit.PhoenixAdapter,
   render_errors: [
     formats: [html: DidServerWeb.ErrorHTML, json: DidServerWeb.ErrorJSON],
     layout: false

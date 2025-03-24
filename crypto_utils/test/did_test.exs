@@ -65,36 +65,6 @@ defmodule CryptoUtils.DidTest do
     ]
   }
 
-  def setup_test_server() do
-    TestServer.start()
-
-    TestServer.add("/users/alice/did.json",
-      to: fn conn ->
-        body =
-          CryptoUtils.Did.format_did_document!(@did_web_identifier,
-            public_key_format: "Multikey",
-            multibase_value: @multibase_value,
-            signature_method_fragment: "keys-1"
-          )
-          |> Jason.encode!()
-
-        conn
-        |> Plug.Conn.put_resp_header("content-type", "application/json")
-        |> Plug.Conn.send_resp(200, body)
-      end
-    )
-  end
-
-  def fetch(url, opts) do
-    %URI{path: path} = URI.parse(url)
-
-    url =
-      TestServer.url(path)
-      |> String.to_charlist()
-
-    CryptoUtils.HttpClient.fetch(url, opts)
-  end
-
   test "builds a DID document" do
     document =
       CryptoUtils.Did.format_did_document!(@did_key_identifier,
@@ -150,33 +120,73 @@ defmodule CryptoUtils.DidTest do
                []
              )
 
-    assert [vm_jwk, vm_mk] = doc["verificationMethod"]
+    assert [vm_jwk, _vm_mk] = doc["verificationMethod"]
     jwk = vm_jwk["publicKeyJwk"]
     assert jwk["kty"] == "EC"
     assert jwk["crv"] == "P-256"
   end
 
+  describe "dereferencing" do
+    test "select_object" do
+      vm = CryptoUtils.Did.select_object(@did_document, "#{@did_key_identifier}#keys-1")
+      assert is_map(vm)
+      assert vm["id"] == "#{@did_key_identifier}#keys-1"
+      assert vm["type"] == "Multikey"
+    end
+
+    test "select_service" do
+      service = CryptoUtils.Did.select_service(@did_document, "atproto_pds")
+      assert is_map(service)
+      assert service["id"] == "#atproto_pds"
+      assert service["type"] == "AtprotoPersonalDataServer"
+    end
+  end
+
   describe "did:web test server" do
     test "resolves manually" do
-      setup_test_server()
+      Req.Test.stub(DidWebManualStub, &did_web_stub(&1))
 
       {:ok, uri} = CryptoUtils.Did.Methods.DidWeb.did_web_uri(@did_web_identifier)
       url = URI.to_string(uri)
       assert url == "https://server.example/users/alice/did.json"
 
-      resp = fetch(url, method: :get, headers: [{"accept", "application/json"}])
+      opts = [plug: {Req.Test, DidWebManualStub}, headers: %{"accept" => "application/json"}]
+      resp = CryptoUtils.HttpClient.fetch(url, opts)
       assert {:ok, doc_data} = resp
       assert {:ok, doc} = Jason.decode(doc_data)
       assert doc["id"] == @did_web_identifier
     end
 
     test "resolves using method module" do
-      setup_test_server()
+      # DidWebStub configured in config/test.exs
+      Req.Test.stub(DidWebStub, &did_web_stub(&1))
 
       assert {:ok, {_res_meta, doc, _doc_meta}} =
-               CryptoUtils.Did.resolve_did!(@did_web_identifier, client: __MODULE__)
+               CryptoUtils.Did.resolve_did!(@did_web_identifier)
 
       assert doc["id"] == @did_web_identifier
+    end
+  end
+
+  def did_web_stub(conn) do
+    if conn.request_path == "/users/alice/did.json" do
+      body =
+        CryptoUtils.Did.format_did_document!(@did_web_identifier,
+          public_key_format: "Multikey",
+          multibase_value: @multibase_value,
+          signature_method_fragment: "keys-1"
+        )
+        |> Jason.encode!()
+
+      conn
+      |> Plug.Conn.put_resp_header("content-type", "application/json")
+      |> Plug.Conn.send_resp(200, body)
+    else
+      body = %{error: "Not found"} |> Jason.encode!()
+
+      conn
+      |> Plug.Conn.put_resp_header("content-type", "application/json")
+      |> Plug.Conn.send_resp(404, body)
     end
   end
 end

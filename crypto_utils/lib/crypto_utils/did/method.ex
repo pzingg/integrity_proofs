@@ -4,8 +4,11 @@ defmodule CryptoUtils.Did.Method do
   """
 
   @callback name() :: String.t()
+  @callback generate(public_key :: term()) :: String.t() | nil
   @callback to_resolver() :: module()
   @callback validate(CryptoUtils.Did.basic_parts(), Keyword.t()) :: {:ok, map()} | :error
+
+  @optional_callbacks generate: 1
 
   @doc """
   Find the handler module for a Did method

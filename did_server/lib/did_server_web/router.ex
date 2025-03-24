@@ -92,6 +92,23 @@ defmodule DidServerWeb.Router do
     get("/", DidPlcController, :info)
   end
 
+  # didkit operations
+  scope "/", DidServerWeb do
+    pipe_through :api
+
+    get "/keys/new", KeyStoreController, :new
+    post "/keys/create", KeyStoreController, :create
+    get "/keys/show/:public_key", KeyStoreController, :show
+    post "/keys/show", KeyStoreController, :show
+
+    post "/credential/example", CredentialController, :example
+    post "/credential/issue", CredentialController, :issue
+    post "/credential/verify", CredentialController, :verify
+
+    post "/presentation/prove", PresentationController, :prove
+    post "/presentation/verify", PresentationController, :verify
+  end
+
   scope "/.well-known", DidServerWeb do
     pipe_through :plain
 

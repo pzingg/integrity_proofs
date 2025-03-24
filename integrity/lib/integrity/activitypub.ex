@@ -75,7 +75,7 @@ defmodule Integrity.ActivityPub do
       statement = find_proof!(person)
 
     if Map.get(proof, "verificationMethod") != subject do
-      raise InvalidIntegrityProofError, "subject does not match proof.verficationMethod"
+      raise InvalidIntegrityProofError, "subject does not match proof.verificationMethod"
     end
 
     if aka != actor_id do
