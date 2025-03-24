@@ -87,16 +87,13 @@ defmodule CryptoUtils.Did.Methods.DidWeb do
   def resolve_representation(did, opts) do
     case did_web_uri(did) do
       {:ok, uri} ->
-        client = Keyword.get(opts, :client, CryptoUtils.HttpClient)
+        env_options = Elixir.Application.get_env(:crypto_utils, :did_web_req_options, [])
+        opts = Keyword.merge(env_options, opts)
         # TODO: https://w3c-ccg.github.io/did-method-web/#in-transit-security
-        accept = Keyword.get(opts, :accept, "application/json")
+        {accept, opts} = Keyword.pop(opts, :accept, "application/json")
+        opts = Keyword.put(opts, :headers, %{"accept" => accept})
 
-        opts =
-          opts
-          |> Keyword.put(:headers, [{"accept", accept}])
-          |> Keyword.put(:method, :get)
-
-        case client.fetch(URI.to_string(uri), opts) do
+        case CryptoUtils.HttpClient.fetch(URI.to_string(uri), opts) do
           {:ok, body} ->
             # TODO: set document created/updated metadata from HTTP headers?
             res_meta = %ResolutionMetadata{content_type: "application/did+ld+json"}

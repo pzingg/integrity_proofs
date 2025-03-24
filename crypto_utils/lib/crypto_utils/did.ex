@@ -226,6 +226,16 @@ defmodule CryptoUtils.Did do
 
   @doc """
   Parse a DID, optionally validating via the resolver.
+
+  Returns a map with items
+    * `:version`
+    * `:multibase_value`
+    * `:curve`
+    * `:key_bytes`
+    * `:algo_key`
+    * `:jwk`
+    * `:jwt_alg`
+    * `:contexts`
   """
   def parse_did!(identifier, options \\ []) do
     %{resolver: resolver} = parsed = parse_basic!(identifier, options)
@@ -649,10 +659,10 @@ defmodule CryptoUtils.Did do
     |> List.flatten()
     |> Enum.filter(fn obj -> !is_nil(obj) end)
     |> Enum.find(fn
-      %{"id" => object_id} = object ->
+      %{"id" => object_id} ->
         object_id in [resource_id, relative_id]
 
-      other ->
+      _ ->
         false
     end)
   end
@@ -665,7 +675,7 @@ defmodule CryptoUtils.Did do
   1.1 "... select the service endpoint whose id property contains a fragment which matches
   the value of the service DID parameter of the input DID URL"
   """
-  def select_service(%{"service" => services} = did_doc, fragment) do
+  def select_service(%{"service" => services}, fragment) do
     services
     |> List.wrap()
     |> Enum.find(fn

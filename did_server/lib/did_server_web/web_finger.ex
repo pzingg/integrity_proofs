@@ -149,9 +149,9 @@ defmodule DidServerWeb.WebFinger do
   def find_lrdd_template(domain) do
     # WebFinger is restricted to HTTPS - https://tools.ietf.org/html/rfc7033#section-9.1
     meta_url = "https://#{domain}/.well-known/host-meta"
+    opts = [headers: %{"accept" => "application/json"}]
 
-    with {:ok, body, _headers} <-
-           CryptoUtils.HttpClient.fetch(meta_url, headers: [{"accept", "application/json"}]) do
+    with {:ok, body, _headers} <- CryptoUtils.HttpClient.fetch(meta_url, opts) do
       get_template_from_xml(body)
     else
       {:error, message, _status_code} ->
@@ -194,14 +194,10 @@ defmodule DidServerWeb.WebFinger do
   def finger(account, domain) do
     encoded_account = URI.encode("acct:#{account}")
     address = get_address_from_domain(domain, encoded_account)
+    opts = [headers: %{"accept" => "#{@accept_header_value_xml}, #{@accept_header_value_json}"}]
 
     with {:ok, body, headers} <-
-           CryptoUtils.HttpClient.fetch(address,
-             headers: [
-               {"accept", @accept_header_value_xml},
-               {"accept", @accept_header_value_json}
-             ]
-           ) do
+           CryptoUtils.HttpClient.fetch(address, opts) do
       case List.keyfind(headers, "content-type", 0) do
         {_, content_type} ->
           case Plug.Conn.Utils.media_type(content_type) do

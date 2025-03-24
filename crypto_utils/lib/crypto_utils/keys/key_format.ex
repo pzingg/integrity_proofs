@@ -183,7 +183,7 @@ defmodule CryptoUtils.Keys.KeyFormat do
     encode_varint_loop(number, []) |> Enum.reverse()
   end
 
-  defp encode_varint_loop(number, acc \\ []) do
+  defp encode_varint_loop(number, acc) do
     towrite = number &&& 0x7F
     number = number >>> 7
 

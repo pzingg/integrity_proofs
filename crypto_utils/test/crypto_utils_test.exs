@@ -5,7 +5,7 @@ defmodule CryptoUtilsTest do
   doctest CryptoUtils
 
   alias CryptoUtils.Math, as: CMath
-  alias CryptoUtils.{Cid, Did}
+  alias CryptoUtils.Cid
 
   # From ipld-vectors.ts in atproto/common library
   @sample_cbor <<167, 100, 98, 111, 111, 108, 245, 100, 110, 117, 108, 108, 246, 101, 97, 114,

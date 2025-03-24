@@ -14,6 +14,8 @@ defmodule Integrity do
     "capabilityInvocation"
   ]
 
+  @supported_cryptosuites ["eddsa-jcs-2022", "jcs-eddsa-2022"]
+
   @typedoc """
   A Keyword option passed to any of the public functions
   defined by modules in this library.
@@ -93,6 +95,15 @@ defmodule Integrity do
     @impl true
     def exception(acceptable) do
       %__MODULE__{message: "proof created time deviated more than #{acceptable} seconds"}
+    end
+  end
+
+  defmodule InvalidControllerDocumentError do
+    defexception [:message]
+
+    @impl true
+    def exception(url) do
+      %__MODULE__{message: "Invalid controller document; url is #{url}"}
     end
   end
 
@@ -184,7 +195,7 @@ defmodule Integrity do
     type = Keyword.get(options, :type, "undefined")
     cryptosuite = Keyword.get(options, :cryptosuite, "undefined")
 
-    if type != "DataIntegrityProof" && cryptosuite != "eddsa-jcs-2022" do
+    if type != "DataIntegrityProof" || cryptosuite not in @supported_cryptosuites do
       raise ProofTransformationError, type: type, cryptosuite: cryptosuite
     end
 
@@ -216,7 +227,7 @@ defmodule Integrity do
     verification_method = Keyword.get(options, :verification_method, "undefined")
     proof_purpose = Keyword.get(options, :proof_purpose, "undefined")
 
-    if type != "DataIntegrityProof" || cryptosuite != "eddsa-jcs-2022" do
+    if type != "DataIntegrityProof" || cryptosuite not in @supported_cryptosuites do
       raise InvalidProofConfigurationError, type: type, cryptosuite: cryptosuite
     end
 
@@ -226,16 +237,22 @@ defmodule Integrity do
       raise InvalidProofDatetimeError, created
     end
 
-    context = Keyword.get(options, :context) || Map.fetch!(unsecured_document, "@context")
-
     proof_config = %{
-      "@context": context,
       type: type,
       cryptosuite: cryptosuite,
       created: CryptoUtils.format_datetime(created),
       verificationMethod: verification_method,
       proofPurpose: proof_purpose
     }
+
+    context = Keyword.get(options, :context) || Map.get(unsecured_document, "@context")
+
+    proof_config =
+      if context do
+        Map.put(proof_config, "@context", context)
+      else
+        proof_config
+      end
 
     Jcs.encode(proof_config)
   end
@@ -271,16 +288,15 @@ defmodule Integrity do
     created = Keyword.fetch!(options, :created)
     cryptosuite = Keyword.fetch!(options, :cryptosuite)
 
+    # Support deprecated "jcs-eddsa-2022"
     transformed_document =
-      case cryptosuite do
-        "eddsa-jcs-2022" ->
-          transform_eddsa_jcs_2022!(document,
-            type: "DataIntegrityProof",
-            cryptosuite: cryptosuite
-          )
-
-        _ ->
-          raise ArgumentError, "Cryptosuite #{cryptosuite} not supported"
+      if cryptosuite in @supported_cryptosuites do
+        transform_eddsa_jcs_2022!(document,
+          type: "DataIntegrityProof",
+          cryptosuite: cryptosuite
+        )
+      else
+        raise ArgumentError, "Cryptosuite #{cryptosuite} not supported"
       end
 
     options =
@@ -390,35 +406,45 @@ defmodule Integrity do
         },
         options
       ) do
-    vm_identifier = URI.parse(verification_method)
-    vm_fragment = vm_identifier.fragment
-
-    if !CryptoUtils.did_uri?(vm_identifier) && !CryptoUtils.http_uri?(vm_identifier) do
-      raise InvalidVerificationMethodURLError, verification_method
-    end
-
-    controller_document_url = %URI{vm_identifier | fragment: nil} |> URI.to_string()
-    controller_document = dereference_controller_document!(controller_document_url, options)
-    document_id = Map.get(controller_document, "id")
-
-    if document_id != controller_document_url do
-      raise InvalidControllerDocumentIdError, document_id
-    end
-
-    verification_method =
-      find_verification_method_fragment(controller_document, vm_fragment, options)
-
-    if !valid_verification_method?(verification_method) do
-      raise InvalidVerificationMethodError, verification_method
-    end
-
     if !valid_purpose?(verification_method, vm_purpose) do
       raise InvalidProofPurposeForVerificationMethodError,
         method: verification_method,
         purpose: vm_purpose
     end
 
-    verification_method
+    vm_identifier = URI.parse(verification_method)
+
+    if CryptoUtils.did_uri?(vm_identifier) do
+      verification_method
+    else
+      vm_fragment = vm_identifier.fragment
+
+      if !CryptoUtils.did_uri?(vm_identifier) && !CryptoUtils.http_uri?(vm_identifier) do
+        raise InvalidVerificationMethodURLError, verification_method
+      end
+
+      controller_document_url = %URI{vm_identifier | fragment: nil} |> URI.to_string()
+      controller_document = dereference_controller_document!(controller_document_url, options)
+
+      if !Map.has_key?(controller_document, "id") do
+        raise InvalidControllerDocumentError, controller_document_url
+      end
+
+      document_id = Map.get(controller_document, "id")
+
+      if document_id != controller_document_url do
+        raise InvalidControllerDocumentIdError, document_id
+      end
+
+      verification_method =
+        find_verification_method_fragment(controller_document, vm_fragment, options)
+
+      if !valid_verification_method?(verification_method) do
+        raise InvalidVerificationMethodError, verification_method
+      end
+
+      verification_method
+    end
   end
 
   @doc """
@@ -563,19 +589,24 @@ defmodule Integrity do
   """
   def retrieve_public_key!(options, fmt \\ :crypto_algo_key) do
     proof = Keyword.get(options, :proof)
+    verification_method = Keyword.get(options, :verification_method)
     cached_controller_document = Keyword.get(options, :cached_controller_document)
-    pub = Keyword.get(options, :public_key_bytes)
+    key_bytes = Keyword.get(options, :public_key_bytes)
+    curve = Keyword.get(options, :curve, :ed25519)
     public_key_pem = Keyword.get(options, :public_key_pem)
 
     cond do
-      is_map(proof) && is_map(cached_controller_document) ->
-        verification_method = verification_method!(proof, options)
-        {:ok, public_key} = CryptoUtils.Keys.extract_multikey(verification_method, fmt)
-        public_key
+      is_binary(verification_method) && String.starts_with?(verification_method, "did:key:") ->
+        parsed_key = CryptoUtils.Did.parse_did!(verification_method)
 
-      is_binary(pub) ->
-        # TODO: Don't hard code the curve name
-        CryptoUtils.Keys.make_public_key(pub, :ed25519, fmt)
+        if fmt == :crypto_algo_key do
+          parsed_key.algo_key
+        else
+          CryptoUtils.Keys.make_public_key(parsed_key.key_bytes, parsed_key.curve, fmt)
+        end
+
+      is_binary(key_bytes) ->
+        CryptoUtils.Keys.make_public_key(key_bytes, curve, fmt)
 
       is_binary(public_key_pem) ->
         case CryptoUtils.Keys.decode_pem_ssh_file(public_key_pem, :public_key, fmt) do
@@ -583,14 +614,18 @@ defmodule Integrity do
           _ -> raise ArgumentError, IO.inspect(options)
         end
 
+      is_map(proof) && is_map(cached_controller_document) ->
+        verification_method = verification_method!(proof, options)
+        {:ok, public_key} = CryptoUtils.Keys.extract_multikey(verification_method, fmt)
+        public_key
+
       true ->
         raise ArgumentError, IO.inspect(options)
     end
   end
 
   defp dereference_controller_document!(_controller_document_url, options) do
-    built_in = Keyword.get(options, :cached_controller_document)
-    built_in
+    Keyword.get(options, :cached_controller_document, %{})
   end
 
   defp find_verification_method_fragment(controller_document, vm_fragment, _options) do
@@ -600,7 +635,7 @@ defmodule Integrity do
     Map.fetch!(controller_document, "verificationMethod")
     |> List.wrap()
     |> Enum.find(fn
-      vm when is_map(vm) -> Map.fetch!(vm, "id") == vm_url
+      vm when is_map(vm) -> Map.get(vm, "id", "") == vm_url
       _ -> false
     end)
   end

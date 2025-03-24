@@ -6,16 +6,13 @@ defmodule DidServerWeb.CredentialController do
 
   alias DidServerWeb.ErrorJSON
 
-  def issue(conn, _params) do
-    issue_credential(conn, conn.body_params)
+  def example(conn, %{"issuer" => issuer, "subject_id" => subject_id} = _params) do
+    conn
+    |> render("example_credential.json", issuer: issuer, subject_id: subject_id)
   end
 
-  def verify(conn, _params) do
-    verify_credential(conn, conn.body_params)
-  end
-
-  def issue_credential(conn, %{"credential" => credential} = body_params) do
-    option_params = Map.get(body_params, "options", %{})
+  def issue(conn, %{"credential" => credential} = params) do
+    option_params = Map.get(params, "options", %{})
 
     options =
       CryptoUtils.to_keyword_list(option_params, [
@@ -37,7 +34,7 @@ defmodule DidServerWeb.CredentialController do
     end
   end
 
-  defp verify_credential(conn, _body_params) do
+  def verify(conn, %{"credential" => _credential} = _params) do
     conn
     |> put_status(500)
     |> put_view(ErrorJSON)

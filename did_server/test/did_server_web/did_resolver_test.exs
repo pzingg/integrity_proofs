@@ -1,7 +1,6 @@
 defmodule DidServerWeb.ResolverTest do
   # async: false, because otherwise one test will create a did:plc
   # and the other won't see it?
-  @behaviour CryptoUtils.Fetcher
 
   use DidServerWeb.ConnCase
 
@@ -9,38 +8,10 @@ defmodule DidServerWeb.ResolverTest do
 
   alias CryptoUtils.Keys.Keypair
 
-  @impl true
-  def fetch(url, opts) do
-    conn = Keyword.fetch!(opts, :test_conn)
-
-    %URI{path: path} =
-      url
-      |> CryptoUtils.HttpClient.maybe_rewrite(opts)
-      |> URI.parse()
-
-    {_conn, resp} =
-      case Keyword.get(opts, :method, :get) do
-        :get ->
-          conn = get(conn, path)
-          {conn, response(conn, 200)}
-
-        :post ->
-          body = Keyword.fetch!(opts, :body)
-          conn = post(conn, path, body)
-          {conn, response(conn, 200)}
-      end
-
-    {:ok, resp}
-  end
-
-  def resolver_opts do
-    rewrite_patterns = [
-      {~r|^https?://example\.com/.well-known(/.*)$|, fn _, path -> "/.well-known/#{path}" end},
-      {~r|^https?://plc.directory(/.*)$|, fn _, path -> "/plc/#{path}" end}
-    ]
-
-    [rewrite_patterns: rewrite_patterns, client: __MODULE__]
-  end
+  @rewrite_patterns [
+    {~r|^https?://example\.com/.well-known(/.*)$|, fn _, path -> "/.well-known/#{path}" end},
+    {~r|^https?://plc.directory(/.*)$|, fn _, path -> "/plc/#{path}" end}
+  ]
 
   describe "resolves dids" do
     test "resolves a did:web", %{conn: conn} do
@@ -49,7 +20,7 @@ defmodule DidServerWeb.ResolverTest do
           valid_account_attributes(username: "admin", domain: "example.com")
         )
 
-      opts = resolver_opts() |> Keyword.put(:test_conn, conn)
+      opts = [rewrite_patterns: @rewrite_patterns]
 
       assert {:ok, {_res_meta, doc, _doc_meta}} =
                CryptoUtils.Did.resolve_did!("did:web:example.com", opts)
@@ -58,6 +29,10 @@ defmodule DidServerWeb.ResolverTest do
     end
 
     test "resolves a did:plc", %{conn: conn} do
+      Req.Test.stub(DidPlcStub, fn conn ->
+        Req.Test.json(conn, %{"celsius" => 25.0})
+      end)
+
       signing_key = Keypair.generate(:p256, :did_key)
       recovery_key = Keypair.generate(:p256, :did_key)
 
@@ -73,7 +48,7 @@ defmodule DidServerWeb.ResolverTest do
 
       assert {:ok, %{operation: %{did: did}}} = DidServer.Log.create_operation(params)
 
-      opts = resolver_opts() |> Keyword.put(:test_conn, conn)
+      opts = [rewrite_patterns: @rewrite_patterns]
       assert {:ok, {_res_meta, doc, _doc_meta}} = CryptoUtils.Did.resolve_did!(did, opts)
       assert "at://bob.bsky.social" in doc["alsoKnownAs"]
     end

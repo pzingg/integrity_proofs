@@ -180,12 +180,12 @@ defmodule CryptoUtils.Did.BaseResolver do
   end
 
   def dereference_primary_service(
-        resolver,
+        _resolver,
         parameters,
         service,
-        %DidURI{query: query} = primary_did_uri,
-        did_url_dereferencing_input_metadata,
-        res_meta,
+        %DidURI{} = primary_did_uri,
+        _did_url_dereferencing_input_metadata,
+        _res_meta,
         did_doc,
         _did_doc_meta
       ) do
@@ -275,14 +275,14 @@ defmodule CryptoUtils.Did.BaseResolver do
   https://w3c-ccg.github.io/did-resolution/#service-endpoint-construction
   """
   def construct_service_endpoint(
-        %DidURI{path: did_path, query: did_query, fragment: did_fragment} = did_uri,
+        %DidURI{path: did_path, query: did_query, fragment: did_fragment},
         did_parameters,
         service_endpoint_url
       ) do
     # https://w3c-ccg.github.io/did-resolution/#algorithm
     # 1, 2, 3
     %URI{query: input_service_endpoint_query, fragment: input_service_endpoint_fragment} =
-      service_endpoint_uri = URI.parse(service_endpoint_url)
+      URI.parse(service_endpoint_url)
 
     if !is_nil(did_fragment) && !is_nil(input_service_endpoint_fragment) do
       # https://w3c-ccg.github.io/did-resolution/#input

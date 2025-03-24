@@ -101,11 +101,12 @@ defmodule DidServerWeb.Router do
     get "/keys/show/:public_key", KeyStoreController, :show
     post "/keys/show", KeyStoreController, :show
 
-    post "/issue/credentials", CredentialController, :issue
-    post "/verify/credentials", CredentialController, :verify
+    post "/credential/example", CredentialController, :example
+    post "/credential/issue", CredentialController, :issue
+    post "/credential/verify", CredentialController, :verify
 
-    post "/prove/presentations", PresentationController, :prove
-    post "/verify/presentations", PresentationController, :verify
+    post "/presentation/prove", PresentationController, :prove
+    post "/presentation/verify", PresentationController, :verify
   end
 
   scope "/.well-known", DidServerWeb do
