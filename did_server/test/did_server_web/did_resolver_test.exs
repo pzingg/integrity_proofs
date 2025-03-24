@@ -8,11 +8,6 @@ defmodule DidServerWeb.ResolverTest do
 
   alias CryptoUtils.Keys.Keypair
 
-  @rewrite_patterns [
-    {~r|^https?://example\.com/.well-known(/.*)$|, fn _, path -> "/.well-known/#{path}" end},
-    {~r|^https?://plc.directory(/.*)$|, fn _, path -> "/plc/#{path}" end}
-  ]
-
   describe "resolves dids" do
     test "resolves a did:web", %{conn: conn} do
       {:ok, _user} =
@@ -20,7 +15,7 @@ defmodule DidServerWeb.ResolverTest do
           valid_account_attributes(username: "admin", domain: "example.com")
         )
 
-      opts = [rewrite_patterns: @rewrite_patterns]
+      opts = [rewrite_patterns: rewrite_patterns()]
 
       assert {:ok, {_res_meta, doc, _doc_meta}} =
                CryptoUtils.Did.resolve_did!("did:web:example.com", opts)
@@ -48,9 +43,19 @@ defmodule DidServerWeb.ResolverTest do
 
       assert {:ok, %{operation: %{did: did}}} = DidServer.Log.create_operation(params)
 
-      opts = [rewrite_patterns: @rewrite_patterns]
+      opts = [rewrite_patterns: rewrite_patterns()]
       assert {:ok, {_res_meta, doc, _doc_meta}} = CryptoUtils.Did.resolve_did!(did, opts)
       assert "at://bob.bsky.social" in doc["alsoKnownAs"]
     end
+  end
+
+  def rewrite_patterns() do
+    localhost = DidServerWeb.Endpoint.url()
+
+    [
+      {~r|^https?://example\.com/.well-known(/.*)$|,
+       fn _, path -> "#{localhost}/.well-known#{path}" end},
+      {~r|^https?://plc.directory(/.*)$|, fn _, path -> "#{localhost}/plc#{path}" end}
+    ]
   end
 end

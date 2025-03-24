@@ -10,7 +10,7 @@
         </svg>
       </a>
       <p class="rounded-full bg-brand/5 px-2 text-[0.8125rem] font-medium leading-6 text-brand">
-        v<%= Application.spec(:phoenix, :vsn) %>
+        v{Application.spec(:phoenix, :vsn)}
       </p>
     </div>
     <div class="flex items-center gap-4">
@@ -53,6 +53,6 @@
 </header>
 <main class="px-4 sm:px-6 lg:px-8">
   <div class="max-w-2xl mx-auto my-8">
-    <%= @inner_content %>
+    {@inner_content}
   </div>
 </main>

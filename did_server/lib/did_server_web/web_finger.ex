@@ -155,7 +155,7 @@ defmodule DidServerWeb.WebFinger do
       get_template_from_xml(body)
     else
       {:error, message, _status_code} ->
-        Logger.warn("Can't find LRDD template in #{inspect(meta_url)}: #{message}")
+        Logger.warning("Can't find LRDD template in #{inspect(meta_url)}: #{message}")
         {:error, :lrdd_not_found}
     end
   end
@@ -225,7 +225,7 @@ defmodule DidServerWeb.WebFinger do
 
   def string_from_xpath(xpath, doc) do
     try do
-      {:xmlObj, :string, res} = :xmerl_xpath.string('string(#{xpath})', doc)
+      {:xmlObj, :string, res} = :xmerl_xpath.string(~c"string(#{xpath})", doc)
 
       res =
         res

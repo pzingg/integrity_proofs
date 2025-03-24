@@ -4,6 +4,8 @@ defmodule DidServerWeb.CredentialController do
   """
   use DidServerWeb, :controller
 
+  require Logger
+
   alias DidServerWeb.ErrorJSON
 
   def example(conn, %{"issuer" => issuer, "subject_id" => subject_id} = _params) do
@@ -20,6 +22,9 @@ defmodule DidServerWeb.CredentialController do
         :proof_purpose,
         :verification_method
       ])
+
+    Logger.error("issuing signed credential for #{inspect(credential)}")
+    Logger.error("   options are #{inspect(options)}")
 
     case Integrity.Credential.sign(credential, DidServer.AgentKeyStore, nil, options) do
       {:ok, signed_credential} ->

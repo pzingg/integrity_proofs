@@ -67,7 +67,7 @@ defmodule Integrity.Credential do
   end
 
   defp match_key(keystore, _, did_resolver, vm) when is_binary(vm) do
-    with {:ok, public_key} <- resolve_key(vm, did_resolver) do
+    with {:ok, public_key} <- resolve_key(did_resolver, vm) do
       case keystore.get(:any, public_key) do
         nil -> {:error, "Resolved key not found"}
         private_key -> {:ok, {public_key, private_key}}

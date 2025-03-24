@@ -2,7 +2,7 @@ import Config
 
 # Configure your database
 config :did_server, DidServer.Repo,
-  username: "postgres",
+  username: "postgres_super",
   password: "postgres",
   hostname: "localhost",
   database: "did_server",

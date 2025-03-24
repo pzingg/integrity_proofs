@@ -5,8 +5,6 @@ defmodule DidServerWeb.UserAuth do
   import Phoenix.Controller
 
   alias DidServer.Accounts
-  alias DidServer.Accounts.Account
-  alias DidServer.Identities
   alias DidServer.Accounts.User
 
   # Make the remember me cookie valid for 60 days.

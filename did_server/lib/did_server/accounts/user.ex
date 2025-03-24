@@ -21,7 +21,7 @@ defmodule DidServer.Accounts.User do
   @doc """
   Verifies the password by trying the password of the linked DID.
   """
-  def valid_password?(%User{key: key} = user, password) when byte_size(password) > 0 do
+  def valid_password?(%User{key: key}, password) when byte_size(password) > 0 do
     Key.valid_password?(key, password)
   end
 

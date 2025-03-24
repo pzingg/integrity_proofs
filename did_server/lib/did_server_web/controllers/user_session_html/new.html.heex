@@ -18,7 +18,7 @@
     <div class="pt-4">
       <h2 class="font-semibold">Log in with email address</h2>
       <.simple_form :let={f} for={@conn.params["user"]} as={:user} action={~p"/users/log_in"}>
-        <.error :if={@error_message}><%= @error_message %></.error>
+        <.error :if={@error_message}>{@error_message}</.error>
 
         <.input
           field={f[:email]}
@@ -43,7 +43,7 @@
     <div class="pt-4">
       <h2 class="font-semibold">Log in with username and domain</h2>
       <.simple_form :let={f} for={@conn.params["user"]} as={:user} action={~p"/users/log_in"}>
-        <.error :if={@error_message}><%= @error_message %></.error>
+        <.error :if={@error_message}>{@error_message}</.error>
 
         <.input
           field={f[:username]}
