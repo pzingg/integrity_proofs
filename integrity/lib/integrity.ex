@@ -413,38 +413,33 @@ defmodule Integrity do
     end
 
     vm_identifier = URI.parse(verification_method)
+    vm_fragment = vm_identifier.fragment
 
-    if CryptoUtils.did_uri?(vm_identifier) do
-      verification_method
-    else
-      vm_fragment = vm_identifier.fragment
-
-      if !CryptoUtils.did_uri?(vm_identifier) && !CryptoUtils.http_uri?(vm_identifier) do
-        raise InvalidVerificationMethodURLError, verification_method
-      end
-
-      controller_document_url = %URI{vm_identifier | fragment: nil} |> URI.to_string()
-      controller_document = dereference_controller_document!(controller_document_url, options)
-
-      if !Map.has_key?(controller_document, "id") do
-        raise InvalidControllerDocumentError, controller_document_url
-      end
-
-      document_id = Map.get(controller_document, "id")
-
-      if document_id != controller_document_url do
-        raise InvalidControllerDocumentIdError, document_id
-      end
-
-      verification_method =
-        find_verification_method_fragment(controller_document, vm_fragment, options)
-
-      if !valid_verification_method?(verification_method) do
-        raise InvalidVerificationMethodError, verification_method
-      end
-
-      verification_method
+    if !(CryptoUtils.did_uri?(vm_identifier) || CryptoUtils.http_uri?(vm_identifier)) do
+      raise InvalidVerificationMethodURLError, verification_method
     end
+
+    controller_document_url = %URI{vm_identifier | fragment: nil, query: nil} |> URI.to_string()
+    controller_document = dereference_controller_document!(controller_document_url, options)
+
+    if !Map.has_key?(controller_document, "id") do
+      raise InvalidControllerDocumentError, controller_document_url
+    end
+
+    document_id = Map.get(controller_document, "id")
+
+    if document_id != controller_document_url do
+      raise InvalidControllerDocumentIdError, document_id
+    end
+
+    verification_method =
+      find_verification_method_fragment(controller_document, vm_fragment, options)
+
+    if !valid_verification_method?(verification_method) do
+      raise InvalidVerificationMethodError, verification_method
+    end
+
+    verification_method
   end
 
   @doc """
@@ -597,6 +592,8 @@ defmodule Integrity do
 
     cond do
       is_binary(verification_method) && String.starts_with?(verification_method, "did:key:") ->
+        vm_identifier = URI.parse(verification_method)
+        verification_method = %URI{vm_identifier | fragment: nil, query: nil} |> to_string()
         parsed_key = CryptoUtils.Did.parse_did!(verification_method)
 
         if fmt == :crypto_algo_key do

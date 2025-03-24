@@ -23,7 +23,6 @@ defmodule CryptoUtils.HttpClient do
 
   On error, returns `{:error, {reason, http_status_code}}`.
   """
-  @impl true
   def fetch(url, opts) do
     {method, opts} = Keyword.pop(opts, :method, :get)
     {user_agent, opts} = Keyword.pop(opts, :user_agent, "integrity-proofs.req")
@@ -47,7 +46,7 @@ defmodule CryptoUtils.HttpClient do
       end
 
     case result do
-      {:ok, %Req.Response{status: status, body: body, headers: headers}} ->
+      {:ok, %Req.Response{status: status, body: body}} ->
         if status in 200..299 do
           {:ok, body}
         else
